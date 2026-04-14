@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut } from "lucide-react"
+import Link from "next/link"
+import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface ChatSettingsDrawerProps {
@@ -110,33 +111,30 @@ export function ChatSettingsDrawer({
 
           {/* Theme Section */}
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Palette className="w-4 h-4 text-neutral-400" />
-              <h3 className="text-sm font-medium text-neutral-300">채팅 테마</h3>
-            </div>
-            <div className="flex gap-3">
-              {themeOptions.map((theme) => (
-                <button
-                  key={theme.id}
-                  onClick={() => setSelectedTheme(theme.id)}
-                  className="flex flex-col items-center gap-1.5"
-                >
-                  <div
-                    className={cn(
-                      "w-10 h-10 rounded-full transition-all",
-                      theme.color,
-                      selectedTheme === theme.id && `ring-2 ring-offset-2 ring-offset-neutral-900 ${theme.ring}`
-                    )}
-                  />
-                  <span className={cn(
-                    "text-xs",
-                    selectedTheme === theme.id ? "text-neutral-200" : "text-neutral-500"
-                  )}>
-                    {theme.label}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <Link 
+              href="/themes"
+              className="flex items-center justify-between p-3 -mx-3 rounded-lg hover:bg-neutral-800/50 transition-colors group"
+            >
+              <div className="flex items-center gap-2">
+                <Palette className="w-4 h-4 text-neutral-400" />
+                <h3 className="text-sm font-medium text-neutral-300">채팅 테마</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1.5">
+                  {themeOptions.slice(0, 4).map((theme) => (
+                    <div
+                      key={theme.id}
+                      className={cn(
+                        "w-5 h-5 rounded-full",
+                        theme.color,
+                        selectedTheme === theme.id && "ring-1 ring-offset-1 ring-offset-neutral-900 ring-neutral-400"
+                      )}
+                    />
+                  ))}
+                </div>
+                <ChevronRight className="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 transition-colors" />
+              </div>
+            </Link>
           </section>
 
           {/* Personality Tuning Section */}
