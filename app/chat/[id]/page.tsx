@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
-import { BottomNavBar } from "@/components/chat/bottom-nav-bar"
 import { type ChatMessage } from "@/lib/chat-types"
 
 const initialMessages: ChatMessage[] = [
@@ -129,16 +128,12 @@ export default function ChatPage() {
         />
       </main>
 
-      {/* Fixed Bottom Area */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        {/* Input Area */}
+      {/* Fixed Input Area - positioned above global nav */}
+      <div className="fixed bottom-16 sm:bottom-0 left-0 right-0 z-40">
         <ChatInput 
           onSendMessage={handleSendMessage} 
           onCommand={handleCommand}
         />
-        
-        {/* Bottom Navigation */}
-        <BottomNavBar />
       </div>
     </div>
   )

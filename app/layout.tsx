@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { BottomNavBar } from '@/components/chat/bottom-nav-bar'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -36,8 +37,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="bg-background">
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased pb-16 sm:pb-0">
         {children}
+        
+        {/* Global Bottom Navigation - Mobile Only */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
+          <BottomNavBar />
+        </div>
+        
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Play, ChevronLeft, ChevronRight, User, Compass, PenTool } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { BottomNavBar } from "@/components/chat/bottom-nav-bar"
 
 type Tab = "discover" | "studio"
 
@@ -208,11 +207,6 @@ export default function HomePage() {
 
       {/* Story Drawer */}
       <StoryDrawer />
-
-      {/* Bottom Navigation - Mobile */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-        <BottomNavBar />
-      </div>
     </main>
   )
 }
