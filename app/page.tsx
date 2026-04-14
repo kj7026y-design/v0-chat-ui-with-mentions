@@ -6,6 +6,7 @@ import { CharacterCard } from "@/components/character-card"
 import { ScenarioModal } from "@/components/scenario-modal"
 import { Button } from "@/components/ui/button"
 import { Sparkles, Plus, BookOpen } from "lucide-react"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 export default function HomePage() {
@@ -85,7 +86,7 @@ export default function HomePage() {
       </div>
 
       {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-20">
+      <Link href="/create" className="fixed bottom-6 right-6 z-20">
         <Button
           size="lg"
           className="rounded-full shadow-lg bg-primary text-primary-foreground hover:bg-primary/90 h-14 px-6 gap-2"
@@ -93,7 +94,7 @@ export default function HomePage() {
           <Plus className="w-5 h-5" />
           <span className="font-medium">새 캐릭터 만들기</span>
         </Button>
-      </div>
+      </Link>
 
       {/* Scenario Modal */}
       <ScenarioModal />
