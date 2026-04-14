@@ -2,7 +2,20 @@
 
 import { useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Sparkles, X, Upload, ImageIcon, Eye } from "lucide-react"
+import {
+  ArrowLeft,
+  Sparkles,
+  X,
+  Eye,
+  Dices,
+  Rocket,
+  Plus,
+  MessageSquare,
+  Heart,
+  BarChart3,
+  Smartphone,
+  Trash2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -23,6 +36,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
+import { Slider } from "@/components/ui/slider"
 import {
   Sheet,
   SheetContent,
@@ -46,11 +60,62 @@ const PERSONALITY_TAGS = [
   "카리스마",
 ]
 
-interface UploadedImage {
-  id: string
-  file: File
-  preview: string
+// Random data pools based on creativity level
+const RANDOM_DATA = {
+  names: {
+    low: ["김철수", "박영희", "이준호", "최민지", "정수빈"],
+    mid: ["아리아", "카이젠", "미르", "세라핀", "로완"],
+    high: ["제드 엑스", "네뷸라 7", "샤도우 위스퍼", "크림슨 페이트", "에코 프라임"],
+  },
+  categories: {
+    low: ["회사", "학교"] as Category[],
+    mid: ["고대 서양", "고대 아시아"] as Category[],
+    high: ["판타지"] as Category[],
+  },
+  personalities: {
+    low: [["다정함", "차분함"], ["열정적", "유머러스"], ["순수함", "다정함"]],
+    mid: [["냉철함", "카리스마"], ["신비로움", "차분함"], ["도도함", "츤데레"]],
+    high: [["신비로움", "냉철함", "카리스마"], ["능글맞음", "도도함", "츤데레"], ["천진난만", "신비로움"]],
+  },
+  relationships: {
+    low: ["직장 동료", "같은 반 친구", "이웃 주민", "동아리 선배"],
+    mid: ["오랜 라이벌", "수호자", "스승", "계약된 파트너"],
+    high: ["차원을 넘어온 수호령", "기억을 공유하는 존재", "운명에 얽힌 숙적", "영혼의 계약자"],
+  },
+  speechStyles: {
+    low: [
+      "{char}는 존댓말을 사용하며 예의 바르게 말한다. {user}를 '님'으로 부른다.",
+      "{char}는 반말을 쓰며 친근하게 대한다. 가끔 {user}에게 장난을 친다.",
+    ],
+    mid: [
+      "{char}는 고풍스러운 말투를 사용한다. '~하오', '~이로다' 등의 어미를 쓴다.",
+      "{char}는 차갑고 간결하게 말한다. {user}에게 감정을 잘 드러내지 않는다.",
+    ],
+    high: [
+      "{char}는 수수께끼 같은 말투로 대화한다. 직접적인 대답 대신 은유를 사용한다.",
+      "{char}는 여러 인격을 가진 듯 말투가 수시로 변한다. {user}를 혼란스럽게 만든다.",
+    ],
+  },
+  backstories: {
+    low: "평범한 가정에서 자랐으며, 안정적인 삶을 살아왔다.",
+    mid: "어린 시절 큰 사건을 겪었고, 그로 인해 강인한 성격이 형성되었다.",
+    high: "다른 차원에서 넘어왔으며, 이 세계의 기억과 원래 세계의 기억이 뒤섞여 있다.",
+  },
 }
+
+interface SlashCommand {
+  id: string
+  name: string
+  action: string
+  icon: React.ReactNode
+  isCustom?: boolean
+}
+
+const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
+  { id: "1", name: "/속마음", action: "캐릭터의 진짜 속마음을 독백으로 보여준다", icon: <Heart className="h-4 w-4" /> },
+  { id: "2", name: "/상태바", action: "현재 감정, 호감도, 상황을 상태창으로 표시한다", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "3", name: "/카톡", action: "카카오톡 채팅 형식으로 대화를 진행한다", icon: <Smartphone className="h-4 w-4" /> },
+]
 
 interface FormData {
   name: string
@@ -62,15 +127,16 @@ interface FormData {
   preferences: string
   secrets: string
   taboos: string
-  images: UploadedImage[]
 }
 
 export default function CreateCharacterPage() {
   const router = useRouter()
   const speechStyleRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  const [creativityLevel, setCreativityLevel] = useState([3])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_SLASH_COMMANDS)
+  const [newCommandName, setNewCommandName] = useState("")
+  const [newCommandAction, setNewCommandAction] = useState("")
   const [formData, setFormData] = useState<FormData>({
     name: "",
     category: "",
@@ -81,8 +147,36 @@ export default function CreateCharacterPage() {
     preferences: "",
     secrets: "",
     taboos: "",
-    images: [],
   })
+
+  const getCreativityTier = (level: number): "low" | "mid" | "high" => {
+    if (level <= 2) return "low"
+    if (level <= 4) return "mid"
+    return "high"
+  }
+
+  const pickRandom = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
+
+  // Random generate all required fields at once
+  const handleRandomGenerate = () => {
+    const tier = getCreativityTier(creativityLevel[0])
+
+    setFormData((prev) => ({
+      ...prev,
+      name: pickRandom(RANDOM_DATA.names[tier]),
+      category: pickRandom(RANDOM_DATA.categories[tier]),
+      personalities: pickRandom(RANDOM_DATA.personalities[tier]),
+      relationship: pickRandom(RANDOM_DATA.relationships[tier]),
+      speechStyle: pickRandom(RANDOM_DATA.speechStyles[tier]),
+      secrets: RANDOM_DATA.backstories[tier],
+    }))
+  }
+
+  // Individual random generators
+  const randomizeName = () => {
+    const tier = getCreativityTier(creativityLevel[0])
+    setFormData((prev) => ({ ...prev, name: pickRandom(RANDOM_DATA.names[tier]) }))
+  }
 
   const togglePersonality = (tag: string) => {
     setFormData((prev) => ({
@@ -91,55 +185,6 @@ export default function CreateCharacterPage() {
         ? prev.personalities.filter((t) => t !== tag)
         : [...prev.personalities, tag],
     }))
-  }
-
-  // Image upload handlers
-  const handleFiles = useCallback((files: FileList | null) => {
-    if (!files) return
-    const newImages: UploadedImage[] = Array.from(files)
-      .filter((file) => file.type.startsWith("image/"))
-      .map((file) => ({
-        id: crypto.randomUUID(),
-        file,
-        preview: URL.createObjectURL(file),
-      }))
-
-    setFormData((prev) => ({
-      ...prev,
-      images: [...prev.images, ...newImages],
-    }))
-  }, [])
-
-  const removeImage = (id: string) => {
-    setFormData((prev) => {
-      const imageToRemove = prev.images.find((img) => img.id === id)
-      if (imageToRemove) {
-        URL.revokeObjectURL(imageToRemove.preview)
-      }
-      return {
-        ...prev,
-        images: prev.images.filter((img) => img.id !== id),
-      }
-    })
-  }
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      setIsDragging(false)
-      handleFiles(e.dataTransfer.files)
-    },
-    [handleFiles]
-  )
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
   }
 
   // Insert variable at cursor position
@@ -154,12 +199,33 @@ export default function CreateCharacterPage() {
 
     setFormData((prev) => ({ ...prev, speechStyle: newText }))
 
-    // Restore focus and cursor position after state update
     setTimeout(() => {
       textarea.focus()
       const newCursorPos = start + variable.length
       textarea.setSelectionRange(newCursorPos, newCursorPos)
     }, 0)
+  }
+
+  // Slash command handlers
+  const addCustomCommand = () => {
+    if (!newCommandName || !newCommandAction) return
+    const commandName = newCommandName.startsWith("/") ? newCommandName : `/${newCommandName}`
+    setSlashCommands((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        name: commandName,
+        action: newCommandAction,
+        icon: <MessageSquare className="h-4 w-4" />,
+        isCustom: true,
+      },
+    ])
+    setNewCommandName("")
+    setNewCommandAction("")
+  }
+
+  const removeCommand = (id: string) => {
+    setSlashCommands((prev) => prev.filter((cmd) => cmd.id !== id))
   }
 
   // Render text with variable replacement
@@ -221,29 +287,22 @@ export default function CreateCharacterPage() {
     })
 
     if (formData.appearance) {
-      parts.push({
-        text: `외모 및 특징: ${formData.appearance}`,
-        isPlaceholder: false,
-      })
+      parts.push({ text: `외모 및 특징: ${formData.appearance}`, isPlaceholder: false })
     }
-
     if (formData.preferences) {
-      parts.push({
-        text: `취향 및 호불호: ${formData.preferences}`,
-        isPlaceholder: false,
-      })
+      parts.push({ text: `취향 및 호불호: ${formData.preferences}`, isPlaceholder: false })
     }
-
     if (formData.secrets) {
-      parts.push({
-        text: `숨겨진 과거: ${formData.secrets}`,
-        isPlaceholder: false,
-      })
+      parts.push({ text: `숨겨진 과거: ${formData.secrets}`, isPlaceholder: false })
+    }
+    if (formData.taboos) {
+      parts.push({ text: `금기 사항: 절대로 ${formData.taboos}하지 마.`, isPlaceholder: false })
     }
 
-    if (formData.taboos) {
+    // Add slash commands to prompt
+    if (slashCommands.length > 0) {
       parts.push({
-        text: `금기 사항: 절대로 ${formData.taboos}하지 마.`,
+        text: `\n[슬래시 명령어]\n${slashCommands.map((cmd) => `${cmd.name}: ${cmd.action}`).join("\n")}`,
         isPlaceholder: false,
       })
     }
@@ -262,60 +321,32 @@ export default function CreateCharacterPage() {
     formData.relationship &&
     formData.speechStyle
 
-  // Preview Content Component (reused in both desktop and mobile)
-  const PreviewContent = () => (
-    <>
-      <ScrollArea className="flex-1">
-        <div className="p-6">
-          <div className="space-y-4 text-sm leading-relaxed">
-            {generateSystemPrompt().map((part, index) => (
-              <p
-                key={index}
-                className={
-                  part.isPlaceholder
-                    ? "text-muted-foreground"
-                    : "text-foreground"
-                }
-              >
-                {part.text.includes("{user}") || part.text.includes("{char}")
-                  ? renderWithVariables(part.text)
-                  : part.text}
-              </p>
-            ))}
-          </div>
-        </div>
-      </ScrollArea>
+  const creativityLabels = ["평범함", "", "", "중립", "", "독특함"]
 
-      {/* Image Preview Section */}
-      <div className="shrink-0 border-t border-border p-4 bg-secondary/20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <ImageIcon className="h-4 w-4" />
-          <span>참고 이미지: {formData.images.length}장</span>
+  // Preview Content Component
+  const PreviewContent = () => (
+    <ScrollArea className="flex-1">
+      <div className="p-6">
+        <div className="space-y-4 text-sm leading-relaxed">
+          {generateSystemPrompt().map((part, index) => (
+            <p
+              key={index}
+              className={part.isPlaceholder ? "text-muted-foreground" : "text-foreground whitespace-pre-wrap"}
+            >
+              {part.text.includes("{user}") || part.text.includes("{char}")
+                ? renderWithVariables(part.text)
+                : part.text}
+            </p>
+          ))}
         </div>
-        {formData.images.length > 0 ? (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {formData.images.map((img) => (
-              <img
-                key={img.id}
-                src={img.preview}
-                alt="Preview"
-                className="h-12 w-12 object-cover rounded shrink-0"
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground/60">
-            업로드된 이미지가 없습니다
-          </p>
-        )}
       </div>
-    </>
+    </ScrollArea>
   )
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-14 items-center gap-4 px-4 md:px-6">
           <Button
             variant="ghost"
@@ -329,36 +360,81 @@ export default function CreateCharacterPage() {
         </div>
       </header>
 
-      {/* Main Content - Responsive Layout */}
-      <div className="flex h-[calc(100vh-3.5rem)]">
-        {/* Left: Input Form - Full width on mobile, 50% on desktop */}
-        <div className="w-full md:w-1/2 md:border-r md:border-border">
-          <ScrollArea className="h-full">
-            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-32 md:pb-8">
+      {/* Main Content */}
+      <div className="flex min-h-[calc(100vh-3.5rem)]">
+        {/* Left: Input Form */}
+        <div className="w-full md:w-1/2">
+          <ScrollArea className="h-[calc(100vh-3.5rem)]">
+            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-40 md:pb-8">
+              {/* Random Generator Section */}
+              <section className="space-y-4">
+                <Card className="bg-card/50 border-border/50">
+                  <CardContent className="p-4 md:p-6 space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium">창의력 조절 (Creativity Level)</span>
+                        <span className="text-xs text-muted-foreground">
+                          {creativityLevel[0]} / 5
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">평범함</span>
+                        <Slider
+                          value={creativityLevel}
+                          onValueChange={setCreativityLevel}
+                          min={1}
+                          max={5}
+                          step={1}
+                          className="flex-1"
+                        />
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">독특함</span>
+                      </div>
+                    </div>
+                    <Button
+                      size="lg"
+                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={handleRandomGenerate}
+                    >
+                      <Sparkles className="mr-2 h-5 w-5" />
+                      이 설정으로 캐릭터 랜덤 생성
+                    </Button>
+                  </CardContent>
+                </Card>
+              </section>
+
               {/* Step 1: Core Identity */}
               <section className="space-y-5 md:space-y-6">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
                     1
                   </div>
-                  <h2 className="text-lg font-semibold">
-                    필수 정보 (Core Identity)
-                  </h2>
+                  <h2 className="text-lg font-semibold">필수 정보 (Core Identity)</h2>
                 </div>
 
                 <FieldGroup className="space-y-4 md:space-y-5">
-                  {/* Character Name */}
+                  {/* Character Name with Random Button */}
                   <Field>
                     <FieldLabel htmlFor="name">캐릭터 이름</FieldLabel>
-                    <Input
-                      id="name"
-                      placeholder="예: 아리아, 김대리"
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      className="bg-input"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="name"
+                        placeholder="예: 아리아, 김대리"
+                        value={formData.name}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, name: e.target.value }))
+                        }
+                        className="bg-input flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={randomizeName}
+                        className="shrink-0"
+                        title="이름 랜덤 생성"
+                      >
+                        <Dices className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </Field>
 
                   {/* Category */}
@@ -383,56 +459,6 @@ export default function CreateCharacterPage() {
                     </Select>
                   </Field>
 
-                  {/* Image Upload */}
-                  <Field>
-                    <FieldLabel>캐릭터 이미지 (여러 장 등록 가능)</FieldLabel>
-                    <div
-                      className={`mt-2 border-2 border-dashed rounded-lg p-6 md:p-8 text-center cursor-pointer transition-colors ${
-                        isDragging
-                          ? "border-primary bg-primary/10"
-                          : "border-border hover:border-muted-foreground"
-                      }`}
-                      onDrop={handleDrop}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => handleFiles(e.target.files)}
-                      />
-                      <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        이미지를 드래그하거나 클릭하여 업로드
-                      </p>
-                    </div>
-
-                    {/* Image Thumbnails */}
-                    {formData.images.length > 0 && (
-                      <div className="mt-4 grid grid-cols-4 md:grid-cols-5 gap-2">
-                        {formData.images.map((img) => (
-                          <div key={img.id} className="relative group aspect-square">
-                            <img
-                              src={img.preview}
-                              alt="Uploaded"
-                              className="w-full h-full object-cover rounded-md"
-                            />
-                            <button
-                              onClick={() => removeImage(img.id)}
-                              className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </Field>
-
                   {/* Personality Tags */}
                   <Field>
                     <FieldLabel>핵심 성격 (복수 선택 가능)</FieldLabel>
@@ -441,9 +467,7 @@ export default function CreateCharacterPage() {
                         <Badge
                           key={tag}
                           variant={
-                            formData.personalities.includes(tag)
-                              ? "default"
-                              : "outline"
+                            formData.personalities.includes(tag) ? "default" : "outline"
                           }
                           className={`cursor-pointer transition-all ${
                             formData.personalities.includes(tag)
@@ -463,9 +487,7 @@ export default function CreateCharacterPage() {
 
                   {/* Relationship */}
                   <Field>
-                    <FieldLabel htmlFor="relationship">
-                      사용자와의 관계
-                    </FieldLabel>
+                    <FieldLabel htmlFor="relationship">사용자와의 관계</FieldLabel>
                     <Input
                       id="relationship"
                       placeholder="예: 직장 상사, 소꿉친구, 스승"
@@ -482,7 +504,7 @@ export default function CreateCharacterPage() {
 
                   {/* Speech Style with Variable Buttons */}
                   <Field>
-                    <FieldLabel htmlFor="speechStyle">말투 규칙</FieldLabel>
+                    <FieldLabel htmlFor="speechStyle">말투 및 규칙</FieldLabel>
                     <div className="flex gap-2 mb-2">
                       <Badge
                         variant="outline"
@@ -519,7 +541,7 @@ export default function CreateCharacterPage() {
               {/* Step 2: Deep Persona (Accordion) */}
               <section className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-secondary-foreground text-sm font-medium">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
                     2
                   </div>
                   <h2 className="text-lg font-semibold text-muted-foreground">
@@ -528,17 +550,14 @@ export default function CreateCharacterPage() {
                 </div>
 
                 <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="deep-persona" className="border-border">
+                  <AccordionItem value="deep-persona" className="border-border/50">
                     <AccordionTrigger className="text-muted-foreground hover:text-foreground">
-                      상세 설정 펼치기 (선택)
+                      상세 설정 펼치기
                     </AccordionTrigger>
                     <AccordionContent>
                       <FieldGroup className="space-y-4 md:space-y-5 pt-4">
-                        {/* Appearance */}
                         <Field>
-                          <FieldLabel htmlFor="appearance">
-                            외모 및 특징
-                          </FieldLabel>
+                          <FieldLabel htmlFor="appearance">외모 및 특징</FieldLabel>
                           <Input
                             id="appearance"
                             placeholder="예: 은발에 푸른 눈, 항상 검은 망토를 걸침"
@@ -553,11 +572,8 @@ export default function CreateCharacterPage() {
                           />
                         </Field>
 
-                        {/* Preferences */}
                         <Field>
-                          <FieldLabel htmlFor="preferences">
-                            취향 및 호불호
-                          </FieldLabel>
+                          <FieldLabel htmlFor="preferences">취향 및 호불호</FieldLabel>
                           <Input
                             id="preferences"
                             placeholder="예: 커피를 좋아하고 시끄러운 곳을 싫어함"
@@ -572,11 +588,8 @@ export default function CreateCharacterPage() {
                           />
                         </Field>
 
-                        {/* Secrets */}
                         <Field>
-                          <FieldLabel htmlFor="secrets">
-                            숨겨진 비밀 / 과거사
-                          </FieldLabel>
+                          <FieldLabel htmlFor="secrets">숨겨진 비밀 / 과거사</FieldLabel>
                           <Textarea
                             id="secrets"
                             placeholder="캐릭터가 숨기고 있는 비밀이나 과거의 사건을 입력하세요."
@@ -591,7 +604,6 @@ export default function CreateCharacterPage() {
                           />
                         </Field>
 
-                        {/* Taboos */}
                         <Field>
                           <FieldLabel htmlFor="taboos">금기 사항</FieldLabel>
                           <Input
@@ -613,6 +625,86 @@ export default function CreateCharacterPage() {
                 </Accordion>
               </section>
 
+              {/* Step 3: Slash Commands (Accordion) */}
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
+                    3
+                  </div>
+                  <h2 className="text-lg font-semibold text-muted-foreground">
+                    명령어 정의 (Slash Commands)
+                  </h2>
+                </div>
+
+                <Accordion type="single" collapsible className="w-full">
+                  <AccordionItem value="slash-commands" className="border-border/50">
+                    <AccordionTrigger className="text-muted-foreground hover:text-foreground">
+                      슬래시 명령어 설정
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="space-y-4 pt-4">
+                        {/* Existing Commands */}
+                        <div className="space-y-2">
+                          {slashCommands.map((cmd) => (
+                            <div
+                              key={cmd.id}
+                              className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30"
+                            >
+                              <div className="text-primary">{cmd.icon}</div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm">{cmd.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {cmd.action}
+                                </p>
+                              </div>
+                              {cmd.isCustom && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeCommand(cmd.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Add Custom Command */}
+                        <div className="space-y-3 pt-2 border-t border-border/50">
+                          <p className="text-sm font-medium">커스텀 명령어 추가</p>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="명령어 (예: /힌트)"
+                              value={newCommandName}
+                              onChange={(e) => setNewCommandName(e.target.value)}
+                              className="bg-input flex-1"
+                            />
+                          </div>
+                          <Input
+                            placeholder="동작 설명 (예: 다음 행동에 대한 힌트를 준다)"
+                            value={newCommandAction}
+                            onChange={(e) => setNewCommandAction(e.target.value)}
+                            className="bg-input"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={addCustomCommand}
+                            disabled={!newCommandName || !newCommandAction}
+                            className="w-full"
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            명령어 추가
+                          </Button>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              </section>
+
               {/* Desktop Submit Button */}
               <div className="hidden md:block pt-4 pb-8">
                 <Button
@@ -621,7 +713,7 @@ export default function CreateCharacterPage() {
                   onClick={handleSubmit}
                   disabled={!isFormValid}
                 >
-                  <Sparkles className="mr-2 h-5 w-5" />
+                  <Rocket className="mr-2 h-5 w-5" />
                   캐릭터 생성 및 대화 시작
                 </Button>
               </div>
@@ -630,10 +722,10 @@ export default function CreateCharacterPage() {
         </div>
 
         {/* Right: System Prompt Preview (Desktop only) */}
-        <div className="hidden md:block w-1/2 bg-secondary/30">
+        <div className="hidden md:block w-1/2 bg-secondary/10">
           <div className="sticky top-14 h-[calc(100vh-3.5rem)] p-8">
-            <Card className="h-full bg-card border-border flex flex-col">
-              <CardHeader className="border-b border-border shrink-0">
+            <Card className="h-full bg-card/50 border-border/50 flex flex-col">
+              <CardHeader className="border-b border-border/50 shrink-0">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-4 w-4 text-primary" />
                   시스템 프롬프트 (실시간 조립)
@@ -648,8 +740,7 @@ export default function CreateCharacterPage() {
       </div>
 
       {/* Mobile Bottom Fixed Area */}
-      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border p-4 space-y-3 z-40">
-        {/* Preview Button */}
+      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background/95 backdrop-blur p-4 space-y-3 z-40">
         <Button
           variant="outline"
           className="w-full"
@@ -659,14 +750,13 @@ export default function CreateCharacterPage() {
           프롬프트 미리보기
         </Button>
 
-        {/* Submit Button */}
         <Button
           size="lg"
           className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={handleSubmit}
           disabled={!isFormValid}
         >
-          <Sparkles className="mr-2 h-5 w-5" />
+          <Rocket className="mr-2 h-5 w-5" />
           캐릭터 생성 및 대화 시작
         </Button>
       </div>
@@ -674,7 +764,7 @@ export default function CreateCharacterPage() {
       {/* Mobile Preview Sheet */}
       <Sheet open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <SheetContent side="bottom" className="h-[80vh] p-0">
-          <SheetHeader className="border-b border-border p-4">
+          <SheetHeader className="border-b border-border/50 p-4">
             <SheetTitle className="flex items-center gap-2 text-base">
               <Sparkles className="h-4 w-4 text-primary" />
               시스템 프롬프트 (실시간 조립)
