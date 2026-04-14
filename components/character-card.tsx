@@ -28,6 +28,12 @@ export function CharacterCard({ character, onClick }: CharacterCardProps) {
               {character.description}
             </p>
             <div className="flex flex-wrap gap-1.5">
+              <Badge
+                variant="outline"
+                className="text-xs border-primary/50 text-primary"
+              >
+                {character.category}
+              </Badge>
               {character.tags.map((tag) => (
                 <Badge
                   key={tag}
