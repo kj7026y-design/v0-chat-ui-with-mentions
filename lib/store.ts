@@ -16,6 +16,21 @@ export interface Character {
   category: Category
 }
 
+export interface Story {
+  id: string
+  title: string
+  synopsis: string
+  fullSynopsis: string
+  coverImage: string
+  tags: string[]
+  characters: {
+    name: string
+    role: string
+    avatar: string
+  }[]
+  featured?: boolean
+}
+
 export interface Scenario {
   place: string
   time: string
@@ -31,15 +46,23 @@ export interface Message {
 
 interface AppState {
   characters: Character[]
+  stories: Story[]
   selectedCharacter: Character | null
+  selectedStory: Story | null
   scenario: Scenario | null
   messages: Message[]
   isScenarioModalOpen: boolean
+  isStoryDrawerOpen: boolean
+  userName: string
   setSelectedCharacter: (character: Character | null) => void
+  setSelectedStory: (story: Story | null) => void
   setScenario: (scenario: Scenario) => void
   addMessage: (message: Omit<Message, "id" | "timestamp">) => void
   openScenarioModal: () => void
   closeScenarioModal: () => void
+  openStoryDrawer: () => void
+  closeStoryDrawer: () => void
+  setUserName: (name: string) => void
   clearChat: () => void
 }
 
@@ -141,13 +164,94 @@ const sampleCharacters: Character[] = [
   },
 ]
 
+const sampleStories: Story[] = [
+  {
+    id: "featured-1",
+    title: "황혼의 검객",
+    synopsis: "조선의 그림자 속, 복수를 품은 검이 깨어난다",
+    fullSynopsis: "아버지를 잃은 젊은 검객 무현은 조선의 암흑가에서 복수의 칼날을 갈고 있었다. 우연히 만난 의문의 여인 연화와 함께 궁궐의 비밀을 파헤치던 중, 자신의 과거와 얽힌 거대한 음모를 발견하게 된다. 칼끝에 걸린 진실, 그리고 사랑과 복수 사이에서 무현은 어떤 선택을 하게 될 것인가?",
+    coverImage: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=1200&h=600&fit=crop",
+    tags: ["고대아시아", "스릴러", "액션"],
+    characters: [
+      { name: "무현", role: "주인공 | 비밀 검객", avatar: "⚔️" },
+      { name: "연화", role: "히로인 | 재상의 딸", avatar: "🏯" },
+    ],
+    featured: true,
+  },
+  {
+    id: "story-1",
+    title: "마법사의 탑",
+    synopsis: "잊혀진 마법을 찾아 떠나는 여정",
+    fullSynopsis: "고대 엘프 왕국의 마지막 후예 아리아는 사라진 마법의 비밀을 찾아 금단의 탑으로 향한다. 그곳에서 만난 드래곤 나이트와 함께 세계를 위협하는 어둠의 세력에 맞서 싸우게 된다.",
+    coverImage: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&h=600&fit=crop",
+    tags: ["판타지", "모험"],
+    characters: [
+      { name: "아리아", role: "엘프 마법사", avatar: "🧝‍♀️" },
+      { name: "드래곤 나이트", role: "계약된 기사", avatar: "🐉" },
+    ],
+  },
+  {
+    id: "story-2",
+    title: "로마의 그림자",
+    synopsis: "황제의 뒤에 숨겨진 음모",
+    fullSynopsis: "로마 제국의 전성기, 황제의 참모 아우렐리우스는 궁궐 내부의 암살 음모를 발견한다. 신전의 무녀 헬레나가 전한 신탁을 따라 제국을 구하기 위한 위험한 여정을 시작한다.",
+    coverImage: "https://images.unsplash.com/photo-1515542622106-78bda8ba0e5b?w=400&h=600&fit=crop",
+    tags: ["고대서양", "미스터리"],
+    characters: [
+      { name: "아우렐리우스", role: "황제의 참모", avatar: "🏛️" },
+      { name: "헬레나", role: "신전의 무녀", avatar: "🏺" },
+    ],
+  },
+  {
+    id: "story-3",
+    title: "마케팅 전쟁",
+    synopsis: "대기업의 치열한 경쟁 속 생존기",
+    fullSynopsis: "신입사원으로 입사한 당신은 김대리와 박부장 사이에서 치열한 마케팅 전쟁에 휘말리게 된다. 경쟁사의 스파이, 내부의 배신자, 그리고 뜻밖의 로맨스까지. 과연 당신은 살아남을 수 있을까?",
+    coverImage: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=600&fit=crop",
+    tags: ["회사", "드라마"],
+    characters: [
+      { name: "김대리", role: "마케팅팀 대리", avatar: "👔" },
+      { name: "박부장", role: "베테랑 부장", avatar: "🧑‍💼" },
+    ],
+  },
+  {
+    id: "story-4",
+    title: "캔버스 위의 비밀",
+    synopsis: "미술부에서 시작된 의문의 사건",
+    fullSynopsis: "고등학교 미술부에서 발견된 의문의 그림. 사쿠라와 준혁은 그림 속에 숨겨진 30년 전 학교의 비밀을 파헤치기 시작한다. 과거와 현재가 교차하는 미스터리 학원물.",
+    coverImage: "https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=400&h=600&fit=crop",
+    tags: ["학교", "미스터리"],
+    characters: [
+      { name: "사쿠라", role: "미술부 부장", avatar: "🎨" },
+      { name: "준혁", role: "농구부 에이스", avatar: "🏀" },
+    ],
+  },
+  {
+    id: "story-5",
+    title: "용의 계약",
+    synopsis: "드래곤과 인간의 금지된 동맹",
+    fullSynopsis: "마왕의 부활이 임박한 세계. 마지막 드래곤과 계약을 맺은 기사는 엘프 마법사와 함께 세계를 구할 방법을 찾아 나선다. 종족을 초월한 우정과 희생의 이야기.",
+    coverImage: "https://images.unsplash.com/photo-1560942485-b2a11cc13456?w=400&h=600&fit=crop",
+    tags: ["판타지", "액션"],
+    characters: [
+      { name: "드래곤 나이트", role: "계약된 기사", avatar: "🐉" },
+      { name: "아리아", role: "엘프 마법사", avatar: "🧝‍♀️" },
+    ],
+  },
+]
+
 export const useAppStore = create<AppState>((set) => ({
   characters: sampleCharacters,
+  stories: sampleStories,
   selectedCharacter: null,
+  selectedStory: null,
   scenario: null,
   messages: [],
   isScenarioModalOpen: false,
+  isStoryDrawerOpen: false,
+  userName: "",
   setSelectedCharacter: (character) => set({ selectedCharacter: character }),
+  setSelectedStory: (story) => set({ selectedStory: story }),
   setScenario: (scenario) => set({ scenario }),
   addMessage: (message) =>
     set((state) => ({
@@ -162,5 +266,8 @@ export const useAppStore = create<AppState>((set) => ({
     })),
   openScenarioModal: () => set({ isScenarioModalOpen: true }),
   closeScenarioModal: () => set({ isScenarioModalOpen: false }),
+  openStoryDrawer: () => set({ isStoryDrawerOpen: true }),
+  closeStoryDrawer: () => set({ isStoryDrawerOpen: false }),
+  setUserName: (name) => set({ userName: name }),
   clearChat: () => set({ messages: [] }),
 }))

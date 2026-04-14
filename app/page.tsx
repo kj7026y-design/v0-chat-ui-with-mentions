@@ -1,103 +1,210 @@
 "use client"
 
-import { useState } from "react"
-import { useAppStore, CATEGORIES, type Category } from "@/lib/store"
-import { CharacterCard } from "@/components/character-card"
-import { ScenarioModal } from "@/components/scenario-modal"
+import { useState, useRef } from "react"
+import { useAppStore, type Story } from "@/lib/store"
+import { StoryCard } from "@/components/story-card"
+import { StoryDrawer } from "@/components/story-drawer"
 import { Button } from "@/components/ui/button"
-import { Sparkles, Plus, BookOpen } from "lucide-react"
+import { Play, ChevronLeft, ChevronRight, User, Compass, PenTool } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
+type Tab = "discover" | "studio"
+
 export default function HomePage() {
-  const { characters, setSelectedCharacter, openScenarioModal } = useAppStore()
-  const [selectedCategory, setSelectedCategory] = useState<Category>("회사")
+  const { stories, setSelectedStory, openStoryDrawer } = useAppStore()
+  const [activeTab, setActiveTab] = useState<Tab>("discover")
+  const carouselRef = useRef<HTMLDivElement>(null)
 
-  const filteredCharacters = characters.filter(
-    (char) => char.category === selectedCategory
-  )
+  const featuredStory = stories.find((s) => s.featured)
+  const regularStories = stories.filter((s) => !s.featured)
 
-  const handleCharacterSelect = (character: (typeof characters)[0]) => {
-    setSelectedCharacter(character)
-    openScenarioModal()
+  const handleStoryClick = (story: Story) => {
+    setSelectedStory(story)
+    openStoryDrawer()
+  }
+
+  const scrollCarousel = (direction: "left" | "right") => {
+    if (carouselRef.current) {
+      const scrollAmount = 320
+      carouselRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      })
+    }
   }
 
   return (
-    <main className="min-h-screen bg-background relative">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Sparkles className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-bold text-foreground">StoryChat AI</h1>
+    <main className="min-h-screen bg-background">
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-background via-background/80 to-transparent">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Logo */}
+            <div className="flex items-center gap-8">
+              <h1 className="text-xl font-bold text-foreground tracking-tight">
+                StoryChat
+              </h1>
+
+              {/* Tabs */}
+              <div className="hidden sm:flex items-center gap-1">
+                <button
+                  onClick={() => setActiveTab("discover")}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    activeTab === "discover"
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Compass className="w-4 h-4" />
+                  탐색
+                </button>
+                <Link
+                  href="/create"
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    activeTab === "studio"
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <PenTool className="w-4 h-4" />
+                  내 작업실
+                </Link>
+              </div>
+            </div>
+
+            {/* Profile */}
+            <button className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors">
+              <User className="w-4 h-4 text-muted-foreground" />
+            </button>
           </div>
-          <p className="text-sm text-muted-foreground hidden sm:block">
-            AI 캐릭터와 함께하는 인터랙티브 스토리
-          </p>
+
+          {/* Mobile Tabs */}
+          <div className="flex sm:hidden items-center gap-1 mt-4">
+            <button
+              onClick={() => setActiveTab("discover")}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1 justify-center",
+                activeTab === "discover"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Compass className="w-4 h-4" />
+              탐색
+            </button>
+            <Link
+              href="/create"
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-1 justify-center",
+                "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <PenTool className="w-4 h-4" />
+              내 작업실
+            </Link>
+          </div>
         </div>
-      </header>
+      </nav>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8 pb-24">
-        {/* Character Library Section */}
-        <section>
-          <div className="flex items-center gap-2 mb-6">
-            <BookOpen className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-semibold text-foreground">
-              캐릭터 라이브러리
-            </h2>
+      {/* Hero Banner */}
+      {featuredStory && (
+        <section className="relative pt-24 sm:pt-20">
+          <div className="relative h-[70vh] sm:h-[80vh] w-full overflow-hidden">
+            {/* Background Image */}
+            <img
+              src={featuredStory.coverImage}
+              alt={featuredStory.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {/* Gradient Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/30" />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
+
+            {/* Content */}
+            <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-12 max-w-7xl mx-auto">
+              <div className="max-w-xl space-y-4">
+                {/* Tags */}
+                <div className="flex gap-2">
+                  {featuredStory.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="text-xs font-medium text-foreground/80 bg-foreground/10 backdrop-blur-sm px-3 py-1 rounded-full"
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Title */}
+                <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground tracking-tight text-balance">
+                  {featuredStory.title}
+                </h2>
+
+                {/* Synopsis */}
+                <p className="text-lg sm:text-xl text-foreground/80 leading-relaxed text-pretty">
+                  {featuredStory.synopsis}
+                </p>
+
+                {/* CTA Button */}
+                <Button
+                  onClick={() => handleStoryClick(featuredStory)}
+                  size="lg"
+                  className="bg-foreground text-background hover:bg-foreground/90 h-14 px-8 text-base font-semibold mt-4"
+                >
+                  <Play className="w-5 h-5 mr-2 fill-current" />
+                  바로 시작하기
+                </Button>
+              </div>
+            </div>
           </div>
+        </section>
+      )}
 
-          {/* Category Tabs */}
-          <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
-            {CATEGORIES.map((category) => (
+      {/* Story Carousel Section */}
+      <section className="relative z-10 -mt-8 sm:-mt-16 pb-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg sm:text-xl font-semibold text-foreground">
+              이번 주 추천 스토리 팩
+            </h3>
+            <div className="hidden sm:flex items-center gap-2">
               <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={cn(
-                  "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-                  selectedCategory === category
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-                )}
+                onClick={() => scrollCarousel("left")}
+                className="p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
               >
-                {category}
+                <ChevronLeft className="w-5 h-5 text-foreground" />
               </button>
-            ))}
+              <button
+                onClick={() => scrollCarousel("right")}
+                className="p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+              >
+                <ChevronRight className="w-5 h-5 text-foreground" />
+              </button>
+            </div>
           </div>
 
-          {/* Character Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredCharacters.map((character) => (
-              <CharacterCard
-                key={character.id}
-                character={character}
-                onClick={() => handleCharacterSelect(character)}
+          {/* Carousel */}
+          <div
+            ref={carouselRef}
+            className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4 sm:mx-0 sm:px-0"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {regularStories.map((story) => (
+              <StoryCard
+                key={story.id}
+                story={story}
+                onClick={() => handleStoryClick(story)}
               />
             ))}
           </div>
+        </div>
+      </section>
 
-          {filteredCharacters.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              이 카테고리에는 아직 캐릭터가 없습니다.
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Floating Action Button */}
-      <Link href="/create" className="fixed bottom-6 right-6 z-20">
-        <Button
-          size="lg"
-          className="rounded-full shadow-lg bg-primary text-primary-foreground hover:bg-primary/90 h-14 px-6 gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span className="font-medium">새 캐릭터 만들기</span>
-        </Button>
-      </Link>
-
-      {/* Scenario Modal */}
-      <ScenarioModal />
+      {/* Story Drawer */}
+      <StoryDrawer />
     </main>
   )
 }
