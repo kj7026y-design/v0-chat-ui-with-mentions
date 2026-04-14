@@ -2,11 +2,10 @@
 
 import { useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Sparkles, X, Upload, ImageIcon } from "lucide-react"
+import { ArrowLeft, Sparkles, X, Upload, ImageIcon, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
@@ -24,6 +23,12 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { CATEGORIES, type Category } from "@/lib/store"
 
 const PERSONALITY_TAGS = [
@@ -65,6 +70,7 @@ export default function CreateCharacterPage() {
   const speechStyleRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [formData, setFormData] = useState<FormData>({
     name: "",
     category: "",
@@ -212,7 +218,6 @@ export default function CreateCharacterPage() {
         ? `말투 규칙: ${formData.speechStyle}`
         : "말투 규칙: [말투 및 말버릇 설정]",
       isPlaceholder: !formData.speechStyle,
-      // This will be rendered with variable replacement
     })
 
     if (formData.appearance) {
@@ -257,11 +262,61 @@ export default function CreateCharacterPage() {
     formData.relationship &&
     formData.speechStyle
 
+  // Preview Content Component (reused in both desktop and mobile)
+  const PreviewContent = () => (
+    <>
+      <ScrollArea className="flex-1">
+        <div className="p-6">
+          <div className="space-y-4 text-sm leading-relaxed">
+            {generateSystemPrompt().map((part, index) => (
+              <p
+                key={index}
+                className={
+                  part.isPlaceholder
+                    ? "text-muted-foreground"
+                    : "text-foreground"
+                }
+              >
+                {part.text.includes("{user}") || part.text.includes("{char}")
+                  ? renderWithVariables(part.text)
+                  : part.text}
+              </p>
+            ))}
+          </div>
+        </div>
+      </ScrollArea>
+
+      {/* Image Preview Section */}
+      <div className="shrink-0 border-t border-border p-4 bg-secondary/20">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+          <ImageIcon className="h-4 w-4" />
+          <span>참고 이미지: {formData.images.length}장</span>
+        </div>
+        {formData.images.length > 0 ? (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {formData.images.map((img) => (
+              <img
+                key={img.id}
+                src={img.preview}
+                alt="Preview"
+                className="h-12 w-12 object-cover rounded shrink-0"
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground/60">
+            업로드된 이미지가 없습니다
+          </p>
+        )}
+      </div>
+    </>
+  )
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-14 items-center gap-4 px-6">
+        <div className="flex h-14 items-center gap-4 px-4 md:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -274,14 +329,14 @@ export default function CreateCharacterPage() {
         </div>
       </header>
 
-      {/* Main Content - 5:5 Split */}
+      {/* Main Content - Responsive Layout */}
       <div className="flex h-[calc(100vh-3.5rem)]">
-        {/* Left: Input Form */}
-        <div className="w-1/2 border-r border-border">
+        {/* Left: Input Form - Full width on mobile, 50% on desktop */}
+        <div className="w-full md:w-1/2 md:border-r md:border-border">
           <ScrollArea className="h-full">
-            <div className="p-8 space-y-8">
+            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-32 md:pb-8">
               {/* Step 1: Core Identity */}
-              <section className="space-y-6">
+              <section className="space-y-5 md:space-y-6">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
                     1
@@ -291,7 +346,7 @@ export default function CreateCharacterPage() {
                   </h2>
                 </div>
 
-                <FieldGroup className="space-y-5">
+                <FieldGroup className="space-y-4 md:space-y-5">
                   {/* Character Name */}
                   <Field>
                     <FieldLabel htmlFor="name">캐릭터 이름</FieldLabel>
@@ -332,7 +387,7 @@ export default function CreateCharacterPage() {
                   <Field>
                     <FieldLabel>캐릭터 이미지 (여러 장 등록 가능)</FieldLabel>
                     <div
-                      className={`mt-2 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                      className={`mt-2 border-2 border-dashed rounded-lg p-6 md:p-8 text-center cursor-pointer transition-colors ${
                         isDragging
                           ? "border-primary bg-primary/10"
                           : "border-border hover:border-muted-foreground"
@@ -358,7 +413,7 @@ export default function CreateCharacterPage() {
 
                     {/* Image Thumbnails */}
                     {formData.images.length > 0 && (
-                      <div className="mt-4 grid grid-cols-5 gap-2">
+                      <div className="mt-4 grid grid-cols-4 md:grid-cols-5 gap-2">
                         {formData.images.map((img) => (
                           <div key={img.id} className="relative group aspect-square">
                             <img
@@ -478,7 +533,7 @@ export default function CreateCharacterPage() {
                       상세 설정 펼치기 (선택)
                     </AccordionTrigger>
                     <AccordionContent>
-                      <FieldGroup className="space-y-5 pt-4">
+                      <FieldGroup className="space-y-4 md:space-y-5 pt-4">
                         {/* Appearance */}
                         <Field>
                           <FieldLabel htmlFor="appearance">
@@ -558,8 +613,8 @@ export default function CreateCharacterPage() {
                 </Accordion>
               </section>
 
-              {/* Submit Button */}
-              <div className="pt-4 pb-8">
+              {/* Desktop Submit Button */}
+              <div className="hidden md:block pt-4 pb-8">
                 <Button
                   size="lg"
                   className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
@@ -574,8 +629,8 @@ export default function CreateCharacterPage() {
           </ScrollArea>
         </div>
 
-        {/* Right: System Prompt Preview (Sticky) */}
-        <div className="w-1/2 bg-secondary/30">
+        {/* Right: System Prompt Preview (Desktop only) */}
+        <div className="hidden md:block w-1/2 bg-secondary/30">
           <div className="sticky top-14 h-[calc(100vh-3.5rem)] p-8">
             <Card className="h-full bg-card border-border flex flex-col">
               <CardHeader className="border-b border-border shrink-0">
@@ -585,56 +640,51 @@ export default function CreateCharacterPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
-                <ScrollArea className="flex-1">
-                  <div className="p-6">
-                    <div className="space-y-4 text-sm leading-relaxed">
-                      {generateSystemPrompt().map((part, index) => (
-                        <p
-                          key={index}
-                          className={
-                            part.isPlaceholder
-                              ? "text-muted-foreground"
-                              : "text-foreground"
-                          }
-                        >
-                          {part.text.includes("{user}") ||
-                          part.text.includes("{char}")
-                            ? renderWithVariables(part.text)
-                            : part.text}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                </ScrollArea>
-
-                {/* Image Preview Section */}
-                <div className="shrink-0 border-t border-border p-4 bg-secondary/20">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                    <ImageIcon className="h-4 w-4" />
-                    <span>참고 이미지: {formData.images.length}장</span>
-                  </div>
-                  {formData.images.length > 0 ? (
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {formData.images.map((img) => (
-                        <img
-                          key={img.id}
-                          src={img.preview}
-                          alt="Preview"
-                          className="h-12 w-12 object-cover rounded shrink-0"
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground/60">
-                      업로드된 이미지가 없습니다
-                    </p>
-                  )}
-                </div>
+                <PreviewContent />
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      {/* Mobile Bottom Fixed Area */}
+      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background border-t border-border p-4 space-y-3 z-40">
+        {/* Preview Button */}
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => setIsPreviewOpen(true)}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          프롬프트 미리보기
+        </Button>
+
+        {/* Submit Button */}
+        <Button
+          size="lg"
+          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+          onClick={handleSubmit}
+          disabled={!isFormValid}
+        >
+          <Sparkles className="mr-2 h-5 w-5" />
+          캐릭터 생성 및 대화 시작
+        </Button>
+      </div>
+
+      {/* Mobile Preview Sheet */}
+      <Sheet open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <SheetContent side="bottom" className="h-[80vh] p-0">
+          <SheetHeader className="border-b border-border p-4">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="h-4 w-4 text-primary" />
+              시스템 프롬프트 (실시간 조립)
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-col h-[calc(80vh-60px)]">
+            <PreviewContent />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
