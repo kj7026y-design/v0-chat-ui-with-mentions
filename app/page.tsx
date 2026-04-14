@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Play, ChevronLeft, ChevronRight, User, Compass, PenTool } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { BottomNavBar } from "@/components/chat/bottom-nav-bar"
 
 type Tab = "discover" | "studio"
 
@@ -166,7 +167,7 @@ export default function HomePage() {
       )}
 
       {/* Story Carousel Section */}
-      <section className="relative z-10 pt-8 pb-16">
+      <section className="relative z-10 pt-8 pb-16 sm:pb-16 pb-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg sm:text-xl font-semibold text-foreground">
@@ -207,6 +208,11 @@ export default function HomePage() {
 
       {/* Story Drawer */}
       <StoryDrawer />
+
+      {/* Bottom Navigation - Mobile */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
+        <BottomNavBar />
+      </div>
     </main>
   )
 }
