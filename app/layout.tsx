@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { BottomNavBar } from '@/components/chat/bottom-nav-bar'
+import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -36,14 +37,21 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className="bg-background">
+    <html lang="ko" className="bg-background" suppressHydrationWarning>
       <body className="font-sans antialiased pb-16 sm:pb-0">
-        {children}
-        
-        {/* Global Bottom Navigation - Mobile Only */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-          <BottomNavBar />
-        </div>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          {children}
+          
+          {/* Global Bottom Navigation - Mobile Only */}
+          <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
+            <BottomNavBar />
+          </div>
+        </ThemeProvider>
         
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

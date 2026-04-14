@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { Switch } from "@/components/ui/switch"
 
 export default function MyPage() {
   const [pushEnabled, setPushEnabled] = useState(true)
@@ -180,20 +181,11 @@ export default function MyPage() {
               </div>
 
               {item.type === "toggle" ? (
-                <button
-                  onClick={item.onToggle}
-                  className={cn(
-                    "relative w-11 h-6 rounded-full transition-colors",
-                    item.value ? "bg-neutral-600" : "bg-neutral-700"
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "absolute top-1 w-4 h-4 rounded-full bg-neutral-200 transition-transform",
-                      item.value ? "translate-x-6" : "translate-x-1"
-                    )}
-                  />
-                </button>
+                <Switch
+                  checked={item.value}
+                  onCheckedChange={item.onToggle}
+                  className="data-[state=checked]:bg-neutral-500 data-[state=unchecked]:bg-neutral-700"
+                />
               ) : (
                 <Link href={item.href || "#"} className="p-2 -mr-2">
                   <ChevronRight className="w-5 h-5 text-neutral-600" />

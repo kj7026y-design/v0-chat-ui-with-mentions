@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTheme } from "next-themes"
 import { ArrowLeft, Check, Sun, Moon, MessageSquare, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -79,9 +80,38 @@ const previewMessages = [
 
 export default function ThemesPage() {
   const router = useRouter()
+  const { setTheme, theme: currentSystemTheme } = useTheme()
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>("dark")
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    // Load saved chat theme from localStorage
+    const savedChatTheme = localStorage.getItem("chat-theme") as ThemeId | null
+    if (savedChatTheme && themes.some(t => t.id === savedChatTheme)) {
+      setSelectedTheme(savedChatTheme)
+    }
+  }, [])
 
   const currentTheme = themes.find((t) => t.id === selectedTheme)!
+
+  const handleApplyTheme = () => {
+    // Save chat theme preference
+    localStorage.setItem("chat-theme", selectedTheme)
+    
+    // Apply system-wide theme (light or dark)
+    if (selectedTheme === "light" || selectedTheme === "message") {
+      setTheme("light")
+    } else {
+      setTheme("dark")
+    }
+    
+    router.back()
+  }
+
+  if (!mounted) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-neutral-950 pb-20">
@@ -258,7 +288,10 @@ export default function ThemesPage() {
         </section>
 
         {/* Apply Button */}
-        <button className="w-full py-3.5 rounded-xl bg-neutral-100 text-neutral-900 font-medium hover:bg-neutral-200 transition-colors">
+        <button 
+          onClick={handleApplyTheme}
+          className="w-full py-3.5 rounded-xl bg-neutral-100 text-neutral-900 font-medium hover:bg-neutral-200 transition-colors"
+        >
           테마 적용하기
         </button>
       </div>
