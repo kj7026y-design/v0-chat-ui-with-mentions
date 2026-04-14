@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 
 const navItems = [
   { icon: Home, label: "홈", href: "/" },
-  { icon: MessageCircle, label: "채팅", href: "/chat/1" },
+  { icon: MessageCircle, label: "채팅", href: "/chats" },
   { icon: PlusCircle, label: "만들기", href: "/create" },
   { icon: User, label: "마이페이지", href: "/mypage" },
 ]
@@ -20,7 +20,7 @@ export function BottomNavBar() {
       <div className="flex items-center justify-around py-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href || 
-            (item.href === "/chat/1" && pathname?.startsWith("/chat"))
+            (item.href === "/chats" && pathname?.startsWith("/chat"))
 
           return (
             <Link

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
+import { ChatSettingsDrawer } from "@/components/chat/chat-settings-drawer"
 import { type ChatMessage } from "@/lib/chat-types"
 
 const initialMessages: ChatMessage[] = [
@@ -62,6 +63,7 @@ const initialMessages: ChatMessage[] = [
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [isTyping, setIsTyping] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -117,7 +119,20 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-neutral-900">
       {/* Fixed Header */}
-      <ChatHeader characterName="이무기" level={3} />
+      <ChatHeader 
+        characterName="이무기" 
+        characterEmoji="🐉"
+        level={3} 
+        onMenuClick={() => setIsSettingsOpen(true)}
+      />
+
+      {/* Settings Side Drawer */}
+      <ChatSettingsDrawer
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        characterName="이무기"
+        characterEmoji="🐉"
+      />
 
       {/* Chat Area - Scrollable */}
       <main className="flex-1 overflow-y-auto">
