@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Sparkles, X } from "lucide-react"
+import { ArrowLeft, Sparkles, X, Upload, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -41,6 +41,12 @@ const PERSONALITY_TAGS = [
   "카리스마",
 ]
 
+interface UploadedImage {
+  id: string
+  file: File
+  preview: string
+}
+
 interface FormData {
   name: string
   category: Category | ""
@@ -51,10 +57,14 @@ interface FormData {
   preferences: string
   secrets: string
   taboos: string
+  images: UploadedImage[]
 }
 
 export default function CreateCharacterPage() {
   const router = useRouter()
+  const speechStyleRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [formData, setFormData] = useState<FormData>({
     name: "",
     category: "",
@@ -65,6 +75,7 @@ export default function CreateCharacterPage() {
     preferences: "",
     secrets: "",
     taboos: "",
+    images: [],
   })
 
   const togglePersonality = (tag: string) => {
@@ -76,52 +87,166 @@ export default function CreateCharacterPage() {
     }))
   }
 
-  const generateSystemPrompt = () => {
-    const parts: string[] = []
+  // Image upload handlers
+  const handleFiles = useCallback((files: FileList | null) => {
+    if (!files) return
+    const newImages: UploadedImage[] = Array.from(files)
+      .filter((file) => file.type.startsWith("image/"))
+      .map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        preview: URL.createObjectURL(file),
+      }))
 
-    parts.push(
-      `너의 이름은 ${formData.name || "[캐릭터 이름]"}이고, ${formData.category || "[세계관]"}에 살고 있어.`
-    )
+    setFormData((prev) => ({
+      ...prev,
+      images: [...prev.images, ...newImages],
+    }))
+  }, [])
+
+  const removeImage = (id: string) => {
+    setFormData((prev) => {
+      const imageToRemove = prev.images.find((img) => img.id === id)
+      if (imageToRemove) {
+        URL.revokeObjectURL(imageToRemove.preview)
+      }
+      return {
+        ...prev,
+        images: prev.images.filter((img) => img.id !== id),
+      }
+    })
+  }
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+      handleFiles(e.dataTransfer.files)
+    },
+    [handleFiles]
+  )
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  // Insert variable at cursor position
+  const insertVariable = (variable: "{user}" | "{char}") => {
+    const textarea = speechStyleRef.current
+    if (!textarea) return
+
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = formData.speechStyle
+    const newText = text.substring(0, start) + variable + text.substring(end)
+
+    setFormData((prev) => ({ ...prev, speechStyle: newText }))
+
+    // Restore focus and cursor position after state update
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = start + variable.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+    }, 0)
+  }
+
+  // Render text with variable replacement
+  const renderWithVariables = (text: string) => {
+    if (!text) return null
+
+    const charName = formData.name || "[캐릭터 이름]"
+    const parts = text.split(/(\{user\}|\{char\})/g)
+
+    return parts.map((part, index) => {
+      if (part === "{user}") {
+        return (
+          <strong key={index} className="text-primary">
+            사용자
+          </strong>
+        )
+      }
+      if (part === "{char}") {
+        return (
+          <strong key={index} className="text-primary">
+            {charName}
+          </strong>
+        )
+      }
+      return <span key={index}>{part}</span>
+    })
+  }
+
+  const generateSystemPrompt = () => {
+    const parts: { text: string; isPlaceholder: boolean }[] = []
+
+    parts.push({
+      text: `너의 이름은 ${formData.name || "[캐릭터 이름]"}이고, ${formData.category || "[세계관]"}에 살고 있어.`,
+      isPlaceholder: !formData.name || !formData.category,
+    })
 
     if (formData.personalities.length > 0) {
-      parts.push(
-        `너의 성격은 ${formData.personalities.join(", ")}한 특징을 가지고 있어.`
-      )
+      parts.push({
+        text: `너의 성격은 ${formData.personalities.join(", ")}한 특징을 가지고 있어.`,
+        isPlaceholder: false,
+      })
     } else {
-      parts.push("너의 성격은 [핵심 성격]한 특징을 가지고 있어.")
+      parts.push({
+        text: "너의 성격은 [핵심 성격]한 특징을 가지고 있어.",
+        isPlaceholder: true,
+      })
     }
 
-    parts.push(
-      `사용자와의 관계는 ${formData.relationship || "[관계 설정]"}이야.`
-    )
+    parts.push({
+      text: `사용자와의 관계는 ${formData.relationship || "[관계 설정]"}이야.`,
+      isPlaceholder: !formData.relationship,
+    })
 
-    if (formData.speechStyle) {
-      parts.push(`말투 규칙: ${formData.speechStyle}`)
-    } else {
-      parts.push("말투 규칙: [말투 및 말버릇 설정]")
-    }
+    parts.push({
+      text: formData.speechStyle
+        ? `말투 규칙: ${formData.speechStyle}`
+        : "말투 규칙: [말투 및 말버릇 설정]",
+      isPlaceholder: !formData.speechStyle,
+      // This will be rendered with variable replacement
+    })
 
     if (formData.appearance) {
-      parts.push(`외모 및 특징: ${formData.appearance}`)
+      parts.push({
+        text: `외모 및 특징: ${formData.appearance}`,
+        isPlaceholder: false,
+      })
     }
 
     if (formData.preferences) {
-      parts.push(`취향 및 호불호: ${formData.preferences}`)
+      parts.push({
+        text: `취향 및 호불호: ${formData.preferences}`,
+        isPlaceholder: false,
+      })
     }
 
     if (formData.secrets) {
-      parts.push(`숨겨진 과거: ${formData.secrets}`)
+      parts.push({
+        text: `숨겨진 과거: ${formData.secrets}`,
+        isPlaceholder: false,
+      })
     }
 
     if (formData.taboos) {
-      parts.push(`금기 사항: 절대로 ${formData.taboos}하지 마.`)
+      parts.push({
+        text: `금기 사항: 절대로 ${formData.taboos}하지 마.`,
+        isPlaceholder: false,
+      })
     }
 
-    return parts.join("\n\n")
+    return parts
   }
 
   const handleSubmit = () => {
-    // In a real app, this would save the character and redirect
     router.push("/")
   }
 
@@ -203,6 +328,56 @@ export default function CreateCharacterPage() {
                     </Select>
                   </Field>
 
+                  {/* Image Upload */}
+                  <Field>
+                    <FieldLabel>캐릭터 이미지 (여러 장 등록 가능)</FieldLabel>
+                    <div
+                      className={`mt-2 border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                        isDragging
+                          ? "border-primary bg-primary/10"
+                          : "border-border hover:border-muted-foreground"
+                      }`}
+                      onDrop={handleDrop}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => handleFiles(e.target.files)}
+                      />
+                      <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        이미지를 드래그하거나 클릭하여 업로드
+                      </p>
+                    </div>
+
+                    {/* Image Thumbnails */}
+                    {formData.images.length > 0 && (
+                      <div className="mt-4 grid grid-cols-5 gap-2">
+                        {formData.images.map((img) => (
+                          <div key={img.id} className="relative group aspect-square">
+                            <img
+                              src={img.preview}
+                              alt="Uploaded"
+                              className="w-full h-full object-cover rounded-md"
+                            />
+                            <button
+                              onClick={() => removeImage(img.id)}
+                              className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Field>
+
                   {/* Personality Tags */}
                   <Field>
                     <FieldLabel>핵심 성격 (복수 선택 가능)</FieldLabel>
@@ -250,12 +425,29 @@ export default function CreateCharacterPage() {
                     />
                   </Field>
 
-                  {/* Speech Style */}
+                  {/* Speech Style with Variable Buttons */}
                   <Field>
                     <FieldLabel htmlFor="speechStyle">말투 규칙</FieldLabel>
+                    <div className="flex gap-2 mb-2">
+                      <Badge
+                        variant="outline"
+                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs"
+                        onClick={() => insertVariable("{user}")}
+                      >
+                        {"{user}"} 추가
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs"
+                        onClick={() => insertVariable("{char}")}
+                      >
+                        {"{char}"} 추가
+                      </Badge>
+                    </div>
                     <Textarea
                       id="speechStyle"
-                      placeholder="캐릭터의 말투나 말버릇을 구체적으로 입력하세요.&#10;예: 문장 끝에 '~이다'를 붙이며 존댓말을 사용함. 가끔 고어체를 섞어 말함."
+                      ref={speechStyleRef}
+                      placeholder={`캐릭터의 말투나 말버릇을 구체적으로 입력하세요.\n예: {char}는 문장 끝에 '~이다'를 붙이며 {user}에게 존댓말을 사용함.`}
                       value={formData.speechStyle}
                       onChange={(e) =>
                         setFormData((prev) => ({
@@ -385,38 +577,59 @@ export default function CreateCharacterPage() {
         {/* Right: System Prompt Preview (Sticky) */}
         <div className="w-1/2 bg-secondary/30">
           <div className="sticky top-14 h-[calc(100vh-3.5rem)] p-8">
-            <Card className="h-full bg-card border-border">
-              <CardHeader className="border-b border-border">
+            <Card className="h-full bg-card border-border flex flex-col">
+              <CardHeader className="border-b border-border shrink-0">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="h-4 w-4 text-primary" />
                   시스템 프롬프트 (실시간 조립)
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-12rem)]">
+              <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
+                <ScrollArea className="flex-1">
                   <div className="p-6">
-                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                      {generateSystemPrompt()
-                        .split("\n\n")
-                        .map((paragraph, index) => {
-                          const isPlaceholder =
-                            paragraph.includes("[") && paragraph.includes("]")
-                          return (
-                            <p
-                              key={index}
-                              className={`mb-4 ${
-                                isPlaceholder
-                                  ? "text-muted-foreground"
-                                  : "text-foreground"
-                              }`}
-                            >
-                              {paragraph}
-                            </p>
-                          )
-                        })}
-                    </pre>
+                    <div className="space-y-4 text-sm leading-relaxed">
+                      {generateSystemPrompt().map((part, index) => (
+                        <p
+                          key={index}
+                          className={
+                            part.isPlaceholder
+                              ? "text-muted-foreground"
+                              : "text-foreground"
+                          }
+                        >
+                          {part.text.includes("{user}") ||
+                          part.text.includes("{char}")
+                            ? renderWithVariables(part.text)
+                            : part.text}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 </ScrollArea>
+
+                {/* Image Preview Section */}
+                <div className="shrink-0 border-t border-border p-4 bg-secondary/20">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                    <ImageIcon className="h-4 w-4" />
+                    <span>참고 이미지: {formData.images.length}장</span>
+                  </div>
+                  {formData.images.length > 0 ? (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {formData.images.map((img) => (
+                        <img
+                          key={img.id}
+                          src={img.preview}
+                          alt="Preview"
+                          className="h-12 w-12 object-cover rounded shrink-0"
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/60">
+                      업로드된 이미지가 없습니다
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
