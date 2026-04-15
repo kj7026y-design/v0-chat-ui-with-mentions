@@ -64,7 +64,7 @@ export function ChatWindow() {
   if (!selectedCharacter || !scenario) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">캐릭터와 시나리오를 먼저 선택해주세요.</p>
+        <p className="text-muted-foreground">캐릭터와 세계관을 먼저 선택해주세요.</p>
       </div>
     )
   }

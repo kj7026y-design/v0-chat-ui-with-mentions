@@ -36,8 +36,8 @@ export default function MyPage() {
     },
     {
       icon: FolderOpen,
-      label: "시나리오 아카이브",
-      description: "내가 저장하거나 만든 시나리오",
+      label: "세계관 아카이브",
+      description: "내가 저장하거나 만든 세계관",
       href: "/archive",
     },
     {
@@ -161,38 +161,51 @@ export default function MyPage() {
           앱 설정
         </h2>
         <div className="bg-neutral-900 rounded-xl overflow-hidden">
-          {settingsItems.map((item, index) => (
-            <div
-              key={item.label}
-              className={cn(
-                "flex items-center gap-4 px-4 py-4",
-                index !== settingsItems.length - 1 && "border-b border-neutral-800"
-              )}
-            >
-              <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center">
-                <item.icon className="w-5 h-5 text-neutral-400" />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-neutral-200">{item.label}</p>
-                {item.type === "link" && item.description && (
-                  <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>
-                )}
-              </div>
+          {settingsItems.map((item, index) => {
+            const content = (
+              <>
+                <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center">
+                  <item.icon className="w-5 h-5 text-neutral-400" />
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-neutral-200">{item.label}</p>
+                  {item.type === "link" && item.description && (
+                    <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>
+                  )}
+                </div>
 
-              {item.type === "toggle" ? (
-                <Switch
-                  checked={item.value}
-                  onCheckedChange={item.onToggle}
-                  className="data-[state=checked]:bg-neutral-500 data-[state=unchecked]:bg-neutral-700"
-                />
-              ) : (
-                <Link href={item.href || "#"} className="p-2 -mr-2">
+                {item.type === "toggle" ? (
+                  <Switch
+                    checked={item.value}
+                    onCheckedChange={item.onToggle}
+                    className="data-[state=checked]:bg-neutral-500 data-[state=unchecked]:bg-neutral-700"
+                  />
+                ) : (
                   <ChevronRight className="w-5 h-5 text-neutral-600" />
-                </Link>
-              )}
-            </div>
-          ))}
+                )}
+              </>
+            )
+
+            const className = cn(
+              "flex items-center gap-4 px-4 py-4 hover:bg-neutral-800/50 transition-colors",
+              index !== settingsItems.length - 1 && "border-b border-neutral-800"
+            )
+
+            if (item.type === "toggle") {
+              return (
+                <div key={item.label} className={className}>
+                  {content}
+                </div>
+              )
+            }
+
+            return (
+              <Link key={item.label} href={item.href || "#"} className={className}>
+                {content}
+              </Link>
+            )
+          })}
         </div>
       </section>
 

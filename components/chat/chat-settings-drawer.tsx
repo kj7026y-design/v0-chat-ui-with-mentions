@@ -203,7 +203,7 @@ export function ChatSettingsDrawer({
           <section>
             <div className="flex items-center gap-2 mb-3">
               <User className="w-4 h-4 text-neutral-400" />
-              <h3 className="text-sm font-medium text-neutral-300">내 페르소나</h3>
+              <h3 className="text-sm font-medium text-neutral-300">내 자아</h3>
             </div>
             <div className="bg-neutral-800/50 rounded-lg p-3">
               <div className="flex items-center gap-3">

@@ -162,7 +162,7 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
           {/* Section Title */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-foreground mb-2">
-              시나리오 설정
+              세계관 설정
             </h1>
             <p className="text-muted-foreground">
               이야기의 배경과 시작점을 설정하세요
@@ -181,7 +181,7 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
               )}
             >
               <BookOpen className="w-4 h-4" />
-              나의 시나리오 불러오기
+              나의 세계관 불러오기
             </button>
             <button
               onClick={() => setMode("create")}

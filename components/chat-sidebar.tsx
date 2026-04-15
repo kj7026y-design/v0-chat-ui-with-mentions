@@ -45,7 +45,7 @@ export function ChatSidebar() {
         {/* Scenario Summary */}
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-sidebar-foreground uppercase tracking-wider">
-            시나리오 정보
+            세계관 정보
           </h3>
 
           <div className="space-y-3">

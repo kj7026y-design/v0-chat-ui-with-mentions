@@ -23,7 +23,7 @@ export function TimelineHeader({ onAddEvent }: TimelineHeaderProps) {
         </button>
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
-            시나리오 타임라인
+            세계관 타임라인
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             이야기의 흐름을 한눈에 확인하세요

@@ -49,7 +49,7 @@ export function ScenarioModal() {
             )}
             <div>
               <DialogTitle className="text-xl text-foreground">
-                시나리오 설정
+                세계관 설정
               </DialogTitle>
               <DialogDescription className="text-muted-foreground">
                 {selectedCharacter?.name}와의 이야기 배경을 설정해주세요
