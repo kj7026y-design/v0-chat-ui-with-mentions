@@ -158,6 +158,15 @@ export default function ChatPage() {
     setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
   }
 
+  const handleBranchFromMessage = (messageId: string) => {
+    // In real implementation, this would create a new chat branch
+    // For demo, show an alert
+    const messageIndex = messages.findIndex(m => m.id === messageId)
+    const branchedMessages = messages.slice(0, messageIndex + 1)
+    console.log(`Creating branch with ${branchedMessages.length} messages`)
+    // Could navigate to new chat: router.push(`/chat/branch-${Date.now()}`)
+  }
+
   return (
     <div className="flex flex-col h-[100dvh] bg-black">
       {/* Fixed Header */}
@@ -203,6 +212,7 @@ export default function ChatPage() {
           onRewriteMessage={handleRewriteMessage}
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
+          onBranchFromMessage={handleBranchFromMessage}
           editedMessageIds={editedMessageIds}
         />
       </main>

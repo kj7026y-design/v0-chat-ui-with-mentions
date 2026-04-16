@@ -12,6 +12,7 @@ interface ChatMessageListProps {
   onRewriteMessage?: (messageId: string) => void
   onEditMessage?: (messageId: string) => void
   onDeleteMessage?: (messageId: string) => void
+  onBranchFromMessage?: (messageId: string) => void
   editedMessageIds?: Set<string>
 }
 
@@ -22,6 +23,7 @@ export function ChatMessageList({
   onRewriteMessage,
   onEditMessage,
   onDeleteMessage,
+  onBranchFromMessage,
   editedMessageIds = new Set()
 }: ChatMessageListProps) {
   return (
@@ -33,6 +35,7 @@ export function ChatMessageList({
           onRewrite={onRewriteMessage}
           onEdit={onEditMessage}
           onDelete={onDeleteMessage}
+          onBranch={onBranchFromMessage}
           isEdited={editedMessageIds.has(message.id)}
         />
       ))}
@@ -51,10 +54,12 @@ interface MessageBubbleProps {
   onRewrite?: (messageId: string) => void
   onEdit?: (messageId: string) => void
   onDelete?: (messageId: string) => void
+  onBranch?: (messageId: string) => void
   isEdited?: boolean
 }
 
-function MessageBubble({ message, onRewrite, onEdit, onDelete, isEdited }: MessageBubbleProps) {
+function MessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, isEdited }: MessageBubbleProps) {
+  const [isBranching, setIsBranching] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const isUser = message.type === "user"
   const isAI = message.type === "ai"
@@ -157,6 +162,30 @@ function MessageBubble({ message, onRewrite, onEdit, onDelete, isEdited }: Messa
             isEdited={isEdited}
           />
         </div>
+      )}
+      
+      {/* Branch Button - always visible below AI messages */}
+      {isAI && (
+        <button
+          onClick={() => {
+            setIsBranching(true)
+            setTimeout(() => {
+              onBranch?.(message.id)
+              setIsBranching(false)
+            }, 800)
+          }}
+          disabled={isBranching}
+          className={cn(
+            "flex items-center gap-1.5 px-2 py-1 text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors",
+            "border-t border-dashed border-neutral-800/50 mt-1 -mx-1 pt-2",
+            isBranching && "text-neutral-400"
+          )}
+        >
+          <svg className={cn("w-3 h-3", isBranching && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span>{isBranching ? "분기 생성 중..." : "여기서부터 새로운 채팅으로 분기"}</span>
+        </button>
       )}
     </div>
   )

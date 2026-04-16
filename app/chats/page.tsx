@@ -192,15 +192,34 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
             className="fixed inset-0 z-40" 
             onClick={() => setShowMenu(false)} 
           />
-          <div className="absolute right-2 top-14 z-50 bg-neutral-800 rounded-lg shadow-xl py-1 min-w-[120px]">
-            <button className="w-full px-4 py-2 text-left text-sm text-neutral-300 hover:bg-neutral-700">
-              알림 끄기
+          <div className="absolute right-2 top-14 z-50 bg-neutral-800 rounded-xl shadow-xl py-1.5 min-w-[140px] border border-neutral-700/50">
+            <button 
+              onClick={() => {
+                // Handle duplicate
+                setShowMenu(false)
+              }}
+              className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors"
+            >
+              채팅방 복제
             </button>
-            <button className="w-full px-4 py-2 text-left text-sm text-neutral-300 hover:bg-neutral-700">
-              고정하기
+            <button 
+              onClick={() => {
+                // Handle rename
+                setShowMenu(false)
+              }}
+              className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors"
+            >
+              이름 변경
             </button>
-            <button className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-neutral-700">
-              삭제하기
+            <div className="my-1 border-t border-neutral-700/50" />
+            <button 
+              onClick={() => {
+                // Handle delete
+                setShowMenu(false)
+              }}
+              className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-700/50 transition-colors"
+            >
+              삭제
             </button>
           </div>
         </>
