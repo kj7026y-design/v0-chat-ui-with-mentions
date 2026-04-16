@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { BookOpen, Plus, MoreVertical, Calendar, MapPin, Play, ChevronRight } from "lucide-react"
+import { BookOpen, Plus, MoreVertical, Calendar, MapPin, Play, Copy, Edit3, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
-type TabId = "characters" | "scenarios" | "completed"
+type TabId = "scenarios" | "characters" | "personas" | "completed"
 
 interface Tab {
   id: TabId
@@ -13,9 +13,10 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: "characters", label: "캐릭터" },
-  { id: "scenarios", label: "세계관" },
-  { id: "completed", label: "완성본" },
+  { id: "scenarios", label: "내 세계관" },
+  { id: "characters", label: "내 캐릭터" },
+  { id: "personas", label: "내 자아" },
+  { id: "completed", label: "내 완성본" },
 ]
 
 // Mock data
@@ -32,9 +33,18 @@ interface Scenario {
   id: string
   title: string
   startDate: string
+  coverImage?: string
   coverColor: string
   events: string[]
   description: string
+}
+
+interface Persona {
+  id: string
+  name: string
+  role: string
+  description: string
+  createdAt: string
 }
 
 interface CompletedWork {
@@ -100,6 +110,30 @@ const mockScenarios: Scenario[] = [
   },
 ]
 
+const mockPersonas: Persona[] = [
+  {
+    id: "p1",
+    name: "나",
+    role: "잊혀진 왕국의 마지막 기사",
+    description: "왕국을 지키기 위해 남은 유일한 존재",
+    createdAt: "2024.03.15",
+  },
+  {
+    id: "p2",
+    name: "민지",
+    role: "현대 서울의 대학생",
+    description: "우연히 마법을 발견한 평범한 대학생",
+    createdAt: "2024.03.10",
+  },
+  {
+    id: "p3",
+    name: "아리아",
+    role: "별들의 도시 탐험가",
+    description: "은하계를 여행하는 우주 탐험가",
+    createdAt: "2024.03.05",
+  },
+]
+
 const mockCompletedWorks: CompletedWork[] = [
   {
     id: "w1",
@@ -137,7 +171,7 @@ const mockCompletedWorks: CompletedWork[] = [
 ]
 
 export default function MyWorksPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("characters")
+  const [activeTab, setActiveTab] = useState<TabId>("scenarios")
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
@@ -168,15 +202,15 @@ export default function MyWorksPage() {
         </div>
 
         {/* Sticky Tabs */}
-        <div className="relative px-5">
-          <div className="flex">
+        <div className="relative px-2 overflow-x-auto scrollbar-hide">
+          <div className="flex min-w-max">
             {tabs.map((tab, index) => (
               <button
                 key={tab.id}
                 ref={(el) => { tabRefs.current[index] = el }}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex-1 py-3 text-sm font-medium transition-colors",
+                  "px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap",
                   activeTab === tab.id ? "text-neutral-100" : "text-neutral-500"
                 )}
               >
@@ -198,62 +232,16 @@ export default function MyWorksPage() {
 
       {/* Tab Content */}
       <div className="px-5 py-6">
-        {activeTab === "characters" && <CharactersTab characters={mockCharacters} />}
         {activeTab === "scenarios" && <ScenariosTab scenarios={mockScenarios} />}
+        {activeTab === "characters" && <CharactersTab characters={mockCharacters} />}
+        {activeTab === "personas" && <PersonasTab personas={mockPersonas} />}
         {activeTab === "completed" && <CompletedTab works={mockCompletedWorks} />}
       </div>
     </div>
   )
 }
 
-// Characters Tab - Card Format
-function CharactersTab({ characters }: { characters: Character[] }) {
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {characters.map((character) => (
-        <div
-          key={character.id}
-          className="bg-neutral-900 rounded-xl overflow-hidden border border-neutral-800/50"
-        >
-          {/* Character Image/Avatar */}
-          <div className="aspect-[4/3] bg-neutral-800 flex items-center justify-center">
-            <span className="text-5xl">{character.emoji}</span>
-          </div>
-          
-          {/* Character Info */}
-          <div className="p-3">
-            <h3 className="text-sm font-semibold text-neutral-100 mb-1">
-              {character.name}
-            </h3>
-            <p className="text-xs text-neutral-500 line-clamp-1 mb-2">
-              {character.description}
-            </p>
-            
-            {/* Tags */}
-            <div className="flex flex-wrap gap-1">
-              {character.tags.slice(0, 2).map((tag) => (
-                <span
-                  key={tag}
-                  className="px-1.5 py-0.5 text-[10px] bg-neutral-800 text-neutral-400 rounded"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      ))}
-      
-      {/* Add Character Card */}
-      <button className="aspect-auto min-h-[180px] bg-neutral-900/50 rounded-xl border border-dashed border-neutral-700 flex flex-col items-center justify-center gap-2 hover:bg-neutral-900 hover:border-neutral-600 transition-colors">
-        <Plus className="w-6 h-6 text-neutral-600" />
-        <span className="text-xs text-neutral-500">새 캐릭터</span>
-      </button>
-    </div>
-  )
-}
-
-// Scenarios Tab - Poster Format
+// Scenarios Tab - Poster Format with Thumbnail
 function ScenariosTab({ scenarios }: { scenarios: Scenario[] }) {
   return (
     <div className="flex flex-col gap-4">
@@ -312,8 +300,102 @@ function ScenariosTab({ scenarios }: { scenarios: Scenario[] }) {
   )
 }
 
-// Completed Works Tab - Combined List
+// Characters Tab - Card Format with Circle Profile
+function CharactersTab({ characters }: { characters: Character[] }) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {characters.map((character) => (
+        <div
+          key={character.id}
+          className="flex flex-col items-center p-4 bg-neutral-900 rounded-xl border border-neutral-800/50"
+        >
+          {/* Circle Profile */}
+          <div className="w-16 h-16 rounded-full bg-neutral-800 flex items-center justify-center mb-3">
+            <span className="text-2xl">{character.emoji}</span>
+          </div>
+          
+          {/* Name */}
+          <h3 className="text-sm font-semibold text-neutral-100 mb-1">
+            {character.name}
+          </h3>
+          
+          {/* Tags */}
+          <div className="flex flex-wrap justify-center gap-1">
+            {character.tags.slice(0, 2).map((tag) => (
+              <span
+                key={tag}
+                className="px-1.5 py-0.5 text-[9px] bg-neutral-800 text-neutral-500 rounded"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+      
+      {/* Add Character Card */}
+      <button className="flex flex-col items-center justify-center p-4 min-h-[140px] bg-neutral-900/50 rounded-xl border border-dashed border-neutral-700 hover:bg-neutral-900 hover:border-neutral-600 transition-colors">
+        <Plus className="w-5 h-5 text-neutral-600 mb-2" />
+        <span className="text-[10px] text-neutral-500">새 캐릭터</span>
+      </button>
+    </div>
+  )
+}
+
+// Personas Tab - My personas with role summary
+function PersonasTab({ personas }: { personas: Persona[] }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {personas.map((persona) => (
+        <div
+          key={persona.id}
+          className="p-4 bg-neutral-900 rounded-xl border border-neutral-800/50"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              {/* Name */}
+              <h3 className="text-sm font-semibold text-neutral-100 mb-1">
+                {persona.name}
+              </h3>
+              
+              {/* Role */}
+              <p className="text-xs text-neutral-400 mb-2">
+                {persona.role}
+              </p>
+              
+              {/* Description */}
+              <p className="text-xs text-neutral-500 line-clamp-2">
+                {persona.description}
+              </p>
+            </div>
+            
+            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800/50 transition-colors">
+              <MoreVertical className="w-4 h-4 text-neutral-500" />
+            </button>
+          </div>
+          
+          {/* Created At */}
+          <div className="mt-3 pt-3 border-t border-neutral-800/50">
+            <span className="text-[10px] text-neutral-600">
+              생성일: {persona.createdAt}
+            </span>
+          </div>
+        </div>
+      ))}
+      
+      {/* Add Persona */}
+      <button className="py-6 rounded-xl border border-dashed border-neutral-700 flex flex-col items-center justify-center gap-2 hover:bg-neutral-900/50 hover:border-neutral-600 transition-colors">
+        <Plus className="w-6 h-6 text-neutral-600" />
+        <span className="text-xs text-neutral-500">새 자아</span>
+      </button>
+    </div>
+  )
+}
+
+// Completed Works Tab - Combined List with dropdown menu
 function CompletedTab({ works }: { works: CompletedWork[] }) {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+
   return (
     <div className="flex flex-col gap-3">
       {works.map((work) => (
@@ -340,6 +422,50 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
                 <p className="text-xs text-neutral-500 mt-0.5 truncate">
                   {work.lastMessage}
                 </p>
+              </div>
+              
+              {/* Menu Button */}
+              <div className="relative">
+                <button
+                  onClick={() => setOpenMenuId(openMenuId === work.id ? null : work.id)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800 transition-colors"
+                >
+                  <MoreVertical className="w-4 h-4 text-neutral-500" />
+                </button>
+                
+                {/* Dropdown Menu */}
+                {openMenuId === work.id && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-40" 
+                      onClick={() => setOpenMenuId(null)} 
+                    />
+                    <div className="absolute right-0 top-10 z-50 bg-neutral-800 rounded-xl shadow-xl py-1.5 min-w-[140px] border border-neutral-700/50">
+                      <button 
+                        onClick={() => setOpenMenuId(null)}
+                        className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors flex items-center gap-2"
+                      >
+                        <Copy className="w-4 h-4" />
+                        채팅방 복제
+                      </button>
+                      <button 
+                        onClick={() => setOpenMenuId(null)}
+                        className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors flex items-center gap-2"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        이름 변경
+                      </button>
+                      <div className="my-1 border-t border-neutral-700/50" />
+                      <button 
+                        onClick={() => setOpenMenuId(null)}
+                        className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-700/50 transition-colors flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        삭제
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
             
