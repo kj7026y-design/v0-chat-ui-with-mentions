@@ -1,20 +1,40 @@
 "use client"
 
-import { type RefObject } from "react"
+import { useState, type RefObject } from "react"
 import { type ChatMessage } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
+import { AuthorTools } from "./author-tools"
 
 interface ChatMessageListProps {
   messages: ChatMessage[]
   isTyping: boolean
   messagesEndRef: RefObject<HTMLDivElement | null>
+  onRewriteMessage?: (messageId: string) => void
+  onEditMessage?: (messageId: string) => void
+  onDeleteMessage?: (messageId: string) => void
+  editedMessageIds?: Set<string>
 }
 
-export function ChatMessageList({ messages, isTyping, messagesEndRef }: ChatMessageListProps) {
+export function ChatMessageList({ 
+  messages, 
+  isTyping, 
+  messagesEndRef,
+  onRewriteMessage,
+  onEditMessage,
+  onDeleteMessage,
+  editedMessageIds = new Set()
+}: ChatMessageListProps) {
   return (
     <div className="flex flex-col gap-3 px-4 py-4 pb-44">
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
+        <MessageBubble 
+          key={message.id} 
+          message={message}
+          onRewrite={onRewriteMessage}
+          onEdit={onEditMessage}
+          onDelete={onDeleteMessage}
+          isEdited={editedMessageIds.has(message.id)}
+        />
       ))}
 
       {/* Typing Indicator */}
@@ -26,8 +46,18 @@ export function ChatMessageList({ messages, isTyping, messagesEndRef }: ChatMess
   )
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+interface MessageBubbleProps {
+  message: ChatMessage
+  onRewrite?: (messageId: string) => void
+  onEdit?: (messageId: string) => void
+  onDelete?: (messageId: string) => void
+  isEdited?: boolean
+}
+
+function MessageBubble({ message, onRewrite, onEdit, onDelete, isEdited }: MessageBubbleProps) {
+  const [isHovered, setIsHovered] = useState(false)
   const isUser = message.type === "user"
+  const isAI = message.type === "ai"
   const isEvent = message.type === "event"
   const isInnerThought = message.type === "inner-thought"
 
@@ -93,17 +123,41 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
   // Regular Message Bubble
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "max-w-[80%] px-4 py-2.5 rounded-2xl",
-          isUser
-            ? "bg-neutral-100 text-neutral-900"
-            : "bg-neutral-800 text-neutral-100"
-        )}
-      >
-        <p className="text-[15px] leading-relaxed">{message.content}</p>
+    <div 
+      className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}
+      onMouseEnter={() => isAI && setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="relative">
+        <div
+          className={cn(
+            "max-w-[80%] px-4 py-2.5 rounded-2xl relative",
+            isUser
+              ? "bg-neutral-100 text-neutral-900"
+              : "bg-neutral-800 text-neutral-100"
+          )}
+        >
+          <p className="text-[15px] leading-relaxed">{message.content}</p>
+          
+          {/* Edited indicator dot */}
+          {isEdited && !isUser && (
+            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-neutral-900" />
+          )}
+        </div>
       </div>
+      
+      {/* Author Tools - visible on hover for AI messages */}
+      {isAI && isHovered && (
+        <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+          <AuthorTools
+            messageId={message.id}
+            onRewrite={onRewrite}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            isEdited={isEdited}
+          />
+        </div>
+      )}
     </div>
   )
 }

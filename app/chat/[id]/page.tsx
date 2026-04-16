@@ -5,6 +5,9 @@ import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
 import { ChatSettingsDrawer } from "@/components/chat/chat-settings-drawer"
+import { DualStatusBar } from "@/components/chat/dual-status-bar"
+import { WorldDateDisplay } from "@/components/chat/world-date-display"
+import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { type ChatMessage } from "@/lib/chat-types"
 
 const initialMessages: ChatMessage[] = [
@@ -64,7 +67,20 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [isTyping, setIsTyping] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isQuestPopupOpen, setIsQuestPopupOpen] = useState(false)
+  const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(new Set())
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Status data
+  const characterStatus = [
+    { label: "감정", value: "공감(Empathy)", icon: "❤️", color: "text-red-400" },
+    { label: "상태", value: "Groggy", icon: "💤", color: "text-yellow-400" },
+  ]
+  
+  const userStatus = [
+    { label: "상태", value: "Out of it", icon: "💤", color: "text-blue-400" },
+    { label: "진행", value: "퀘스트 70%", icon: "💢", color: "text-orange-400" },
+  ]
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -116,14 +132,50 @@ export default function ChatPage() {
     }
   }
 
+  // Author tools handlers
+  const handleRewriteMessage = (messageId: string) => {
+    setIsTyping(true)
+    setTimeout(() => {
+      setIsTyping(false)
+      setMessages((prev) => 
+        prev.map((msg) => 
+          msg.id === messageId 
+            ? { ...msg, content: "다시 생각해보니... 네 말이 맞는 것 같아. 함께 있어서 좋아." }
+            : msg
+        )
+      )
+    }, 1500)
+  }
+
+  const handleEditMessage = (messageId: string) => {
+    // In real implementation, this would open an edit modal
+    setEditedMessageIds((prev) => new Set(prev).add(messageId))
+    // Demo: Show quest popup after edit
+    setTimeout(() => setIsQuestPopupOpen(true), 500)
+  }
+
+  const handleDeleteMessage = (messageId: string) => {
+    setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+  }
+
   return (
-    <div className="flex flex-col h-[100dvh] bg-neutral-900">
+    <div className="flex flex-col h-[100dvh] bg-black">
       {/* Fixed Header */}
       <ChatHeader 
         characterName="이무기" 
         characterEmoji="🐉"
         level={3} 
         onMenuClick={() => setIsSettingsOpen(true)}
+      />
+
+      {/* World Date Display */}
+      <WorldDateDisplay date="AC 300년 4월 16일" />
+
+      {/* Dual Status Bar */}
+      <DualStatusBar
+        characterName="이무기"
+        characterStatus={characterStatus}
+        userStatus={userStatus}
       />
 
       {/* Settings Side Drawer */}
@@ -134,12 +186,24 @@ export default function ChatPage() {
         characterEmoji="🐉"
       />
 
+      {/* Quest Reward Popup */}
+      <QuestRewardPopup
+        isOpen={isQuestPopupOpen}
+        onClose={() => setIsQuestPopupOpen(false)}
+        questTitle="첫 번째 산책"
+        hasDoubleAffection={true}
+      />
+
       {/* Chat Area - Scrollable */}
       <main className="flex-1 overflow-y-auto">
         <ChatMessageList 
           messages={messages} 
           isTyping={isTyping}
           messagesEndRef={messagesEndRef}
+          onRewriteMessage={handleRewriteMessage}
+          onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
+          editedMessageIds={editedMessageIds}
         />
       </main>
 
