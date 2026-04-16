@@ -24,9 +24,15 @@ export function QuestRewardPopup({
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => setShowContent(true), 100)
-      return () => clearTimeout(timer)
+      // Prevent body scroll when popup is open
+      document.body.style.overflow = 'hidden'
+      return () => {
+        clearTimeout(timer)
+        document.body.style.overflow = ''
+      }
     } else {
       setShowContent(false)
+      document.body.style.overflow = ''
     }
   }, [isOpen])
 
@@ -42,7 +48,7 @@ export function QuestRewardPopup({
       
       {/* Popup Content */}
       <div className={cn(
-        "relative w-[90%] max-w-sm mx-auto bg-neutral-900 rounded-2xl overflow-hidden",
+        "relative w-[90%] max-w-sm max-h-[85vh] mx-auto bg-neutral-900 rounded-2xl overflow-y-auto",
         "border border-neutral-800",
         "transform transition-all duration-300",
         showContent ? "scale-100 opacity-100" : "scale-95 opacity-0"
