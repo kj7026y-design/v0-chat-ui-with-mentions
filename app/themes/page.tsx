@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
-import { ArrowLeft, Check, Sun, Moon, Monitor, MessageCircle } from "lucide-react"
+import { ArrowLeft, Check, Sun, Moon, Monitor, MessageCircle, MessageSquare, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ThemeId = "light" | "dark" | "system"
-type ChatThemeId = "default" | "soft" | "ocean" | "forest"
+type ChatThemeId = "light" | "dark" | "message" | "messenger"
 
 interface ThemeConfig {
   id: ThemeId
@@ -19,10 +19,14 @@ interface ThemeConfig {
 interface ChatThemeConfig {
   id: ChatThemeId
   label: string
-  userBubble: string
-  aiBubble: string
-  userText: string
-  aiText: string
+  icon: React.ReactNode
+  preview: {
+    bg: string
+    userBubble: string
+    userText: string
+    aiBubble: string
+    aiText: string
+  }
 }
 
 const themes: ThemeConfig[] = [
@@ -48,36 +52,52 @@ const themes: ThemeConfig[] = [
 
 const chatThemes: ChatThemeConfig[] = [
   {
-    id: "default",
-    label: "기본",
-    userBubble: "bg-neutral-100 dark:bg-neutral-100",
-    aiBubble: "bg-neutral-800",
-    userText: "text-neutral-900",
-    aiText: "text-neutral-100",
+    id: "light",
+    label: "라이트",
+    icon: <Sun className="w-4 h-4" />,
+    preview: {
+      bg: "#FFFFFF",
+      userBubble: "#007AFF",
+      userText: "#FFFFFF",
+      aiBubble: "#E9E9EB",
+      aiText: "#000000",
+    },
   },
   {
-    id: "soft",
-    label: "소프트",
-    userBubble: "bg-rose-100 dark:bg-rose-200",
-    aiBubble: "bg-rose-50 dark:bg-rose-900",
-    userText: "text-rose-900",
-    aiText: "text-rose-900 dark:text-rose-100",
+    id: "dark",
+    label: "다크",
+    icon: <Moon className="w-4 h-4" />,
+    preview: {
+      bg: "#121212",
+      userBubble: "#333333",
+      userText: "#FFFFFF",
+      aiBubble: "#1E1E1E",
+      aiText: "#E5E5E5",
+    },
   },
   {
-    id: "ocean",
-    label: "오션",
-    userBubble: "bg-sky-100 dark:bg-sky-200",
-    aiBubble: "bg-sky-50 dark:bg-sky-900",
-    userText: "text-sky-900",
-    aiText: "text-sky-900 dark:text-sky-100",
+    id: "message",
+    label: "메시지",
+    icon: <MessageSquare className="w-4 h-4" />,
+    preview: {
+      bg: "#F2F2F7",
+      userBubble: "#34C759",
+      userText: "#FFFFFF",
+      aiBubble: "#FFFFFF",
+      aiText: "#000000",
+    },
   },
   {
-    id: "forest",
-    label: "포레스트",
-    userBubble: "bg-emerald-100 dark:bg-emerald-200",
-    aiBubble: "bg-emerald-50 dark:bg-emerald-900",
-    userText: "text-emerald-900",
-    aiText: "text-emerald-900 dark:text-emerald-100",
+    id: "messenger",
+    label: "메신저",
+    icon: <Send className="w-4 h-4" />,
+    preview: {
+      bg: "#BACEE0",
+      userBubble: "#FEE500",
+      userText: "#3C1E1E",
+      aiBubble: "#FFFFFF",
+      aiText: "#000000",
+    },
   },
 ]
 
@@ -85,7 +105,7 @@ export default function ThemesPage() {
   const router = useRouter()
   const { setTheme, theme: currentTheme, resolvedTheme } = useTheme()
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>("dark")
-  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("default")
+  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("dark")
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -200,28 +220,31 @@ export default function ThemesPage() {
                   )}
                 >
                   {/* Mini Preview */}
-                  <div className={cn(
-                    "rounded-lg p-3 mb-2",
-                    previewTheme === "dark" ? "bg-neutral-900" : "bg-neutral-100"
-                  )}>
+                  <div 
+                    className="rounded-lg p-3 mb-2"
+                    style={{ backgroundColor: chatTheme.preview.bg }}
+                  >
                     {/* AI Bubble */}
-                    <div className={cn(
-                      "w-3/4 h-4 rounded-full mb-1.5",
-                      chatTheme.aiBubble
-                    )} />
+                    <div 
+                      className="w-3/4 h-4 rounded-full mb-1.5"
+                      style={{ backgroundColor: chatTheme.preview.aiBubble }}
+                    />
                     {/* User Bubble */}
-                    <div className={cn(
-                      "w-1/2 h-4 rounded-full ml-auto",
-                      chatTheme.userBubble
-                    )} />
+                    <div 
+                      className="w-1/2 h-4 rounded-full ml-auto"
+                      style={{ backgroundColor: chatTheme.preview.userBubble }}
+                    />
                   </div>
                   
-                  <p className={cn(
-                    "text-sm font-medium text-center",
-                    isSelected ? "text-foreground" : "text-muted-foreground"
-                  )}>
-                    {chatTheme.label}
-                  </p>
+                  <div className="flex items-center justify-center gap-1.5">
+                    <span className="text-muted-foreground">{chatTheme.icon}</span>
+                    <p className={cn(
+                      "text-sm font-medium",
+                      isSelected ? "text-foreground" : "text-muted-foreground"
+                    )}>
+                      {chatTheme.label}
+                    </p>
+                  </div>
 
                   {/* Selected Check */}
                   {isSelected && (
@@ -239,34 +262,29 @@ export default function ThemesPage() {
         <section>
           <h2 className="text-sm font-medium text-muted-foreground mb-4">미리보기</h2>
           <div
-            className={cn(
-              "rounded-xl overflow-hidden border transition-all duration-300",
-              previewTheme === "dark" ? "bg-[#121212] border-neutral-800" : "bg-white border-neutral-200"
-            )}
+            className="rounded-xl overflow-hidden border transition-all duration-300"
+            style={{ 
+              backgroundColor: selectedChatThemeConfig.preview.bg,
+              borderColor: previewTheme === "dark" ? "#262626" : "#e5e5e5"
+            }}
           >
             {/* Preview Header */}
             <div
-              className={cn(
-                "px-4 py-3 flex items-center gap-3 border-b",
-                previewTheme === "dark" ? "border-neutral-800" : "border-neutral-200"
-              )}
+              className="px-4 py-3 flex items-center gap-3 border-b"
+              style={{ borderColor: previewTheme === "dark" ? "#262626" : "#e5e5e5" }}
             >
               <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center",
-                  previewTheme === "dark" ? "bg-neutral-800" : "bg-neutral-200"
-                )}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: previewTheme === "dark" ? "#262626" : "#e5e5e5" }}
               >
-                <MessageCircle className={cn(
-                  "w-4 h-4",
-                  previewTheme === "dark" ? "text-neutral-400" : "text-neutral-600"
-                )} />
+                <MessageCircle 
+                  className="w-4 h-4"
+                  style={{ color: previewTheme === "dark" ? "#a3a3a3" : "#525252" }}
+                />
               </div>
               <span
-                className={cn(
-                  "font-medium text-sm",
-                  previewTheme === "dark" ? "text-neutral-100" : "text-neutral-900"
-                )}
+                className="font-medium text-sm"
+                style={{ color: previewTheme === "dark" ? "#f5f5f5" : "#171717" }}
               >
                 채팅 미리보기
               </span>
@@ -276,33 +294,39 @@ export default function ThemesPage() {
             <div className="p-4 space-y-3">
               {/* AI Message */}
               <div className="flex justify-start">
-                <div className={cn(
-                  "max-w-[75%] px-4 py-2.5 rounded-2xl",
-                  selectedChatThemeConfig.aiBubble,
-                  selectedChatThemeConfig.aiText
-                )}>
+                <div 
+                  className="max-w-[75%] px-4 py-2.5 rounded-2xl"
+                  style={{ 
+                    backgroundColor: selectedChatThemeConfig.preview.aiBubble,
+                    color: selectedChatThemeConfig.preview.aiText
+                  }}
+                >
                   <p className="text-sm">안녕하세요! 무엇을 도와드릴까요?</p>
                 </div>
               </div>
 
               {/* User Message */}
               <div className="flex justify-end">
-                <div className={cn(
-                  "max-w-[75%] px-4 py-2.5 rounded-2xl",
-                  selectedChatThemeConfig.userBubble,
-                  selectedChatThemeConfig.userText
-                )}>
+                <div 
+                  className="max-w-[75%] px-4 py-2.5 rounded-2xl"
+                  style={{ 
+                    backgroundColor: selectedChatThemeConfig.preview.userBubble,
+                    color: selectedChatThemeConfig.preview.userText
+                  }}
+                >
                   <p className="text-sm">오늘 날씨가 어때요?</p>
                 </div>
               </div>
 
               {/* AI Message */}
               <div className="flex justify-start">
-                <div className={cn(
-                  "max-w-[75%] px-4 py-2.5 rounded-2xl",
-                  selectedChatThemeConfig.aiBubble,
-                  selectedChatThemeConfig.aiText
-                )}>
+                <div 
+                  className="max-w-[75%] px-4 py-2.5 rounded-2xl"
+                  style={{ 
+                    backgroundColor: selectedChatThemeConfig.preview.aiBubble,
+                    color: selectedChatThemeConfig.preview.aiText
+                  }}
+                >
                   <p className="text-sm">오늘은 맑고 화창한 날씨입니다!</p>
                 </div>
               </div>

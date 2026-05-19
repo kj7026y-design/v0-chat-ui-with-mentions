@@ -5,44 +5,59 @@ import { type ChatMessage } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
 
-type ChatThemeId = "default" | "soft" | "ocean" | "forest"
+type ChatThemeId = "light" | "dark" | "message" | "messenger"
 
 interface ChatThemeConfig {
   id: ChatThemeId
-  userBubble: string
-  aiBubble: string
-  userText: string
-  aiText: string
+  preview: {
+    bg: string
+    userBubble: string
+    userText: string
+    aiBubble: string
+    aiText: string
+  }
 }
 
 const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
-  default: {
-    id: "default",
-    userBubble: "bg-neutral-100 dark:bg-neutral-100",
-    aiBubble: "bg-neutral-800",
-    userText: "text-neutral-900",
-    aiText: "text-neutral-100",
+  light: {
+    id: "light",
+    preview: {
+      bg: "#FFFFFF",
+      userBubble: "#007AFF",
+      userText: "#FFFFFF",
+      aiBubble: "#E9E9EB",
+      aiText: "#000000",
+    },
   },
-  soft: {
-    id: "soft",
-    userBubble: "bg-rose-100 dark:bg-rose-200",
-    aiBubble: "bg-rose-50 dark:bg-rose-900",
-    userText: "text-rose-900",
-    aiText: "text-rose-900 dark:text-rose-100",
+  dark: {
+    id: "dark",
+    preview: {
+      bg: "#121212",
+      userBubble: "#333333",
+      userText: "#FFFFFF",
+      aiBubble: "#1E1E1E",
+      aiText: "#E5E5E5",
+    },
   },
-  ocean: {
-    id: "ocean",
-    userBubble: "bg-sky-100 dark:bg-sky-200",
-    aiBubble: "bg-sky-50 dark:bg-sky-900",
-    userText: "text-sky-900",
-    aiText: "text-sky-900 dark:text-sky-100",
+  message: {
+    id: "message",
+    preview: {
+      bg: "#F2F2F7",
+      userBubble: "#34C759",
+      userText: "#FFFFFF",
+      aiBubble: "#FFFFFF",
+      aiText: "#000000",
+    },
   },
-  forest: {
-    id: "forest",
-    userBubble: "bg-emerald-100 dark:bg-emerald-200",
-    aiBubble: "bg-emerald-50 dark:bg-emerald-900",
-    userText: "text-emerald-900",
-    aiText: "text-emerald-900 dark:text-emerald-100",
+  messenger: {
+    id: "messenger",
+    preview: {
+      bg: "#BACEE0",
+      userBubble: "#FEE500",
+      userText: "#3C1E1E",
+      aiBubble: "#FFFFFF",
+      aiText: "#000000",
+    },
   },
 }
 
@@ -67,7 +82,7 @@ export function ChatMessageList({
   onBranchFromMessage,
   editedMessageIds = new Set()
 }: ChatMessageListProps) {
-  const [chatTheme, setChatTheme] = useState<ChatThemeId>("default")
+  const [chatTheme, setChatTheme] = useState<ChatThemeId>("dark")
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("chat-theme") as ChatThemeId
@@ -198,12 +213,11 @@ function MessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, isEdite
     >
       <div className="relative">
         <div
-          className={cn(
-            "max-w-[80%] px-4 py-2.5 rounded-2xl relative",
-            isUser
-              ? cn(themeConfig.userBubble, themeConfig.userText)
-              : cn(themeConfig.aiBubble, themeConfig.aiText)
-          )}
+          className="max-w-[80%] px-4 py-2.5 rounded-2xl relative"
+          style={{
+            backgroundColor: isUser ? themeConfig.preview.userBubble : themeConfig.preview.aiBubble,
+            color: isUser ? themeConfig.preview.userText : themeConfig.preview.aiText,
+          }}
         >
           <p className="text-[15px] leading-relaxed">{message.content}</p>
           
