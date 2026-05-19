@@ -206,6 +206,7 @@ export default function ChatPage() {
         onClose={() => setIsSettingsOpen(false)}
         characterName="이무기"
         characterEmoji="🐉"
+        onChatStyleChange={(style) => setChatStyle(style)}
       />
 
       {/* Quest Reward Popup */}
