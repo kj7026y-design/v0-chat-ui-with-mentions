@@ -3,12 +3,16 @@
 import { useState, useRef, useEffect } from "react"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
+import { NovelMessageList } from "@/components/chat/novel-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
+import { NovelChatInput } from "@/components/chat/novel-chat-input"
 import { ChatSettingsDrawer } from "@/components/chat/chat-settings-drawer"
 import { DualStatusBar } from "@/components/chat/dual-status-bar"
 import { WorldDateDisplay } from "@/components/chat/world-date-display"
 import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { type ChatMessage } from "@/lib/chat-types"
+
+type ChatStyleId = "bubble" | "novel"
 
 const initialMessages: ChatMessage[] = [
   {
@@ -69,6 +73,7 @@ export default function ChatPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isQuestPopupOpen, setIsQuestPopupOpen] = useState(false)
   const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(new Set())
+  const [chatStyle, setChatStyle] = useState<ChatStyleId>("bubble")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Status data
@@ -85,6 +90,14 @@ export default function ChatPage() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
+
+  useEffect(() => {
+    // Load chat style from localStorage
+    const savedStyle = localStorage.getItem("chat-style") as ChatStyleId
+    if (savedStyle) {
+      setChatStyle(savedStyle)
+    }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
@@ -172,7 +185,7 @@ export default function ChatPage() {
       {/* Fixed Header */}
       <ChatHeader 
         characterName="이무기" 
-        characterEmoji="🐉"
+        characterEmoji="����"
         level={3} 
         onMenuClick={() => setIsSettingsOpen(true)}
       />
@@ -205,24 +218,39 @@ export default function ChatPage() {
 
       {/* Chat Area - Scrollable */}
       <main className="flex-1 overflow-y-auto">
-        <ChatMessageList 
-          messages={messages} 
-          isTyping={isTyping}
-          messagesEndRef={messagesEndRef}
-          onRewriteMessage={handleRewriteMessage}
-          onEditMessage={handleEditMessage}
-          onDeleteMessage={handleDeleteMessage}
-          onBranchFromMessage={handleBranchFromMessage}
-          editedMessageIds={editedMessageIds}
-        />
+        {chatStyle === "novel" ? (
+          <NovelMessageList 
+            messages={messages} 
+            isTyping={isTyping}
+            messagesEndRef={messagesEndRef}
+          />
+        ) : (
+          <ChatMessageList 
+            messages={messages} 
+            isTyping={isTyping}
+            messagesEndRef={messagesEndRef}
+            onRewriteMessage={handleRewriteMessage}
+            onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
+            onBranchFromMessage={handleBranchFromMessage}
+            editedMessageIds={editedMessageIds}
+          />
+        )}
       </main>
 
       {/* Fixed Input Area - positioned above global nav */}
       <div className="fixed bottom-16 sm:bottom-0 left-0 right-0 z-40">
-        <ChatInput 
-          onSendMessage={handleSendMessage} 
-          onCommand={handleCommand}
-        />
+        {chatStyle === "novel" ? (
+          <NovelChatInput 
+            onSendMessage={handleSendMessage} 
+            onCommand={handleCommand}
+          />
+        ) : (
+          <ChatInput 
+            onSendMessage={handleSendMessage} 
+            onCommand={handleCommand}
+          />
+        )}
       </div>
     </div>
   )
