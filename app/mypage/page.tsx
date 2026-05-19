@@ -60,7 +60,7 @@ export default function MyPage() {
       icon: Moon,
       label: "테마 설정",
       type: "link" as const,
-      description: "다크 모드",
+      description: "라이트 / 다크 모드 전환",
       href: "/themes",
     },
     {
@@ -218,7 +218,7 @@ export default function MyPage() {
           </button>
           <button className="flex items-center gap-2 text-neutral-600 hover:text-neutral-500 transition-colors">
             <UserX className="w-4 h-4" />
-            <span className="text-xs">계정 탈퇴</span>
+            <span className="text-xs">계��� 탈퇴</span>
           </button>
         </div>
       </section>
