@@ -3,16 +3,26 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
-import { ArrowLeft, Check, Sun, Moon, Monitor } from "lucide-react"
+import { ArrowLeft, Check, Sun, Moon, Monitor, MessageCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ThemeId = "light" | "dark" | "system"
+type ChatThemeId = "default" | "soft" | "ocean" | "forest"
 
 interface ThemeConfig {
   id: ThemeId
   label: string
   description: string
   icon: React.ReactNode
+}
+
+interface ChatThemeConfig {
+  id: ChatThemeId
+  label: string
+  userBubble: string
+  aiBubble: string
+  userText: string
+  aiText: string
 }
 
 const themes: ThemeConfig[] = [
@@ -36,10 +46,46 @@ const themes: ThemeConfig[] = [
   },
 ]
 
+const chatThemes: ChatThemeConfig[] = [
+  {
+    id: "default",
+    label: "기본",
+    userBubble: "bg-neutral-100 dark:bg-neutral-100",
+    aiBubble: "bg-neutral-800",
+    userText: "text-neutral-900",
+    aiText: "text-neutral-100",
+  },
+  {
+    id: "soft",
+    label: "소프트",
+    userBubble: "bg-rose-100 dark:bg-rose-200",
+    aiBubble: "bg-rose-50 dark:bg-rose-900",
+    userText: "text-rose-900",
+    aiText: "text-rose-900 dark:text-rose-100",
+  },
+  {
+    id: "ocean",
+    label: "오션",
+    userBubble: "bg-sky-100 dark:bg-sky-200",
+    aiBubble: "bg-sky-50 dark:bg-sky-900",
+    userText: "text-sky-900",
+    aiText: "text-sky-900 dark:text-sky-100",
+  },
+  {
+    id: "forest",
+    label: "포레스트",
+    userBubble: "bg-emerald-100 dark:bg-emerald-200",
+    aiBubble: "bg-emerald-50 dark:bg-emerald-900",
+    userText: "text-emerald-900",
+    aiText: "text-emerald-900 dark:text-emerald-100",
+  },
+]
+
 export default function ThemesPage() {
   const router = useRouter()
   const { setTheme, theme: currentTheme, resolvedTheme } = useTheme()
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>("dark")
+  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("default")
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -47,10 +93,16 @@ export default function ThemesPage() {
     if (currentTheme) {
       setSelectedTheme(currentTheme as ThemeId)
     }
+    // Load saved chat theme from localStorage
+    const savedChatTheme = localStorage.getItem("chat-theme") as ChatThemeId
+    if (savedChatTheme) {
+      setSelectedChatTheme(savedChatTheme)
+    }
   }, [currentTheme])
 
   const handleApplyTheme = () => {
     setTheme(selectedTheme)
+    localStorage.setItem("chat-theme", selectedChatTheme)
     router.back()
   }
 
@@ -60,6 +112,7 @@ export default function ThemesPage() {
 
   // 미리보기에 사용할 테마 (system인 경우 resolvedTheme 사용)
   const previewTheme = selectedTheme === "system" ? resolvedTheme : selectedTheme
+  const selectedChatThemeConfig = chatThemes.find(t => t.id === selectedChatTheme)!
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -76,9 +129,9 @@ export default function ThemesPage() {
       </header>
 
       <div className="px-4 space-y-8 pt-6">
-        {/* Theme Selection */}
+        {/* App Theme Selection */}
         <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-4">테마 선택</h2>
+          <h2 className="text-sm font-medium text-muted-foreground mb-4">앱 테마</h2>
           <div className="space-y-3">
             {themes.map((theme) => {
               const isSelected = selectedTheme === theme.id
@@ -127,6 +180,61 @@ export default function ThemesPage() {
           </div>
         </section>
 
+        {/* Chat Theme Selection */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <MessageCircle className="w-4 h-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium text-muted-foreground">채팅 테마</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {chatThemes.map((chatTheme) => {
+              const isSelected = selectedChatTheme === chatTheme.id
+              return (
+                <button
+                  key={chatTheme.id}
+                  onClick={() => setSelectedChatTheme(chatTheme.id)}
+                  className={cn(
+                    "relative p-3 rounded-xl transition-all duration-200",
+                    "bg-card hover:bg-accent",
+                    isSelected && "ring-2 ring-primary"
+                  )}
+                >
+                  {/* Mini Preview */}
+                  <div className={cn(
+                    "rounded-lg p-3 mb-2",
+                    previewTheme === "dark" ? "bg-neutral-900" : "bg-neutral-100"
+                  )}>
+                    {/* AI Bubble */}
+                    <div className={cn(
+                      "w-3/4 h-4 rounded-full mb-1.5",
+                      chatTheme.aiBubble
+                    )} />
+                    {/* User Bubble */}
+                    <div className={cn(
+                      "w-1/2 h-4 rounded-full ml-auto",
+                      chatTheme.userBubble
+                    )} />
+                  </div>
+                  
+                  <p className={cn(
+                    "text-sm font-medium text-center",
+                    isSelected ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    {chatTheme.label}
+                  </p>
+
+                  {/* Selected Check */}
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                      <Check className="w-3 h-3 text-primary-foreground" />
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
         {/* Live Preview */}
         <section>
           <h2 className="text-sm font-medium text-muted-foreground mb-4">미리보기</h2>
@@ -149,7 +257,10 @@ export default function ThemesPage() {
                   previewTheme === "dark" ? "bg-neutral-800" : "bg-neutral-200"
                 )}
               >
-                <span className="text-sm">🎨</span>
+                <MessageCircle className={cn(
+                  "w-4 h-4",
+                  previewTheme === "dark" ? "text-neutral-400" : "text-neutral-600"
+                )} />
               </div>
               <span
                 className={cn(
@@ -157,92 +268,43 @@ export default function ThemesPage() {
                   previewTheme === "dark" ? "text-neutral-100" : "text-neutral-900"
                 )}
               >
-                앱 미리보기
+                채팅 미리보기
               </span>
             </div>
 
-            {/* Preview Content */}
+            {/* Chat Preview */}
             <div className="p-4 space-y-3">
-              {/* Card Preview */}
-              <div
-                className={cn(
-                  "p-4 rounded-lg",
-                  previewTheme === "dark" ? "bg-neutral-900" : "bg-neutral-100"
-                )}
-              >
-                <p
-                  className={cn(
-                    "text-sm font-medium mb-1",
-                    previewTheme === "dark" ? "text-neutral-100" : "text-neutral-900"
-                  )}
-                >
-                  카드 제목
-                </p>
-                <p
-                  className={cn(
-                    "text-xs",
-                    previewTheme === "dark" ? "text-neutral-400" : "text-neutral-600"
-                  )}
-                >
-                  이것은 카드 설명 텍스트입니다.
-                </p>
-              </div>
-
-              {/* Button Preview */}
-              <div className="flex gap-2">
-                <div
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium",
-                    previewTheme === "dark"
-                      ? "bg-neutral-100 text-neutral-900"
-                      : "bg-neutral-900 text-neutral-100"
-                  )}
-                >
-                  주요 버튼
-                </div>
-                <div
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium",
-                    previewTheme === "dark"
-                      ? "bg-neutral-800 text-neutral-300"
-                      : "bg-neutral-200 text-neutral-700"
-                  )}
-                >
-                  보조 버튼
+              {/* AI Message */}
+              <div className="flex justify-start">
+                <div className={cn(
+                  "max-w-[75%] px-4 py-2.5 rounded-2xl",
+                  selectedChatThemeConfig.aiBubble,
+                  selectedChatThemeConfig.aiText
+                )}>
+                  <p className="text-sm">안녕하세요! 무엇을 도와드릴까요?</p>
                 </div>
               </div>
 
-              {/* List Preview */}
-              <div
-                className={cn(
-                  "rounded-lg overflow-hidden",
-                  previewTheme === "dark" ? "bg-neutral-900" : "bg-neutral-100"
-                )}
-              >
-                {["메뉴 항목 1", "메뉴 항목 2"].map((item, index) => (
-                  <div
-                    key={item}
-                    className={cn(
-                      "px-4 py-3 flex items-center justify-between",
-                      index === 0 && (previewTheme === "dark" ? "border-b border-neutral-800" : "border-b border-neutral-200")
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "text-sm",
-                        previewTheme === "dark" ? "text-neutral-200" : "text-neutral-800"
-                      )}
-                    >
-                      {item}
-                    </span>
-                    <div
-                      className={cn(
-                        "w-4 h-4 rounded-full",
-                        previewTheme === "dark" ? "bg-neutral-700" : "bg-neutral-300"
-                      )}
-                    />
-                  </div>
-                ))}
+              {/* User Message */}
+              <div className="flex justify-end">
+                <div className={cn(
+                  "max-w-[75%] px-4 py-2.5 rounded-2xl",
+                  selectedChatThemeConfig.userBubble,
+                  selectedChatThemeConfig.userText
+                )}>
+                  <p className="text-sm">오늘 날씨가 어때요?</p>
+                </div>
+              </div>
+
+              {/* AI Message */}
+              <div className="flex justify-start">
+                <div className={cn(
+                  "max-w-[75%] px-4 py-2.5 rounded-2xl",
+                  selectedChatThemeConfig.aiBubble,
+                  selectedChatThemeConfig.aiText
+                )}>
+                  <p className="text-sm">오늘은 맑고 화창한 날씨입니다!</p>
+                </div>
               </div>
             </div>
           </div>

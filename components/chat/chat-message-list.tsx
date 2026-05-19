@@ -1,9 +1,50 @@
 "use client"
 
-import { useState, type RefObject } from "react"
+import { useState, useEffect, type RefObject } from "react"
 import { type ChatMessage } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
+
+type ChatThemeId = "default" | "soft" | "ocean" | "forest"
+
+interface ChatThemeConfig {
+  id: ChatThemeId
+  userBubble: string
+  aiBubble: string
+  userText: string
+  aiText: string
+}
+
+const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
+  default: {
+    id: "default",
+    userBubble: "bg-neutral-100 dark:bg-neutral-100",
+    aiBubble: "bg-neutral-800",
+    userText: "text-neutral-900",
+    aiText: "text-neutral-100",
+  },
+  soft: {
+    id: "soft",
+    userBubble: "bg-rose-100 dark:bg-rose-200",
+    aiBubble: "bg-rose-50 dark:bg-rose-900",
+    userText: "text-rose-900",
+    aiText: "text-rose-900 dark:text-rose-100",
+  },
+  ocean: {
+    id: "ocean",
+    userBubble: "bg-sky-100 dark:bg-sky-200",
+    aiBubble: "bg-sky-50 dark:bg-sky-900",
+    userText: "text-sky-900",
+    aiText: "text-sky-900 dark:text-sky-100",
+  },
+  forest: {
+    id: "forest",
+    userBubble: "bg-emerald-100 dark:bg-emerald-200",
+    aiBubble: "bg-emerald-50 dark:bg-emerald-900",
+    userText: "text-emerald-900",
+    aiText: "text-emerald-900 dark:text-emerald-100",
+  },
+}
 
 interface ChatMessageListProps {
   messages: ChatMessage[]
@@ -26,6 +67,26 @@ export function ChatMessageList({
   onBranchFromMessage,
   editedMessageIds = new Set()
 }: ChatMessageListProps) {
+  const [chatTheme, setChatTheme] = useState<ChatThemeId>("default")
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("chat-theme") as ChatThemeId
+    if (savedTheme && chatThemes[savedTheme]) {
+      setChatTheme(savedTheme)
+    }
+    
+    // Listen for storage changes (when theme is updated from settings)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "chat-theme" && e.newValue) {
+        setChatTheme(e.newValue as ChatThemeId)
+      }
+    }
+    window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
+  }, [])
+
+  const themeConfig = chatThemes[chatTheme]
+
   return (
     <div className="flex flex-col gap-3 px-4 py-4 pb-44">
       {messages.map((message) => (
@@ -37,6 +98,7 @@ export function ChatMessageList({
           onDelete={onDeleteMessage}
           onBranch={onBranchFromMessage}
           isEdited={editedMessageIds.has(message.id)}
+          themeConfig={themeConfig}
         />
       ))}
 
@@ -56,9 +118,10 @@ interface MessageBubbleProps {
   onDelete?: (messageId: string) => void
   onBranch?: (messageId: string) => void
   isEdited?: boolean
+  themeConfig: ChatThemeConfig
 }
 
-function MessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, isEdited }: MessageBubbleProps) {
+function MessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, isEdited, themeConfig }: MessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const isUser = message.type === "user"
@@ -138,8 +201,8 @@ function MessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, isEdite
           className={cn(
             "max-w-[80%] px-4 py-2.5 rounded-2xl relative",
             isUser
-              ? "bg-neutral-100 text-neutral-900"
-              : "bg-neutral-800 text-neutral-100"
+              ? cn(themeConfig.userBubble, themeConfig.userText)
+              : cn(themeConfig.aiBubble, themeConfig.aiText)
           )}
         >
           <p className="text-[15px] leading-relaxed">{message.content}</p>

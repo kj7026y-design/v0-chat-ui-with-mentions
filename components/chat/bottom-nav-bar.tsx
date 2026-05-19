@@ -17,7 +17,7 @@ export function BottomNavBar() {
   const pathname = usePathname()
 
   return (
-    <nav className="bg-neutral-900/80 backdrop-blur-md border-t border-neutral-800/50">
+    <nav className="bg-background/80 backdrop-blur-md border-t border-border">
       <div className="flex items-center justify-around py-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href || 
@@ -29,7 +29,7 @@ export function BottomNavBar() {
               href={item.href}
               className={cn(
                 "flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors",
-                isActive ? "text-neutral-100" : "text-neutral-500"
+                isActive ? "text-foreground" : "text-muted-foreground"
               )}
             >
               <item.icon className="w-5 h-5" />
