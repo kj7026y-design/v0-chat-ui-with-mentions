@@ -1,18 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import Link from "next/link"
-import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight, MessageCircle, BookOpen } from "lucide-react"
+import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-type ChatStyleId = "bubble" | "novel"
 
 interface ChatSettingsDrawerProps {
   isOpen: boolean
   onClose: () => void
   characterName: string
   characterEmoji: string
-  onChatStyleChange?: (style: ChatStyleId) => void
 }
 
 const timelineEvents = [
@@ -41,26 +38,11 @@ export function ChatSettingsDrawer({
   isOpen, 
   onClose, 
   characterName, 
-  characterEmoji,
-  onChatStyleChange
+  characterEmoji
 }: ChatSettingsDrawerProps) {
   const [selectedTheme, setSelectedTheme] = useState("dark")
   const [spicyLevel, setSpicyLevel] = useState(50)
   const [uniqueLevel, setUniqueLevel] = useState(70)
-  const [chatStyle, setChatStyle] = useState<ChatStyleId>("bubble")
-
-  useEffect(() => {
-    const savedStyle = localStorage.getItem("chat-style") as ChatStyleId
-    if (savedStyle) {
-      setChatStyle(savedStyle)
-    }
-  }, [])
-
-  const handleChatStyleChange = (style: ChatStyleId) => {
-    setChatStyle(style)
-    localStorage.setItem("chat-style", style)
-    onChatStyleChange?.(style)
-  }
 
   return (
     <>
@@ -102,40 +84,6 @@ export function ChatSettingsDrawer({
 
         {/* Content */}
         <div className="px-4 py-4 space-y-6">
-          {/* Chat Style Toggle Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <BookOpen className="w-4 h-4 text-neutral-400" />
-              <h3 className="text-sm font-medium text-neutral-300">채팅 스타일</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => handleChatStyleChange("bubble")}
-                className={cn(
-                  "flex items-center justify-center gap-2 py-3 rounded-lg transition-all",
-                  chatStyle === "bubble" 
-                    ? "bg-neutral-100 text-neutral-900" 
-                    : "bg-neutral-800/50 text-neutral-400 hover:bg-neutral-800"
-                )}
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">말풍선</span>
-              </button>
-              <button
-                onClick={() => handleChatStyleChange("novel")}
-                className={cn(
-                  "flex items-center justify-center gap-2 py-3 rounded-lg transition-all",
-                  chatStyle === "novel" 
-                    ? "bg-neutral-100 text-neutral-900" 
-                    : "bg-neutral-800/50 text-neutral-400 hover:bg-neutral-800"
-                )}
-              >
-                <BookOpen className="w-4 h-4" />
-                <span className="text-sm font-medium">소설형</span>
-              </button>
-            </div>
-          </section>
-
           {/* Timeline Section */}
           <section>
             <div className="flex items-center gap-2 mb-3">
