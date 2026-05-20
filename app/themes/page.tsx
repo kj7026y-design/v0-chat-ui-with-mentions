@@ -3,35 +3,13 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useTheme } from "next-themes"
-import { ArrowLeft, Check, Sun, Moon, Monitor, MessageCircle, MessageSquare, Send, BookOpen } from "lucide-react"
+import { ArrowLeft, Check, Sun, Moon, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type ThemeId = "light" | "dark" | "system"
-type ChatThemeId = "light" | "dark" | "message" | "messenger"
-type ChatStyleId = "bubble" | "novel"
 
 interface ThemeConfig {
   id: ThemeId
-  label: string
-  description: string
-  icon: React.ReactNode
-}
-
-interface ChatThemeConfig {
-  id: ChatThemeId
-  label: string
-  icon: React.ReactNode
-  preview: {
-    bg: string
-    userBubble: string
-    userText: string
-    aiBubble: string
-    aiText: string
-  }
-}
-
-interface ChatStyleConfig {
-  id: ChatStyleId
   label: string
   description: string
   icon: React.ReactNode
@@ -58,78 +36,10 @@ const themes: ThemeConfig[] = [
   },
 ]
 
-const chatThemes: ChatThemeConfig[] = [
-  {
-    id: "light",
-    label: "라이트",
-    icon: <Sun className="w-4 h-4" />,
-    preview: {
-      bg: "#FFFFFF",
-      userBubble: "#007AFF",
-      userText: "#FFFFFF",
-      aiBubble: "#E9E9EB",
-      aiText: "#000000",
-    },
-  },
-  {
-    id: "dark",
-    label: "다크",
-    icon: <Moon className="w-4 h-4" />,
-    preview: {
-      bg: "#121212",
-      userBubble: "#333333",
-      userText: "#FFFFFF",
-      aiBubble: "#1E1E1E",
-      aiText: "#E5E5E5",
-    },
-  },
-  {
-    id: "message",
-    label: "메시지",
-    icon: <MessageSquare className="w-4 h-4" />,
-    preview: {
-      bg: "#F2F2F7",
-      userBubble: "#34C759",
-      userText: "#FFFFFF",
-      aiBubble: "#FFFFFF",
-      aiText: "#000000",
-    },
-  },
-  {
-    id: "messenger",
-    label: "메신저",
-    icon: <Send className="w-4 h-4" />,
-    preview: {
-      bg: "#BACEE0",
-      userBubble: "#FEE500",
-      userText: "#3C1E1E",
-      aiBubble: "#FFFFFF",
-      aiText: "#000000",
-    },
-  },
-]
-
-const chatStyles: ChatStyleConfig[] = [
-  {
-    id: "bubble",
-    label: "말풍선",
-    description: "카카오톡 스타일의 좌우 분리형 말풍선",
-    icon: <MessageCircle className="w-5 h-5" />,
-  },
-  {
-    id: "novel",
-    label: "소설형",
-    description: "웹소설/대본처럼 읽히는 세로 흐름",
-    icon: <BookOpen className="w-5 h-5" />,
-  },
-]
-
 export default function ThemesPage() {
   const router = useRouter()
-  const { setTheme, theme: currentTheme, resolvedTheme } = useTheme()
+  const { setTheme, theme: currentTheme } = useTheme()
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>("dark")
-  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("dark")
-  const [selectedChatStyle, setSelectedChatStyle] = useState<ChatStyleId>("bubble")
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -137,32 +47,16 @@ export default function ThemesPage() {
     if (currentTheme) {
       setSelectedTheme(currentTheme as ThemeId)
     }
-    // Load saved chat theme from localStorage
-    const savedChatTheme = localStorage.getItem("chat-theme") as ChatThemeId
-    if (savedChatTheme) {
-      setSelectedChatTheme(savedChatTheme)
-    }
-    // Load saved chat style from localStorage
-    const savedChatStyle = localStorage.getItem("chat-style") as ChatStyleId
-    if (savedChatStyle) {
-      setSelectedChatStyle(savedChatStyle)
-    }
   }, [currentTheme])
 
   const handleApplyTheme = () => {
     setTheme(selectedTheme)
-    localStorage.setItem("chat-theme", selectedChatTheme)
-    localStorage.setItem("chat-style", selectedChatStyle)
     router.back()
   }
 
   if (!mounted) {
     return null
   }
-
-  // 미리보기에 사용할 테마 (system인 경우 resolvedTheme 사용)
-  const previewTheme = selectedTheme === "system" ? resolvedTheme : selectedTheme
-  const selectedChatThemeConfig = chatThemes.find(t => t.id === selectedChatTheme)!
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -227,189 +121,6 @@ export default function ThemesPage() {
                 </button>
               )
             })}
-          </div>
-        </section>
-
-        {/* Chat Style Selection */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <BookOpen className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-sm font-medium text-muted-foreground">채팅 스타일</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {chatStyles.map((style) => {
-              const isSelected = selectedChatStyle === style.id
-              return (
-                <button
-                  key={style.id}
-                  onClick={() => setSelectedChatStyle(style.id)}
-                  className={cn(
-                    "relative flex flex-col items-center gap-2 p-4 rounded-xl transition-all duration-200",
-                    "bg-card hover:bg-accent",
-                    isSelected && "ring-2 ring-primary"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
-                      isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {style.icon}
-                  </div>
-                  <div className="text-center">
-                    <p className={cn(
-                      "text-sm font-medium",
-                      isSelected ? "text-foreground" : "text-muted-foreground"
-                    )}>
-                      {style.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {style.description}
-                    </p>
-                  </div>
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                      <Check className="w-3 h-3 text-primary-foreground" />
-                    </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        {/* Chat Theme Selection */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <MessageCircle className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-sm font-medium text-muted-foreground">채팅 테마</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {chatThemes.map((chatTheme) => {
-              const isSelected = selectedChatTheme === chatTheme.id
-              return (
-                <button
-                  key={chatTheme.id}
-                  onClick={() => setSelectedChatTheme(chatTheme.id)}
-                  className={cn(
-                    "relative p-3 rounded-xl transition-all duration-200",
-                    "bg-card hover:bg-accent",
-                    isSelected && "ring-2 ring-primary"
-                  )}
-                >
-                  {/* Mini Preview */}
-                  <div 
-                    className="rounded-lg p-3 mb-2"
-                    style={{ backgroundColor: chatTheme.preview.bg }}
-                  >
-                    {/* AI Bubble */}
-                    <div 
-                      className="w-3/4 h-4 rounded-full mb-1.5"
-                      style={{ backgroundColor: chatTheme.preview.aiBubble }}
-                    />
-                    {/* User Bubble */}
-                    <div 
-                      className="w-1/2 h-4 rounded-full ml-auto"
-                      style={{ backgroundColor: chatTheme.preview.userBubble }}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span className="text-muted-foreground">{chatTheme.icon}</span>
-                    <p className={cn(
-                      "text-sm font-medium",
-                      isSelected ? "text-foreground" : "text-muted-foreground"
-                    )}>
-                      {chatTheme.label}
-                    </p>
-                  </div>
-
-                  {/* Selected Check */}
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                      <Check className="w-3 h-3 text-primary-foreground" />
-                    </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
-        {/* Live Preview */}
-        <section>
-          <h2 className="text-sm font-medium text-muted-foreground mb-4">미리보기</h2>
-          <div
-            className="rounded-xl overflow-hidden border transition-all duration-300"
-            style={{ 
-              backgroundColor: selectedChatThemeConfig.preview.bg,
-              borderColor: previewTheme === "dark" ? "#262626" : "#e5e5e5"
-            }}
-          >
-            {/* Preview Header */}
-            <div
-              className="px-4 py-3 flex items-center gap-3 border-b"
-              style={{ borderColor: previewTheme === "dark" ? "#262626" : "#e5e5e5" }}
-            >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: previewTheme === "dark" ? "#262626" : "#e5e5e5" }}
-              >
-                <MessageCircle 
-                  className="w-4 h-4"
-                  style={{ color: previewTheme === "dark" ? "#a3a3a3" : "#525252" }}
-                />
-              </div>
-              <span
-                className="font-medium text-sm"
-                style={{ color: previewTheme === "dark" ? "#f5f5f5" : "#171717" }}
-              >
-                채팅 미리보기
-              </span>
-            </div>
-
-            {/* Chat Preview */}
-            <div className="p-4 space-y-3">
-              {/* AI Message */}
-              <div className="flex justify-start">
-                <div 
-                  className="max-w-[75%] px-4 py-2.5 rounded-2xl"
-                  style={{ 
-                    backgroundColor: selectedChatThemeConfig.preview.aiBubble,
-                    color: selectedChatThemeConfig.preview.aiText
-                  }}
-                >
-                  <p className="text-sm">안녕하세요! 무엇을 도와드릴까요?</p>
-                </div>
-              </div>
-
-              {/* User Message */}
-              <div className="flex justify-end">
-                <div 
-                  className="max-w-[75%] px-4 py-2.5 rounded-2xl"
-                  style={{ 
-                    backgroundColor: selectedChatThemeConfig.preview.userBubble,
-                    color: selectedChatThemeConfig.preview.userText
-                  }}
-                >
-                  <p className="text-sm">오늘 날씨가 어때요?</p>
-                </div>
-              </div>
-
-              {/* AI Message */}
-              <div className="flex justify-start">
-                <div 
-                  className="max-w-[75%] px-4 py-2.5 rounded-2xl"
-                  style={{ 
-                    backgroundColor: selectedChatThemeConfig.preview.aiBubble,
-                    color: selectedChatThemeConfig.preview.aiText
-                  }}
-                >
-                  <p className="text-sm">오늘은 맑고 화창한 날씨입니다!</p>
-                </div>
-              </div>
-            </div>
           </div>
         </section>
 

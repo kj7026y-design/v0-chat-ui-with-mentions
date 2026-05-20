@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useParams } from "next/navigation"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
@@ -9,6 +10,8 @@ import { DualStatusBar } from "@/components/chat/dual-status-bar"
 import { WorldDateDisplay } from "@/components/chat/world-date-display"
 import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { type ChatMessage } from "@/lib/chat-types"
+
+type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
 const initialMessages: ChatMessage[] = [
   {
@@ -64,11 +67,15 @@ const initialMessages: ChatMessage[] = [
 ]
 
 export default function ChatPage() {
+  const params = useParams()
+  const chatId = params.id as string
+  
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [isTyping, setIsTyping] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isQuestPopupOpen, setIsQuestPopupOpen] = useState(false)
   const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(new Set())
+  const [chatTheme, setChatTheme] = useState<ChatThemeId>("system")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Status data
@@ -89,6 +96,16 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages, isTyping])
+
+  // Load chat-specific theme
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
+    if (savedTheme) {
+      setChatTheme(savedTheme)
+    } else {
+      setChatTheme("system")
+    }
+  }, [chatId])
 
   const handleSendMessage = (content: string) => {
     // Add user message
@@ -193,6 +210,8 @@ export default function ChatPage() {
         onClose={() => setIsSettingsOpen(false)}
         characterName="이무기"
         characterEmoji="🐉"
+        chatId={chatId}
+        onChatThemeChange={(theme) => setChatTheme(theme)}
       />
 
       {/* Quest Reward Popup */}
@@ -214,6 +233,8 @@ export default function ChatPage() {
           onDeleteMessage={handleDeleteMessage}
           onBranchFromMessage={handleBranchFromMessage}
           editedMessageIds={editedMessageIds}
+          chatId={chatId}
+          chatTheme={chatTheme}
         />
       </main>
 

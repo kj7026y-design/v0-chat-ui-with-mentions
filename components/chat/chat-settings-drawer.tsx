@@ -1,28 +1,102 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight } from "lucide-react"
+import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight, Check, Sun, Moon, MessageSquare, Send, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTheme } from "next-themes"
+
+type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
+
+interface ChatThemeConfig {
+  id: ChatThemeId
+  label: string
+  icon: React.ReactNode
+  preview: {
+    bg: string
+    userBubble: string
+    userText: string
+    aiBubble: string
+    aiText: string
+  }
+}
+
+const chatThemes: ChatThemeConfig[] = [
+  {
+    id: "system",
+    label: "앱 설정",
+    icon: <RotateCcw className="w-4 h-4" />,
+    preview: {
+      bg: "#1a1a1a",
+      userBubble: "#333333",
+      userText: "#FFFFFF",
+      aiBubble: "#1E1E1E",
+      aiText: "#E5E5E5",
+    },
+  },
+  {
+    id: "light",
+    label: "라이트",
+    icon: <Sun className="w-4 h-4" />,
+    preview: {
+      bg: "#FFFFFF",
+      userBubble: "#007AFF",
+      userText: "#FFFFFF",
+      aiBubble: "#E9E9EB",
+      aiText: "#000000",
+    },
+  },
+  {
+    id: "dark",
+    label: "다크",
+    icon: <Moon className="w-4 h-4" />,
+    preview: {
+      bg: "#121212",
+      userBubble: "#333333",
+      userText: "#FFFFFF",
+      aiBubble: "#1E1E1E",
+      aiText: "#E5E5E5",
+    },
+  },
+  {
+    id: "message",
+    label: "메시지",
+    icon: <MessageSquare className="w-4 h-4" />,
+    preview: {
+      bg: "#F2F2F7",
+      userBubble: "#34C759",
+      userText: "#FFFFFF",
+      aiBubble: "#FFFFFF",
+      aiText: "#000000",
+    },
+  },
+  {
+    id: "messenger",
+    label: "메신저",
+    icon: <Send className="w-4 h-4" />,
+    preview: {
+      bg: "#BACEE0",
+      userBubble: "#FEE500",
+      userText: "#3C1E1E",
+      aiBubble: "#FFFFFF",
+      aiText: "#000000",
+    },
+  },
+]
 
 interface ChatSettingsDrawerProps {
   isOpen: boolean
   onClose: () => void
   characterName: string
   characterEmoji: string
+  chatId: string
+  onChatThemeChange?: (theme: ChatThemeId) => void
 }
 
 const timelineEvents = [
   { id: "1", title: "첫 만남", date: "2024년 3월 1일" },
   { id: "2", title: "이무기의 생일", date: "2024년 4월 15일" },
   { id: "3", title: "우리의 100일", date: "2024년 6월 9일" },
-]
-
-const themeOptions = [
-  { id: "dark", label: "다크", color: "bg-neutral-900", ring: "ring-neutral-100" },
-  { id: "kakao", label: "카톡", color: "bg-[#9bbbd4]", ring: "ring-[#9bbbd4]" },
-  { id: "classic", label: "클래식", color: "bg-[#e8ddd4]", ring: "ring-[#e8ddd4]" },
-  { id: "pink", label: "핑크", color: "bg-[#ffb8c6]", ring: "ring-[#ffb8c6]" },
 ]
 
 const sharedMedia = [
@@ -38,11 +112,41 @@ export function ChatSettingsDrawer({
   isOpen, 
   onClose, 
   characterName, 
-  characterEmoji
+  characterEmoji,
+  chatId,
+  onChatThemeChange
 }: ChatSettingsDrawerProps) {
-  const [selectedTheme, setSelectedTheme] = useState("dark")
+  const { resolvedTheme } = useTheme()
+  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("system")
   const [spicyLevel, setSpicyLevel] = useState(50)
   const [uniqueLevel, setUniqueLevel] = useState(70)
+
+  // Load chat-specific theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
+    if (savedTheme) {
+      setSelectedChatTheme(savedTheme)
+    }
+  }, [chatId])
+
+  const handleChatThemeChange = (theme: ChatThemeId) => {
+    setSelectedChatTheme(theme)
+    if (theme === "system") {
+      localStorage.removeItem(`chat-theme-${chatId}`)
+    } else {
+      localStorage.setItem(`chat-theme-${chatId}`, theme)
+    }
+    onChatThemeChange?.(theme)
+  }
+
+  // Get the actual preview theme based on system setting
+  const getPreviewTheme = (themeConfig: ChatThemeConfig) => {
+    if (themeConfig.id === "system") {
+      // Return preview based on current app theme
+      return resolvedTheme === "dark" ? chatThemes[2].preview : chatThemes[1].preview
+    }
+    return themeConfig.preview
+  }
 
   return (
     <>
@@ -84,6 +188,70 @@ export function ChatSettingsDrawer({
 
         {/* Content */}
         <div className="px-4 py-4 space-y-6">
+          {/* Chat Theme Section */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Palette className="w-4 h-4 text-neutral-400" />
+              <h3 className="text-sm font-medium text-neutral-300">채팅 테마</h3>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {chatThemes.map((theme) => {
+                const isSelected = selectedChatTheme === theme.id
+                const previewColors = getPreviewTheme(theme)
+                return (
+                  <button
+                    key={theme.id}
+                    onClick={() => handleChatThemeChange(theme.id)}
+                    className={cn(
+                      "relative p-2 rounded-lg transition-all duration-200",
+                      "bg-neutral-800/50 hover:bg-neutral-800",
+                      isSelected && "ring-2 ring-neutral-100"
+                    )}
+                  >
+                    {/* Mini Preview */}
+                    <div 
+                      className="rounded-md p-2 mb-1.5 aspect-[4/3]"
+                      style={{ backgroundColor: previewColors.bg }}
+                    >
+                      {/* AI Bubble */}
+                      <div 
+                        className="w-3/4 h-2 rounded-full mb-1"
+                        style={{ backgroundColor: previewColors.aiBubble }}
+                      />
+                      {/* User Bubble */}
+                      <div 
+                        className="w-1/2 h-2 rounded-full ml-auto"
+                        style={{ backgroundColor: previewColors.userBubble }}
+                      />
+                    </div>
+                    
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="text-neutral-400">{theme.icon}</span>
+                      <p className={cn(
+                        "text-xs font-medium",
+                        isSelected ? "text-neutral-100" : "text-neutral-400"
+                      )}>
+                        {theme.label}
+                      </p>
+                    </div>
+
+                    {/* Selected Check */}
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-neutral-100 flex items-center justify-center">
+                        <Check className="w-2.5 h-2.5 text-neutral-900" />
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-neutral-500 mt-2">
+              {selectedChatTheme === "system" 
+                ? "앱의 라이트/다크 모드 설정을 따릅니다" 
+                : "이 채팅방에서만 적용됩니다"}
+            </p>
+          </section>
+
           {/* Timeline Section */}
           <section>
             <div className="flex items-center gap-2 mb-3">
@@ -107,34 +275,6 @@ export function ChatSettingsDrawer({
             <button className="w-full mt-2 py-2 text-sm text-neutral-400 hover:text-neutral-300 transition-colors">
               전체 보기 →
             </button>
-          </section>
-
-          {/* Theme Section */}
-          <section>
-            <Link 
-              href="/themes"
-              className="flex items-center justify-between p-3 -mx-3 rounded-lg hover:bg-neutral-800/50 transition-colors group"
-            >
-              <div className="flex items-center gap-2">
-                <Palette className="w-4 h-4 text-neutral-400" />
-                <h3 className="text-sm font-medium text-neutral-300">채팅 테마</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1.5">
-                  {themeOptions.slice(0, 4).map((theme) => (
-                    <div
-                      key={theme.id}
-                      className={cn(
-                        "w-5 h-5 rounded-full",
-                        theme.color,
-                        selectedTheme === theme.id && "ring-1 ring-offset-1 ring-offset-neutral-900 ring-neutral-400"
-                      )}
-                    />
-                  ))}
-                </div>
-                <ChevronRight className="w-4 h-4 text-neutral-500 group-hover:text-neutral-300 transition-colors" />
-              </div>
-            </Link>
           </section>
 
           {/* Personality Tuning Section */}
