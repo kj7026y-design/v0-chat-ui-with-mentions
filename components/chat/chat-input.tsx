@@ -1,20 +1,29 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Send } from "lucide-react"
+import { Send, Image as ImageIcon, Zap } from "lucide-react"
 import { SLASH_COMMANDS } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
 
 interface ChatInputProps {
-  onSendMessage: (content: string) => void
+  onSendMessage: (content: string, mentionedTargets?: string[]) => void
   onCommand: (command: string) => void
 }
+
+// Character targets for mentions
+const MENTION_TARGETS = [
+  { id: "hongGilDong", name: "홍길동", emoji: "🧑‍🦱" },
+  { id: "imugi", name: "이무기", emoji: "🐉" },
+  { id: "extra", name: "엑스트라", emoji: "👥" },
+]
 
 export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
   const [input, setInput] = useState("")
   const [showCommands, setShowCommands] = useState(false)
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [selectedMentions, setSelectedMentions] = useState<string[]>([])
+  const [isAllSelected, setIsAllSelected] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
     input.startsWith("/")
@@ -30,6 +39,46 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
       setShowCommands(false)
     }
   }, [input])
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.style.height = "auto"
+      const lineHeight = 24 // Approximate line height
+      const maxLines = 4
+      const maxHeight = lineHeight * maxLines
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+      textarea.style.height = `${newHeight}px`
+    }
+  }, [input])
+
+  // Handle mention selection
+  const handleMentionToggle = (targetId: string) => {
+    if (targetId === "all") {
+      // Toggle "all" selection
+      if (isAllSelected) {
+        setIsAllSelected(false)
+      } else {
+        setSelectedMentions([])
+        setIsAllSelected(true)
+      }
+    } else {
+      // Individual character toggle
+      if (isAllSelected) {
+        // If "all" was selected, deselect it and select only this character
+        setIsAllSelected(false)
+        setSelectedMentions([targetId])
+      } else {
+        // Toggle individual selection
+        setSelectedMentions((prev) =>
+          prev.includes(targetId)
+            ? prev.filter((id) => id !== targetId)
+            : [...prev, targetId]
+        )
+      }
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,8 +98,21 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
       }
     }
 
-    onSendMessage(input)
+    // Determine mentioned targets
+    const mentionedTargets = isAllSelected
+      ? ["all"]
+      : selectedMentions
+
+    // Log for debugging
+    console.log("[v0] Sending message with mentions:", mentionedTargets)
+
+    onSendMessage(input, mentionedTargets.length > 0 ? mentionedTargets : undefined)
     setInput("")
+    
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto"
+    }
   }
 
   const handleCommandSelect = (commandName: string) => {
@@ -59,30 +121,40 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
     setShowCommands(false)
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!showCommands || filteredCommands.length === 0) return
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Command navigation
+    if (showCommands && filteredCommands.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedCommandIndex((prev) =>
+          prev < filteredCommands.length - 1 ? prev + 1 : prev
+        )
+        return
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : prev))
+        return
+      } else if (e.key === "Enter") {
+        e.preventDefault()
+        handleCommandSelect(filteredCommands[selectedCommandIndex].name)
+        return
+      }
+    }
 
-    if (e.key === "ArrowDown") {
+    // Enter to send, Shift+Enter for newline
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      setSelectedCommandIndex((prev) =>
-        prev < filteredCommands.length - 1 ? prev + 1 : prev
-      )
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : prev))
-    } else if (e.key === "Enter" && showCommands) {
-      e.preventDefault()
-      handleCommandSelect(filteredCommands[selectedCommandIndex].name)
+      handleSubmit(e)
     }
   }
 
   return (
-    <div className="relative px-4 pb-2 bg-neutral-900">
+    <div className="relative px-4 pb-2 bg-white dark:bg-neutral-900">
       {/* Command Popup */}
       {showCommands && filteredCommands.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 rounded-xl bg-neutral-800 overflow-hidden shadow-lg">
+        <div className="absolute bottom-full left-4 right-4 mb-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 overflow-hidden shadow-lg border border-neutral-200 dark:border-neutral-700">
           <div className="p-2">
-            <p className="text-xs text-neutral-500 px-2 py-1">명령어</p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500 px-2 py-1">명령어</p>
             {filteredCommands.map((cmd, index) => (
               <button
                 key={cmd.id}
@@ -90,16 +162,16 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
                 className={cn(
                   "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left",
                   index === selectedCommandIndex
-                    ? "bg-neutral-700"
-                    : "hover:bg-neutral-700/50"
+                    ? "bg-neutral-200 dark:bg-neutral-700"
+                    : "hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50"
                 )}
               >
                 <span className="text-lg">{cmd.icon}</span>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-neutral-100">
+                  <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
                     /{cmd.name}
                   </span>
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-xs text-neutral-500 dark:text-neutral-400">
                     {cmd.description}
                   </span>
                 </div>
@@ -109,17 +181,72 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
         </div>
       )}
 
+      {/* Quick Action Bar */}
+      <div className="flex items-center gap-2 mb-2 overflow-x-auto scrollbar-hide pb-1">
+        {/* Fixed Actions */}
+        <button
+          type="button"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+        >
+          <ImageIcon className="w-4 h-4" />
+          <span>이미지</span>
+        </button>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+        >
+          <Zap className="w-4 h-4" />
+          <span>명령어</span>
+        </button>
+
+        {/* Divider */}
+        <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700 flex-shrink-0" />
+
+        {/* Mention Targets */}
+        {MENTION_TARGETS.map((target) => (
+          <button
+            key={target.id}
+            type="button"
+            onClick={() => handleMentionToggle(target.id)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors",
+              selectedMentions.includes(target.id) && !isAllSelected
+                ? "bg-blue-500 text-white"
+                : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            )}
+          >
+            <span>{target.emoji}</span>
+            <span>@{target.name}</span>
+          </button>
+        ))}
+
+        {/* All Mention */}
+        <button
+          type="button"
+          onClick={() => handleMentionToggle("all")}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors",
+            isAllSelected
+              ? "bg-blue-500 text-white"
+              : "bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+          )}
+        >
+          <span>👥</span>
+          <span>@모두</span>
+        </button>
+      </div>
+
       {/* Input Form */}
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
-        <div className="flex-1 flex items-center gap-2 px-4 py-3 rounded-full bg-neutral-800">
-          <input
-            ref={inputRef}
-            type="text"
+      <form onSubmit={handleSubmit} className="flex items-end gap-2">
+        <div className="flex-1 flex items-end gap-2 px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800">
+          <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="메시지를 입력하세요..."
-            className="flex-1 bg-transparent text-neutral-100 text-[15px] placeholder:text-neutral-500 outline-none"
+            rows={1}
+            className="flex-1 bg-transparent text-neutral-900 dark:text-neutral-100 text-[15px] placeholder:text-neutral-500 outline-none resize-none leading-6 max-h-24"
           />
         </div>
         
@@ -127,10 +254,10 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
           type="submit"
           disabled={!input.trim()}
           className={cn(
-            "flex items-center justify-center w-11 h-11 rounded-full transition-colors",
+            "flex items-center justify-center w-11 h-11 rounded-full transition-colors flex-shrink-0",
             input.trim()
-              ? "bg-neutral-100 text-neutral-900"
-              : "bg-neutral-800 text-neutral-500"
+              ? "bg-blue-500 text-white"
+              : "bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500"
           )}
         >
           <Send className="w-5 h-5" />
