@@ -188,16 +188,16 @@ export default function MyWorksPage() {
   }, [activeTab])
 
   return (
-    <div className="min-h-screen bg-black pb-20">
+    <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-black border-b border-neutral-800/50">
+      <header className="sticky top-0 z-40 bg-background border-b border-border">
         <div className="px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BookOpen className="w-5 h-5 text-neutral-400" />
-            <h1 className="text-lg font-bold text-neutral-100">내 작품</h1>
+            <BookOpen className="w-5 h-5 text-muted-foreground" />
+            <h1 className="text-lg font-bold text-foreground">내 작품</h1>
           </div>
-          <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-neutral-800 transition-colors">
-            <Plus className="w-5 h-5 text-neutral-400" />
+          <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors">
+            <Plus className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
@@ -211,7 +211,7 @@ export default function MyWorksPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
                   "px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap",
-                  activeTab === tab.id ? "text-neutral-100" : "text-neutral-500"
+                  activeTab === tab.id ? "text-foreground" : "text-muted-foreground"
                 )}
               >
                 {tab.label}
@@ -221,7 +221,7 @@ export default function MyWorksPage() {
           
           {/* Sliding Indicator */}
           <div
-            className="absolute bottom-0 h-0.5 bg-neutral-100 transition-all duration-300 ease-out"
+            className="absolute bottom-0 h-0.5 bg-foreground transition-all duration-300 ease-out"
             style={{
               left: indicatorStyle.left,
               width: indicatorStyle.width,
@@ -249,7 +249,7 @@ function ScenariosTab({ scenarios }: { scenarios: Scenario[] }) {
         <div
           key={scenario.id}
           className={cn(
-            "relative rounded-xl overflow-hidden bg-gradient-to-br border border-neutral-800/50",
+            "relative rounded-xl overflow-hidden bg-gradient-to-br border border-border",
             scenario.coverColor
           )}
         >
@@ -257,32 +257,32 @@ function ScenariosTab({ scenarios }: { scenarios: Scenario[] }) {
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-base font-semibold text-neutral-100">
+                <h3 className="text-base font-semibold text-foreground">
                   {scenario.title}
                 </h3>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <Calendar className="w-3 h-3 text-neutral-500" />
-                  <span className="text-xs text-neutral-500">{scenario.startDate}</span>
+                  <Calendar className="w-3 h-3 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">{scenario.startDate}</span>
                 </div>
               </div>
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800/50 transition-colors">
-                <MoreVertical className="w-4 h-4 text-neutral-500" />
+              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors">
+                <MoreVertical className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
             
             {/* Description */}
-            <p className="text-sm text-neutral-400 mb-3">
+            <p className="text-sm text-muted-foreground mb-3">
               {scenario.description}
             </p>
             
             {/* Key Events */}
             <div className="space-y-1.5">
-              <span className="text-[10px] text-neutral-500 uppercase tracking-wider">주요 사건</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">주요 사건</span>
               <div className="flex flex-wrap gap-2">
                 {scenario.events.map((event, i) => (
                   <div key={i} className="flex items-center gap-1.5">
-                    <MapPin className="w-3 h-3 text-neutral-600" />
-                    <span className="text-xs text-neutral-400">{event}</span>
+                    <MapPin className="w-3 h-3 text-muted-foreground/70" />
+                    <span className="text-xs text-muted-foreground">{event}</span>
                   </div>
                 ))}
               </div>
@@ -292,9 +292,9 @@ function ScenariosTab({ scenarios }: { scenarios: Scenario[] }) {
       ))}
       
       {/* Add Scenario */}
-      <button className="py-6 rounded-xl border border-dashed border-neutral-700 flex flex-col items-center justify-center gap-2 hover:bg-neutral-900/50 hover:border-neutral-600 transition-colors">
-        <Plus className="w-6 h-6 text-neutral-600" />
-        <span className="text-xs text-neutral-500">새 세계관</span>
+      <button className="py-6 rounded-xl border border-dashed border-border flex flex-col items-center justify-center gap-2 hover:bg-accent hover:border-muted-foreground transition-colors">
+        <Plus className="w-6 h-6 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">새 세계관</span>
       </button>
     </div>
   )
@@ -307,15 +307,15 @@ function CharactersTab({ characters }: { characters: Character[] }) {
       {characters.map((character) => (
         <div
           key={character.id}
-          className="flex flex-col items-center p-4 bg-neutral-900 rounded-xl border border-neutral-800/50"
+          className="flex flex-col items-center p-4 bg-card rounded-xl border border-border"
         >
           {/* Circle Profile */}
-          <div className="w-16 h-16 rounded-full bg-neutral-800 flex items-center justify-center mb-3">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-3">
             <span className="text-2xl">{character.emoji}</span>
           </div>
           
           {/* Name */}
-          <h3 className="text-sm font-semibold text-neutral-100 mb-1">
+          <h3 className="text-sm font-semibold text-foreground mb-1">
             {character.name}
           </h3>
           
@@ -324,7 +324,7 @@ function CharactersTab({ characters }: { characters: Character[] }) {
             {character.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 text-[9px] bg-neutral-800 text-neutral-500 rounded"
+                className="px-1.5 py-0.5 text-[9px] bg-muted text-muted-foreground rounded"
               >
                 {tag}
               </span>
@@ -334,9 +334,9 @@ function CharactersTab({ characters }: { characters: Character[] }) {
       ))}
       
       {/* Add Character Card */}
-      <button className="flex flex-col items-center justify-center p-4 min-h-[140px] bg-neutral-900/50 rounded-xl border border-dashed border-neutral-700 hover:bg-neutral-900 hover:border-neutral-600 transition-colors">
-        <Plus className="w-5 h-5 text-neutral-600 mb-2" />
-        <span className="text-[10px] text-neutral-500">새 캐릭터</span>
+      <button className="flex flex-col items-center justify-center p-4 min-h-[140px] bg-card/50 rounded-xl border border-dashed border-border hover:bg-card hover:border-muted-foreground transition-colors">
+        <Plus className="w-5 h-5 text-muted-foreground mb-2" />
+        <span className="text-[10px] text-muted-foreground">새 캐릭터</span>
       </button>
     </div>
   )
@@ -349,34 +349,34 @@ function PersonasTab({ personas }: { personas: Persona[] }) {
       {personas.map((persona) => (
         <div
           key={persona.id}
-          className="p-4 bg-neutral-900 rounded-xl border border-neutral-800/50"
+          className="p-4 bg-card rounded-xl border border-border"
         >
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               {/* Name */}
-              <h3 className="text-sm font-semibold text-neutral-100 mb-1">
+              <h3 className="text-sm font-semibold text-foreground mb-1">
                 {persona.name}
               </h3>
               
               {/* Role */}
-              <p className="text-xs text-neutral-400 mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 {persona.role}
               </p>
               
               {/* Description */}
-              <p className="text-xs text-neutral-500 line-clamp-2">
+              <p className="text-xs text-muted-foreground/70 line-clamp-2">
                 {persona.description}
               </p>
             </div>
             
-            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800/50 transition-colors">
-              <MoreVertical className="w-4 h-4 text-neutral-500" />
+            <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors">
+              <MoreVertical className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
           
           {/* Created At */}
-          <div className="mt-3 pt-3 border-t border-neutral-800/50">
-            <span className="text-[10px] text-neutral-600">
+          <div className="mt-3 pt-3 border-t border-border">
+            <span className="text-[10px] text-muted-foreground/60">
               생성일: {persona.createdAt}
             </span>
           </div>
@@ -384,9 +384,9 @@ function PersonasTab({ personas }: { personas: Persona[] }) {
       ))}
       
       {/* Add Persona */}
-      <button className="py-6 rounded-xl border border-dashed border-neutral-700 flex flex-col items-center justify-center gap-2 hover:bg-neutral-900/50 hover:border-neutral-600 transition-colors">
-        <Plus className="w-6 h-6 text-neutral-600" />
-        <span className="text-xs text-neutral-500">새 자아</span>
+      <button className="py-6 rounded-xl border border-dashed border-border flex flex-col items-center justify-center gap-2 hover:bg-accent hover:border-muted-foreground transition-colors">
+        <Plus className="w-6 h-6 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">새 자아</span>
       </button>
     </div>
   )
@@ -401,25 +401,25 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
       {works.map((work) => (
         <div
           key={work.id}
-          className="bg-neutral-900 rounded-xl border border-neutral-800/50 overflow-hidden"
+          className="bg-card rounded-xl border border-border overflow-hidden"
         >
           <div className="p-4">
             {/* Header Row */}
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
                 <span className="text-xl">{work.characterEmoji}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-neutral-100">
+                  <span className="text-sm font-semibold text-foreground">
                     {work.characterName}
                   </span>
-                  <span className="text-neutral-600">+</span>
-                  <span className="text-sm text-neutral-400">
+                  <span className="text-muted-foreground/60">+</span>
+                  <span className="text-sm text-muted-foreground">
                     {work.scenarioTitle}
                   </span>
                 </div>
-                <p className="text-xs text-neutral-500 mt-0.5 truncate">
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
                   {work.lastMessage}
                 </p>
               </div>
@@ -428,9 +428,9 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
               <div className="relative">
                 <button
                   onClick={() => setOpenMenuId(openMenuId === work.id ? null : work.id)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800 transition-colors"
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
                 >
-                  <MoreVertical className="w-4 h-4 text-neutral-500" />
+                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
                 </button>
                 
                 {/* Dropdown Menu */}
@@ -440,25 +440,25 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
                       className="fixed inset-0 z-40" 
                       onClick={() => setOpenMenuId(null)} 
                     />
-                    <div className="absolute right-0 top-10 z-50 bg-neutral-800 rounded-xl shadow-xl py-1.5 min-w-[140px] border border-neutral-700/50">
+                    <div className="absolute right-0 top-10 z-50 bg-popover rounded-xl shadow-xl py-1.5 min-w-[140px] border border-border">
                       <button 
                         onClick={() => setOpenMenuId(null)}
-                        className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors flex items-center gap-2"
+                        className="w-full px-4 py-2.5 text-left text-sm text-popover-foreground hover:bg-accent transition-colors flex items-center gap-2"
                       >
                         <Copy className="w-4 h-4" />
                         채팅방 복제
                       </button>
                       <button 
                         onClick={() => setOpenMenuId(null)}
-                        className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors flex items-center gap-2"
+                        className="w-full px-4 py-2.5 text-left text-sm text-popover-foreground hover:bg-accent transition-colors flex items-center gap-2"
                       >
                         <Edit3 className="w-4 h-4" />
                         이름 변경
                       </button>
-                      <div className="my-1 border-t border-neutral-700/50" />
+                      <div className="my-1 border-t border-border" />
                       <button 
                         onClick={() => setOpenMenuId(null)}
-                        className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-700/50 transition-colors flex items-center gap-2"
+                        className="w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-accent transition-colors flex items-center gap-2"
                       >
                         <Trash2 className="w-4 h-4" />
                         삭제
@@ -470,12 +470,12 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
             </div>
             
             {/* Stats */}
-            <div className="flex items-center justify-between pt-3 border-t border-neutral-800/50">
+            <div className="flex items-center justify-between pt-3 border-t border-border">
               <div className="flex items-center gap-4">
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-muted-foreground">
                   {work.messageCount}개 메시지
                 </span>
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-muted-foreground">
                   {work.lastUpdated}
                 </span>
               </div>
@@ -483,10 +483,10 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
               {/* Continue Button */}
               <Link
                 href={`/chat/${work.id}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80 rounded-lg transition-colors"
               >
-                <Play className="w-3.5 h-3.5 text-neutral-300" />
-                <span className="text-xs font-medium text-neutral-300">대화 이어가기</span>
+                <Play className="w-3.5 h-3.5 text-foreground" />
+                <span className="text-xs font-medium text-foreground">대화 이어가기</span>
               </Link>
             </div>
           </div>
@@ -495,11 +495,11 @@ function CompletedTab({ works }: { works: CompletedWork[] }) {
       
       {works.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-16 h-16 rounded-full bg-neutral-900 flex items-center justify-center mb-4">
-            <BookOpen className="w-8 h-8 text-neutral-600" />
+          <div className="w-16 h-16 rounded-full bg-card flex items-center justify-center mb-4">
+            <BookOpen className="w-8 h-8 text-muted-foreground" />
           </div>
-          <p className="text-neutral-500 text-sm">아직 완성본이 없습니다</p>
-          <p className="text-neutral-600 text-xs mt-1">캐릭터와 세계관을 조합해 시작하세요</p>
+          <p className="text-muted-foreground text-sm">아직 완성본이 없습니다</p>
+          <p className="text-muted-foreground/60 text-xs mt-1">캐릭터와 세계관을 조합해 시작하세요</p>
         </div>
       )}
     </div>

@@ -186,7 +186,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-black">
+    <div className="flex flex-col h-[100dvh] bg-background">
       {/* Fixed Header */}
       <ChatHeader 
         characterName="이무기" 
