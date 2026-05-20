@@ -19,6 +19,19 @@ interface ChatThemeConfig {
   }
 }
 
+// Mention target name mapping
+const MENTION_NAMES: Record<string, string> = {
+  hongGilDong: "홍길동",
+  imugi: "이무기",
+  extra: "엑스트라",
+  all: "모두",
+}
+
+function getMentionDisplayNames(mentions: string[] | undefined): string[] {
+  if (!mentions || mentions.length === 0) return []
+  return mentions.map(id => MENTION_NAMES[id] || id)
+}
+
 const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
   system: {
     id: "system",
@@ -246,6 +259,9 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
   }
 
   // Regular Message Bubble
+  const mentionNames = getMentionDisplayNames(message.mentions)
+  const hasMentions = mentionNames.length > 0
+
   return (
     <div 
       className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}
@@ -260,6 +276,20 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
             color: isUser ? themeConfig.preview.userText : themeConfig.preview.aiText,
           }}
         >
+          {/* Mention display for user messages */}
+          {isUser && hasMentions && (
+            <div className="flex items-center gap-1 mb-1.5 flex-wrap">
+              {mentionNames.map((name) => (
+                <span
+                  key={name}
+                  className="text-xs font-medium opacity-80"
+                  style={{ color: themeConfig.preview.userText }}
+                >
+                  @{name}
+                </span>
+              ))}
+            </div>
+          )}
           <p className="text-[15px] leading-relaxed">{message.content}</p>
           
           {/* Edited indicator dot */}

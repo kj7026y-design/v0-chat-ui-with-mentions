@@ -5,6 +5,7 @@ export interface ChatMessage {
   timestamp: Date
   eventImage?: string
   eventDescription?: string
+  mentions?: string[] // Character IDs or "all"
 }
 
 export interface Command {

@@ -107,13 +107,14 @@ export default function ChatPage() {
     }
   }, [chatId])
 
-  const handleSendMessage = (content: string) => {
-    // Add user message
+  const handleSendMessage = (content: string, mentions?: string[]) => {
+    // Add user message with mentions
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       type: "user",
       content,
       timestamp: new Date(),
+      mentions,
     }
     setMessages((prev) => [...prev, userMessage])
 

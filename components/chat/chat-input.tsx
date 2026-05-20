@@ -23,13 +23,28 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
   const [selectedMentions, setSelectedMentions] = useState<string[]>([])
   const [isAllSelected, setIsAllSelected] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
     input.startsWith("/")
       ? cmd.name.toLowerCase().includes(input.slice(1).toLowerCase())
       : false
   )
+
+  // Detect mobile environment
+  useEffect(() => {
+    const checkMobile = () => {
+      const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0
+      const isNarrowScreen = window.innerWidth <= 768
+      setIsMobile(isTouchDevice || isNarrowScreen)
+    }
+    
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   useEffect(() => {
     if (input.startsWith("/") && input.length > 0) {
@@ -53,7 +68,7 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
     }
   }, [input])
 
-  // Handle mention selection
+  // Handle mention selection with "all" logic
   const handleMentionToggle = (targetId: string) => {
     if (targetId === "all") {
       // Toggle "all" selection
@@ -71,17 +86,49 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
         setSelectedMentions([targetId])
       } else {
         // Toggle individual selection
-        setSelectedMentions((prev) =>
-          prev.includes(targetId)
-            ? prev.filter((id) => id !== targetId)
-            : [...prev, targetId]
-        )
+        const newMentions = selectedMentions.includes(targetId)
+          ? selectedMentions.filter((id) => id !== targetId)
+          : [...selectedMentions, targetId]
+        
+        // Check if all individual characters are now selected
+        const allIndividualIds = MENTION_TARGETS.map(t => t.id)
+        const allSelected = allIndividualIds.every(id => newMentions.includes(id))
+        
+        if (allSelected) {
+          // All individuals selected -> switch to "all" mode
+          setSelectedMentions([])
+          setIsAllSelected(true)
+        } else {
+          setSelectedMentions(newMentions)
+        }
       }
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+  // Handle image button click
+  const handleImageClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      // For now, just show alert. In production, this would upload the file.
+      alert(`선택된 파일: ${files[0].name}`)
+    }
+    // Reset input so same file can be selected again
+    e.target.value = ""
+  }
+
+  // Handle command button click
+  const handleCommandClick = () => {
+    setInput("/")
+    textareaRef.current?.focus()
+  }
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!input.trim()) return
 
     // Check if it's a command
@@ -103,11 +150,12 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
       ? ["all"]
       : selectedMentions
 
-    // Log for debugging
-    console.log("[v0] Sending message with mentions:", mentionedTargets)
-
     onSendMessage(input, mentionedTargets.length > 0 ? mentionedTargets : undefined)
     setInput("")
+    
+    // Reset mentions after sending
+    setSelectedMentions([])
+    setIsAllSelected(false)
     
     // Reset textarea height
     if (textareaRef.current) {
@@ -141,15 +189,44 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
       }
     }
 
-    // Enter to send, Shift+Enter for newline
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit(e)
+    // Enter key behavior based on device
+    if (e.key === "Enter") {
+      if (isMobile) {
+        // Mobile: Enter always creates newline, send only via button
+        // Do nothing special, let default behavior happen
+      } else {
+        // Desktop: Enter sends, Shift+Enter creates newline
+        if (!e.shiftKey) {
+          e.preventDefault()
+          handleSubmit()
+        }
+      }
     }
   }
 
+  // Get display names for selected mentions
+  const getSelectedMentionNames = () => {
+    if (isAllSelected) return ["모두"]
+    return selectedMentions.map(id => {
+      const target = MENTION_TARGETS.find(t => t.id === id)
+      return target?.name || id
+    })
+  }
+
+  const selectedNames = getSelectedMentionNames()
+  const hasActiveMentions = isAllSelected || selectedMentions.length > 0
+
   return (
     <div className="relative px-4 pb-2 bg-white dark:bg-neutral-900">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       {/* Command Popup */}
       {showCommands && filteredCommands.length > 0 && (
         <div className="absolute bottom-full left-4 right-4 mb-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 overflow-hidden shadow-lg border border-neutral-200 dark:border-neutral-700">
@@ -186,6 +263,7 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
         {/* Fixed Actions */}
         <button
           type="button"
+          onClick={handleImageClick}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
         >
           <ImageIcon className="w-4 h-4" />
@@ -193,6 +271,7 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
         </button>
         <button
           type="button"
+          onClick={handleCommandClick}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
         >
           <Zap className="w-4 h-4" />
@@ -236,6 +315,23 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
         </button>
       </div>
 
+      {/* Mention Badge Display */}
+      {hasActiveMentions && (
+        <div className="flex items-center gap-1.5 mb-2 px-1">
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">To:</span>
+          <div className="flex items-center gap-1 flex-wrap">
+            {selectedNames.map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300"
+              >
+                @{name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
         <div className="flex-1 flex items-end gap-2 px-4 py-3 rounded-2xl bg-neutral-100 dark:bg-neutral-800">
@@ -250,15 +346,17 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
           />
         </div>
         
+        {/* Send Button */}
         <button
           type="submit"
           disabled={!input.trim()}
           className={cn(
             "flex items-center justify-center w-11 h-11 rounded-full transition-colors flex-shrink-0",
             input.trim()
-              ? "bg-blue-500 text-white"
+              ? "bg-blue-500 text-white hover:bg-blue-600"
               : "bg-neutral-100 dark:bg-neutral-800 text-neutral-400 dark:text-neutral-500"
           )}
+          aria-label="전송"
         >
           <Send className="w-5 h-5" />
         </button>
