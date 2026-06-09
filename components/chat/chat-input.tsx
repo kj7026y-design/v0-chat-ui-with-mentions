@@ -217,7 +217,7 @@ export function ChatInput({ onSendMessage, onCommand }: ChatInputProps) {
   const hasActiveMentions = isAllSelected || selectedMentions.length > 0
 
   return (
-    <div className="relative px-4 pb-2 bg-white dark:bg-neutral-900">
+    <div className="relative px-4 pt-3 pb-3 bg-white dark:bg-neutral-900 border-t border-neutral-200 dark:border-neutral-800">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}

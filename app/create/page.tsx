@@ -403,7 +403,7 @@ export default function CreateCharacterPage() {
         {/* Left: Input Form */}
         <div className="w-full md:w-1/2">
           <ScrollArea className="h-[calc(100vh-3.5rem)]">
-            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-40 md:pb-8">
+            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-56 md:pb-8">
               {/* Random Generator Section (advanced only) */}
               {mode === "advanced" && (
               <section className="space-y-4">
@@ -789,7 +789,7 @@ export default function CreateCharacterPage() {
       </div>
 
       {/* Mobile Bottom Fixed Area */}
-      <div className="fixed bottom-0 left-0 right-0 md:hidden bg-background/95 backdrop-blur p-4 space-y-3 z-40">
+      <div className="fixed bottom-16 left-0 right-0 md:hidden bg-background/95 backdrop-blur border-t border-border p-4 space-y-3 z-40">
         <Button
           variant="outline"
           className="w-full"
