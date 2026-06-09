@@ -113,9 +113,11 @@ export function ChatMessageList({
   chatTheme: externalChatTheme
 }: ChatMessageListProps) {
   const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [internalChatTheme, setInternalChatTheme] = useState<ChatThemeId>("system")
 
   useEffect(() => {
+    setMounted(true)
     if (chatId) {
       const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
       if (savedTheme && chatThemes[savedTheme]) {
@@ -144,6 +146,8 @@ export function ChatMessageList({
 
   // Determine the actual theme config to use
   const getActualThemeConfig = () => {
+    // Before mount, default to light to match SSR output and avoid hydration mismatch
+    if (!mounted) return chatThemes.light
     if (chatTheme === "system") {
       // Follow app theme
       return resolvedTheme === "dark" ? chatThemes.dark : chatThemes.light

@@ -117,12 +117,14 @@ export function ChatSettingsDrawer({
   onChatThemeChange
 }: ChatSettingsDrawerProps) {
   const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("system")
   const [spicyLevel, setSpicyLevel] = useState(50)
   const [uniqueLevel, setUniqueLevel] = useState(70)
 
   // Load chat-specific theme on mount
   useEffect(() => {
+    setMounted(true)
     const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
     if (savedTheme) {
       setSelectedChatTheme(savedTheme)
@@ -142,6 +144,8 @@ export function ChatSettingsDrawer({
   // Get the actual preview theme based on system setting
   const getPreviewTheme = (themeConfig: ChatThemeConfig) => {
     if (themeConfig.id === "system") {
+      // Before mount, default to light preview to match SSR output
+      if (!mounted) return chatThemes[1].preview
       // Return preview based on current app theme
       return resolvedTheme === "dark" ? chatThemes[2].preview : chatThemes[1].preview
     }
