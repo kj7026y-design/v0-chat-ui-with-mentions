@@ -404,7 +404,8 @@ export default function CreateCharacterPage() {
         <div className="w-full md:w-1/2">
           <ScrollArea className="h-[calc(100vh-3.5rem)]">
             <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-40 md:pb-8">
-              {/* Random Generator Section */}
+              {/* Random Generator Section (advanced only) */}
+              {mode === "advanced" && (
               <section className="space-y-4">
                 <Card className="bg-card/50 border-border/50">
                   <CardContent className="p-4 md:p-6 space-y-4">
@@ -439,6 +440,7 @@ export default function CreateCharacterPage() {
                   </CardContent>
                 </Card>
               </section>
+              )}
 
               {/* Step 1: Core Identity */}
               <section className="space-y-5 md:space-y-6">
@@ -576,7 +578,8 @@ export default function CreateCharacterPage() {
                 </FieldGroup>
               </section>
 
-              {/* Step 2: Deep Persona (Accordion) */}
+              {/* Step 2: Deep Persona (Accordion) - advanced only */}
+              {mode === "advanced" && (
               <section className="space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
@@ -662,8 +665,15 @@ export default function CreateCharacterPage() {
                   </AccordionItem>
                 </Accordion>
               </section>
+              )}
 
-              {/* Step 3: Slash Commands (Accordion) */}
+              {/* Story Rules: start scenario + forbidden developments - advanced only */}
+              {mode === "advanced" && (
+                <StoryRulesSection data={storyRules} onChange={setStoryRules} />
+              )}
+
+              {/* Step 3: Slash Commands (Accordion) - advanced only */}
+              {mode === "advanced" && (
               <section className="space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
@@ -742,6 +752,7 @@ export default function CreateCharacterPage() {
                   </AccordionItem>
                 </Accordion>
               </section>
+              )}
 
               {/* Desktop Submit Button */}
               <div className="hidden md:block pt-4 pb-8">

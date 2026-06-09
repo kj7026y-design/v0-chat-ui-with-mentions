@@ -5,11 +5,18 @@ import { useAppStore, type Story } from "@/lib/store"
 import { StoryCard } from "@/components/story-card"
 import { StoryDrawer } from "@/components/story-drawer"
 import { Button } from "@/components/ui/button"
-import { Play, ChevronLeft, ChevronRight, User, Compass, PenTool } from "lucide-react"
+import { Play, ChevronLeft, ChevronRight, User, Compass, PenTool, Heart } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 type Tab = "discover" | "studio"
+
+function formatCount(n?: number): string {
+  if (!n) return "0"
+  if (n >= 10000) return `${(n / 10000).toFixed(1)}만`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}천`
+  return n.toLocaleString()
+}
 
 export default function HomePage() {
   const { stories, setSelectedStory, openStoryDrawer } = useAppStore()
@@ -76,9 +83,13 @@ export default function HomePage() {
             </div>
 
             {/* Profile */}
-            <button className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors">
+            <Link
+              href="/mypage"
+              className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors"
+              aria-label="마이페이지"
+            >
               <User className="w-4 h-4 text-muted-foreground" />
-            </button>
+            </Link>
           </div>
 
           {/* Mobile Tabs */}
@@ -142,6 +153,19 @@ export default function HomePage() {
                 <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground tracking-tight text-balance">
                   {featuredStory.title}
                 </h2>
+
+                {/* Author + Stats */}
+                <div className="flex items-center gap-4 text-sm text-foreground/70">
+                  {featuredStory.author && <span>@{featuredStory.author}</span>}
+                  <span className="flex items-center gap-1">
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    {formatCount(featuredStory.playCount)}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-3.5 h-3.5 fill-current" />
+                    {formatCount(featuredStory.likeCount)}
+                  </span>
+                </div>
 
                 {/* Synopsis */}
                 <p className="text-lg sm:text-xl text-foreground/80 leading-relaxed text-pretty">

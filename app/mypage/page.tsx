@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { 
   ChevronRight, 
   Gem, 
@@ -8,12 +8,15 @@ import {
   Image as ImageIcon, 
   Bell, 
   Moon,
+  Sun,
   HelpCircle,
   LogOut,
   UserX,
   Edit3
 } from "lucide-react"
 import Link from "next/link"
+import { useTheme } from "next-themes"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore, type SavedEvent } from "@/lib/store"
@@ -21,10 +24,22 @@ import { EventCard } from "@/components/chat/event-card"
 import { EventDetailModal } from "@/components/chat/event-detail-modal"
 
 export default function MyPage() {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
   const credits = useAppStore((s) => s.credits)
   const events = useAppStore((s) => s.events)
+  const isDark = mounted ? theme === "dark" : true
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const notReady = (feature: string) =>
+    toast(`${feature}은 준비 중이에요`, {
+      description: "곧 만나보실 수 있어요.",
+    })
   const previewEvents = events.slice(0, 6)
 
   const stats = [
@@ -45,7 +60,7 @@ export default function MyPage() {
       icon: FolderOpen,
       label: "세계관 아카이브",
       description: "내가 저장하거나 만든 세계관",
-      href: "/archive",
+      onClick: () => notReady("세계관 아카이브"),
     },
   ]
 
@@ -58,17 +73,17 @@ export default function MyPage() {
       onToggle: () => setPushEnabled(!pushEnabled),
     },
     {
-      icon: Moon,
-      label: "테마 설정",
-      type: "link" as const,
-      description: "라이트 / 다크 모드 전환",
-      href: "/themes",
+      icon: isDark ? Moon : Sun,
+      label: "다크 모드",
+      type: "toggle" as const,
+      value: isDark,
+      onToggle: () => setTheme(isDark ? "light" : "dark"),
     },
     {
       icon: HelpCircle,
       label: "고객센터 및 FAQ",
-      type: "link" as const,
-      href: "/help",
+      type: "button" as const,
+      onClick: () => notReady("고객센터"),
     },
   ]
 
@@ -91,7 +106,10 @@ export default function MyPage() {
           </div>
 
           {/* Edit Button */}
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors">
+          <button
+            onClick={() => notReady("프로필 수정")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors"
+          >
             <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-xs text-foreground">프로필 수정</span>
           </button>
@@ -116,43 +134,54 @@ export default function MyPage() {
       {/* Main Menu */}
       <section className="px-5 pb-6">
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {mainMenuItems.map((item, index) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-4 px-4 py-4 hover:bg-accent/50 transition-colors",
-                index !== mainMenuItems.length - 1 && "border-b border-border"
-              )}
-            >
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                <item.icon className="w-5 h-5 text-muted-foreground" />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">{item.label}</p>
-                {item.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                )}
-              </div>
+          {mainMenuItems.map((item, index) => {
+            const innerContent = (
+              <>
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <item.icon className="w-5 h-5 text-muted-foreground" />
+                </div>
 
-              {item.value ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">{item.value}</span>
-                  {item.action && (
-                    <button 
-                      onClick={(e) => e.preventDefault()}
-                      className="px-3 py-1 rounded-full bg-secondary hover:bg-accent text-xs text-secondary-foreground transition-colors"
-                    >
-                      {item.action}
-                    </button>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium text-foreground">{item.label}</p>
+                  {item.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                   )}
                 </div>
-              ) : (
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
-              )}
-            </Link>
-          ))}
+
+                {item.value ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{item.value}</span>
+                    {item.action && (
+                      <span className="px-3 py-1 rounded-full bg-secondary text-xs text-secondary-foreground">
+                        {item.action}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                )}
+              </>
+            )
+
+            const itemClass = cn(
+              "flex items-center gap-4 px-4 py-4 w-full hover:bg-accent/50 transition-colors",
+              index !== mainMenuItems.length - 1 && "border-b border-border"
+            )
+
+            if (item.href) {
+              return (
+                <Link key={item.label} href={item.href} className={itemClass}>
+                  {innerContent}
+                </Link>
+              )
+            }
+
+            return (
+              <button key={item.label} onClick={item.onClick} className={itemClass}>
+                {innerContent}
+              </button>
+            )
+          })}
         </div>
       </section>
 
@@ -209,11 +238,8 @@ export default function MyPage() {
                   <item.icon className="w-5 h-5 text-muted-foreground" />
                 </div>
                 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 text-left">
                   <p className="text-sm font-medium text-foreground">{item.label}</p>
-                  {item.type === "link" && item.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                  )}
                 </div>
 
                 {item.type === "toggle" ? (
@@ -228,7 +254,7 @@ export default function MyPage() {
             )
 
             const className = cn(
-              "flex items-center gap-4 px-4 py-4 hover:bg-accent/50 transition-colors",
+              "flex items-center gap-4 px-4 py-4 w-full hover:bg-accent/50 transition-colors",
               index !== settingsItems.length - 1 && "border-b border-border"
             )
 
@@ -241,9 +267,9 @@ export default function MyPage() {
             }
 
             return (
-              <Link key={item.label} href={item.href || "#"} className={className}>
+              <button key={item.label} onClick={item.onClick} className={className}>
                 {content}
-              </Link>
+              </button>
             )
           })}
         </div>
@@ -252,11 +278,17 @@ export default function MyPage() {
       {/* Account Actions */}
       <section className="px-5 pb-8">
         <div className="flex flex-col gap-4 items-center pt-4">
-          <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={() => notReady("로그아웃")}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
             <LogOut className="w-4 h-4" />
             <span className="text-sm">로그아웃</span>
           </button>
-          <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={() => notReady("계정 탈퇴")}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+          >
             <UserX className="w-4 h-4" />
             <span className="text-xs">계정 탈퇴</span>
           </button>

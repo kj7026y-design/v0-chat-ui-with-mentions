@@ -30,6 +30,9 @@ export interface Story {
     avatar: string
   }[]
   featured?: boolean
+  author?: string
+  playCount?: number
+  likeCount?: number
 }
 
 export interface Scenario {
@@ -337,18 +340,24 @@ const sampleStories: Story[] = [
       { name: "연화", role: "히로인 | 재상의 딸", avatar: "🏯" },
     ],
     featured: true,
+    author: "검은달",
+    playCount: 128400,
+    likeCount: 9820,
   },
   {
     id: "story-1",
     title: "마법사의 탑",
     synopsis: "잊혀진 마법을 찾아 떠나는 여정",
-    fullSynopsis: "고대 엘프 왕국의 마지막 후예 아리아는 사라진 마법의 비밀을 찾아 금단의 탑으로 향한다. 그곳에서 만난 드래곤 나이트와 함께 세계를 위협하는 어둠의 세력에 맞서 싸우게 된다.",
+    fullSynopsis: "고대 엘프 왕���의 마지막 후예 아리아는 사라진 마법의 비밀을 찾아 금단의 탑으로 향한다. 그곳에서 만난 드래곤 나이트와 함께 세계를 위협하는 어둠의 세력에 맞서 싸우게 된다.",
     coverImage: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&h=600&fit=crop",
     tags: ["판타지", "모험"],
     characters: [
       { name: "아리아", role: "엘프 마법사", avatar: "🧝‍♀️" },
       { name: "드래곤 나이트", role: "계약된 기사", avatar: "🐉" },
     ],
+    author: "루미너스",
+    playCount: 64200,
+    likeCount: 5310,
   },
   {
     id: "story-2",
@@ -361,6 +370,9 @@ const sampleStories: Story[] = [
       { name: "아우렐리우스", role: "황제의 참모", avatar: "🏛️" },
       { name: "헬레나", role: "신전의 무녀", avatar: "🏺" },
     ],
+    author: "팔라티노",
+    playCount: 41800,
+    likeCount: 3120,
   },
   {
     id: "story-3",
@@ -373,6 +385,9 @@ const sampleStories: Story[] = [
       { name: "김대리", role: "마케팅팀 대리", avatar: "👔" },
       { name: "박부장", role: "베테랑 부장", avatar: "🧑‍💼" },
     ],
+    author: "오피스워커",
+    playCount: 88600,
+    likeCount: 7740,
   },
   {
     id: "story-4",
@@ -385,6 +400,9 @@ const sampleStories: Story[] = [
       { name: "사쿠라", role: "미술부 부장", avatar: "🎨" },
       { name: "준혁", role: "농구부 에이스", avatar: "🏀" },
     ],
+    author: "수채화",
+    playCount: 52300,
+    likeCount: 4490,
   },
   {
     id: "story-5",
@@ -397,6 +415,9 @@ const sampleStories: Story[] = [
       { name: "드래곤 나이트", role: "계약된 기사", avatar: "🐉" },
       { name: "아리아", role: "엘프 마법사", avatar: "🧝‍♀️" },
     ],
+    author: "루미너스",
+    playCount: 73900,
+    likeCount: 6680,
   },
 ]
 
