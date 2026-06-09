@@ -79,17 +79,17 @@ export default function ChatsPage() {
   )
 
   return (
-    <div className="min-h-[100dvh] bg-neutral-900 pb-20">
+    <div className="min-h-[100dvh] bg-background pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-neutral-900/95 backdrop-blur-sm px-4 py-4">
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-neutral-100">채팅</h1>
+          <h1 className="text-xl font-bold text-foreground">채팅</h1>
           <button
             onClick={() => setIsSearchOpen(!isSearchOpen)}
-            className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-neutral-800 transition-colors"
+            className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-accent transition-colors"
             aria-label="검색"
           >
-            <Search className="w-5 h-5 text-neutral-400" />
+            <Search className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
@@ -97,13 +97,13 @@ export default function ChatsPage() {
         {isSearchOpen && (
           <div className="mt-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="캐릭터 검색..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-neutral-800 text-neutral-100 placeholder:text-neutral-500 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-neutral-600"
+                className="w-full bg-muted text-foreground placeholder:text-muted-foreground rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                 autoFocus
               />
             </div>
@@ -112,14 +112,14 @@ export default function ChatsPage() {
       </header>
 
       {/* Chat List */}
-      <div className="divide-y divide-neutral-800/50">
+      <div className="divide-y divide-border">
         {filteredChats.map((chat) => (
           <ChatListItem key={chat.id} chat={chat} />
         ))}
       </div>
 
       {filteredChats.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-neutral-500">
+        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <p>검색 결과가 없습니다</p>
         </div>
       )}
@@ -134,11 +134,11 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
     <div className="relative">
       <Link
         href={`/chat/${chat.id}`}
-        className="flex items-center gap-3 px-4 py-3 hover:bg-neutral-800/50 active:bg-neutral-800 transition-colors"
+        className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent transition-colors"
       >
         {/* Avatar */}
         <div className="relative flex-shrink-0">
-          <div className="w-14 h-14 rounded-full bg-neutral-800 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
             <span className="text-2xl">{chat.characterEmoji}</span>
           </div>
           {chat.unreadCount > 0 && (
@@ -155,17 +155,17 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
           <div className="flex items-center justify-between gap-2">
             <span className={cn(
               "font-semibold truncate",
-              chat.unreadCount > 0 ? "text-neutral-100" : "text-neutral-300"
+              chat.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
             )}>
               {chat.characterName}
             </span>
-            <span className="text-xs text-neutral-500 flex-shrink-0">
+            <span className="text-xs text-muted-foreground flex-shrink-0">
               {formatTimestamp(chat.timestamp)}
             </span>
           </div>
           <p className={cn(
             "text-sm truncate mt-0.5",
-            chat.unreadCount > 0 ? "text-neutral-300" : "text-neutral-500"
+            chat.unreadCount > 0 ? "text-foreground/80" : "text-muted-foreground"
           )}>
             {chat.lastMessage}
           </p>
@@ -179,10 +179,10 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
           e.stopPropagation()
           setShowMenu(!showMenu)
         }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-700 transition-colors"
+        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
         aria-label="더보기"
       >
-        <MoreHorizontal className="w-4 h-4 text-neutral-500" />
+        <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
       </button>
 
       {/* Dropdown Menu */}
@@ -192,13 +192,13 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
             className="fixed inset-0 z-40" 
             onClick={() => setShowMenu(false)} 
           />
-          <div className="absolute right-2 top-14 z-50 bg-neutral-800 rounded-xl shadow-xl py-1.5 min-w-[140px] border border-neutral-700/50">
+          <div className="absolute right-2 top-14 z-50 bg-popover rounded-xl shadow-xl py-1.5 min-w-[140px] border border-border">
             <button 
               onClick={() => {
                 // Handle duplicate
                 setShowMenu(false)
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors"
+              className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-accent transition-colors"
             >
               채팅방 복제
             </button>
@@ -207,17 +207,17 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
                 // Handle rename
                 setShowMenu(false)
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-neutral-700/50 transition-colors"
+              className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-accent transition-colors"
             >
               이름 변경
             </button>
-            <div className="my-1 border-t border-neutral-700/50" />
+            <div className="my-1 border-t border-border" />
             <button 
               onClick={() => {
                 // Handle delete
                 setShowMenu(false)
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-700/50 transition-colors"
+              className="w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-accent transition-colors"
             >
               삭제
             </button>

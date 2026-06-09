@@ -72,27 +72,27 @@ export default function MyPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-black pb-24">
+    <div className="min-h-screen bg-background pb-24">
       {/* Profile Section */}
       <section className="px-5 pt-8 pb-6">
         <div className="flex items-center gap-4">
           {/* Profile Image */}
           <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-neutral-800 overflow-hidden flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-muted overflow-hidden flex items-center justify-center">
               <span className="text-3xl">👤</span>
             </div>
           </div>
 
           {/* Profile Info */}
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-neutral-100">김지은</h1>
-            <p className="text-sm text-neutral-500 mt-0.5">jieun@email.com</p>
+            <h1 className="text-xl font-bold text-foreground">김지은</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">jieun@email.com</p>
           </div>
 
           {/* Edit Button */}
-          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-800 hover:bg-neutral-700 transition-colors">
-            <Edit3 className="w-3.5 h-3.5 text-neutral-400" />
-            <span className="text-xs text-neutral-300">프로필 수정</span>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors">
+            <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs text-foreground">프로필 수정</span>
           </button>
         </div>
       </section>
@@ -103,10 +103,10 @@ export default function MyPage() {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="bg-neutral-900 rounded-xl p-4 text-center"
+              className="bg-card border border-border rounded-xl p-4 text-center"
             >
-              <p className="text-2xl font-bold text-neutral-100">{stat.value}</p>
-              <p className="text-xs text-neutral-500 mt-1">{stat.label}</p>
+              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
             </div>
           ))}
         </div>
@@ -114,41 +114,41 @@ export default function MyPage() {
 
       {/* Main Menu */}
       <section className="px-5 pb-6">
-        <div className="bg-neutral-900 rounded-xl overflow-hidden">
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
           {mainMenuItems.map((item, index) => (
             <Link
               key={item.label}
               href={item.href}
               className={cn(
-                "flex items-center gap-4 px-4 py-4 hover:bg-neutral-800/50 transition-colors",
-                index !== mainMenuItems.length - 1 && "border-b border-neutral-800"
+                "flex items-center gap-4 px-4 py-4 hover:bg-accent/50 transition-colors",
+                index !== mainMenuItems.length - 1 && "border-b border-border"
               )}
             >
-              <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center">
-                <item.icon className="w-5 h-5 text-neutral-400" />
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                <item.icon className="w-5 h-5 text-muted-foreground" />
               </div>
               
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-neutral-200">{item.label}</p>
+                <p className="text-sm font-medium text-foreground">{item.label}</p>
                 {item.description && (
-                  <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                 )}
               </div>
 
               {item.value ? (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-neutral-100">{item.value}</span>
+                  <span className="text-sm font-semibold text-foreground">{item.value}</span>
                   {item.action && (
                     <button 
                       onClick={(e) => e.preventDefault()}
-                      className="px-3 py-1 rounded-full bg-neutral-700 hover:bg-neutral-600 text-xs text-neutral-200 transition-colors"
+                      className="px-3 py-1 rounded-full bg-secondary hover:bg-accent text-xs text-secondary-foreground transition-colors"
                     >
                       {item.action}
                     </button>
                   )}
                 </div>
               ) : (
-                <ChevronRight className="w-5 h-5 text-neutral-600" />
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               )}
             </Link>
           ))}
@@ -157,21 +157,21 @@ export default function MyPage() {
 
       {/* App Settings */}
       <section className="px-5 pb-6">
-        <h2 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3 px-1">
+        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
           앱 설정
         </h2>
-        <div className="bg-neutral-900 rounded-xl overflow-hidden">
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
           {settingsItems.map((item, index) => {
             const content = (
               <>
-                <div className="w-10 h-10 rounded-full bg-neutral-800 flex items-center justify-center">
-                  <item.icon className="w-5 h-5 text-neutral-400" />
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <item.icon className="w-5 h-5 text-muted-foreground" />
                 </div>
                 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-neutral-200">{item.label}</p>
+                  <p className="text-sm font-medium text-foreground">{item.label}</p>
                   {item.type === "link" && item.description && (
-                    <p className="text-xs text-neutral-500 mt-0.5">{item.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                   )}
                 </div>
 
@@ -179,17 +179,16 @@ export default function MyPage() {
                   <Switch
                     checked={item.value}
                     onCheckedChange={item.onToggle}
-                    className="data-[state=checked]:bg-neutral-500 data-[state=unchecked]:bg-neutral-700"
                   />
                 ) : (
-                  <ChevronRight className="w-5 h-5 text-neutral-600" />
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 )}
               </>
             )
 
             const className = cn(
-              "flex items-center gap-4 px-4 py-4 hover:bg-neutral-800/50 transition-colors",
-              index !== settingsItems.length - 1 && "border-b border-neutral-800"
+              "flex items-center gap-4 px-4 py-4 hover:bg-accent/50 transition-colors",
+              index !== settingsItems.length - 1 && "border-b border-border"
             )
 
             if (item.type === "toggle") {
@@ -212,13 +211,13 @@ export default function MyPage() {
       {/* Account Actions */}
       <section className="px-5 pb-8">
         <div className="flex flex-col gap-4 items-center pt-4">
-          <button className="flex items-center gap-2 text-neutral-500 hover:text-neutral-400 transition-colors">
+          <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
             <LogOut className="w-4 h-4" />
             <span className="text-sm">로그아웃</span>
           </button>
-          <button className="flex items-center gap-2 text-neutral-600 hover:text-neutral-500 transition-colors">
+          <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
             <UserX className="w-4 h-4" />
-            <span className="text-xs">계��� 탈퇴</span>
+            <span className="text-xs">계정 탈퇴</span>
           </button>
         </div>
       </section>
