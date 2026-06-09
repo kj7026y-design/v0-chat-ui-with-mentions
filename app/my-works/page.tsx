@@ -188,7 +188,7 @@ export default function MyWorksPage() {
   }, [activeTab])
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background border-b border-border">
         <div className="px-5 py-4 flex items-center justify-between">

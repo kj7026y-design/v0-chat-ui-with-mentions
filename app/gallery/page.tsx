@@ -12,7 +12,7 @@ export default function GalleryPage() {
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2">

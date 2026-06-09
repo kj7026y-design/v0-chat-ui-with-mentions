@@ -358,9 +358,9 @@ export default function CreateCharacterPage() {
   )
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="flex-1 min-h-0 flex flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="shrink-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex h-14 items-center gap-4 px-4 md:px-6">
           <Button
             variant="ghost"
@@ -399,11 +399,11 @@ export default function CreateCharacterPage() {
       </header>
 
       {/* Main Content */}
-      <div className="flex min-h-[calc(100vh-3.5rem)]">
+      <div className="flex flex-1 min-h-0">
         {/* Left: Input Form */}
-        <div className="w-full md:w-1/2">
-          <ScrollArea className="h-[calc(100vh-3.5rem)]">
-            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-56 md:pb-8">
+        <div className="w-full md:w-1/2 flex flex-col min-h-0">
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-8">
               {/* Random Generator Section (advanced only) */}
               {mode === "advanced" && (
               <section className="space-y-4">
@@ -768,11 +768,33 @@ export default function CreateCharacterPage() {
               </div>
             </div>
           </ScrollArea>
+
+          {/* Mobile Bottom Action Bar - normal block */}
+          <div className="shrink-0 md:hidden bg-background border-t border-border p-4 space-y-3">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setIsPreviewOpen(true)}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              프롬프트 미리보기
+            </Button>
+
+            <Button
+              size="lg"
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={handleSubmit}
+              disabled={!isFormValid}
+            >
+              <Rocket className="mr-2 h-5 w-5" />
+              캐릭터 생성 및 대화 시작
+            </Button>
+          </div>
         </div>
 
         {/* Right: System Prompt Preview (Desktop only) */}
         <div className="hidden md:block w-1/2 bg-secondary/10">
-          <div className="sticky top-14 h-[calc(100vh-3.5rem)] p-8">
+          <div className="h-full p-8">
             <Card className="h-full bg-card/50 border-border/50 flex flex-col">
               <CardHeader className="border-b border-border/50 shrink-0">
                 <CardTitle className="flex items-center gap-2 text-base">

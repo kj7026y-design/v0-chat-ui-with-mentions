@@ -188,7 +188,7 @@ export default function ChatPage() {
   const hasMessages = messages.length > 0
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-background">
+    <div className="flex-1 min-h-0 flex flex-col bg-background">
       <ChatHeader
         characterName={CHARACTER_NAME}
         characterEmoji={CHARACTER_EMOJI}
@@ -245,7 +245,7 @@ export default function ChatPage() {
             chatTheme={chatTheme}
           />
         ) : (
-          <div className="min-h-full pb-44">
+          <div className="min-h-full">
               <EmptyChatState
                 characterName={CHARACTER_NAME}
                 characterEmoji={CHARACTER_EMOJI}
@@ -256,8 +256,8 @@ export default function ChatPage() {
         )}
       </main>
 
-      {/* Fixed Input Area - positioned above global nav */}
-      <div className="fixed bottom-16 sm:bottom-0 left-0 right-0 z-40">
+      {/* Input Area - normal block in flex column */}
+      <div className="shrink-0">
         <ChatInput onSendMessage={handleSendMessage} onCommand={handleCommand} />
       </div>
     </div>

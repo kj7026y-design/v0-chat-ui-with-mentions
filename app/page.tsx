@@ -42,7 +42,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="flex-1 min-h-0 overflow-y-auto bg-background">
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-background via-background/80 to-transparent">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">

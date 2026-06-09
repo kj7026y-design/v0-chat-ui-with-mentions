@@ -79,7 +79,7 @@ export default function ChatsPage() {
   )
 
   return (
-    <div className="min-h-[100dvh] bg-background pb-20">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center justify-between">

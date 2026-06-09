@@ -88,7 +88,7 @@ export default function MyPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Profile Section */}
       <section className="px-5 pt-8 pb-6">
         <div className="flex items-center gap-4">

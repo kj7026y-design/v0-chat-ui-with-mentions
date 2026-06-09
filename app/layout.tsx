@@ -39,18 +39,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="bg-background" suppressHydrationWarning>
-      <body className="font-sans antialiased pb-16 sm:pb-0">
+      <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
           enableSystem={true}
           disableTransitionOnChange
         >
-          {children}
-          
-          {/* Global Bottom Navigation - Mobile Only */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
-            <BottomNavBar />
+          {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}
+          <div className="flex flex-col h-[100dvh] overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {children}
+            </div>
+
+            {/* Global Bottom Navigation - Mobile Only */}
+            <div className="shrink-0 sm:hidden">
+              <BottomNavBar />
+            </div>
           </div>
 
           <Toaster position="top-center" />

@@ -77,7 +77,7 @@ export default function TimelinePage() {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 sm:py-10">
         <TimelineHeader onAddEvent={handleAddEvent} />
         <TimelineList events={events} onEventClick={handleEventClick} />

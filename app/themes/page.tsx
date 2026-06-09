@@ -59,7 +59,7 @@ export default function ThemesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
       <header className="sticky top-0 z-40 flex items-center gap-3 px-4 py-4 bg-background/95 backdrop-blur-sm border-b border-border">
         <button
