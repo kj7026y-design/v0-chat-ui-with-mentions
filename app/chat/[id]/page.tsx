@@ -19,7 +19,7 @@ import {
   generateAssistantReply,
   runCommand,
 } from "@/lib/chat-engine"
-import { useAppStore, CREDIT_COSTS } from "@/lib/store"
+import { useAppStore, CREDIT_COSTS, pickSceneImage } from "@/lib/store"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
@@ -42,6 +42,7 @@ export default function ChatPage() {
   const spendCredit = useAppStore((s) => s.spendCredit)
   const saveEvent = useAppStore((s) => s.saveEvent)
   const createBranch = useAppStore((s) => s.createBranch)
+  const startScenario = useAppStore((s) => s.startScenario)
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isTyping, setIsTyping] = useState(false)
@@ -177,8 +178,9 @@ export default function ChatPage() {
       summary: message?.content.slice(0, 60) || "기억에 남는 장면을 저장했어요.",
       emotionalTone: ["긴장", "망설임", "신뢰"],
       relatedCharacter: CHARACTER_NAME,
+      imageUrl: pickSceneImage(messages.length),
     })
-    toast.success("이 장면을 저장했어요.", {
+    toast.success("이 장면을 갤러리에 저장했어요.", {
       description: "마이페이지 이벤트 갤러리에서 확인할 수 있어요.",
     })
   }
@@ -244,11 +246,12 @@ export default function ChatPage() {
           />
         ) : (
           <div className="min-h-full pb-44">
-            <EmptyChatState
-              characterName={CHARACTER_NAME}
-              characterEmoji={CHARACTER_EMOJI}
-              onSuggestionClick={handleSendMessage}
-            />
+              <EmptyChatState
+                characterName={CHARACTER_NAME}
+                characterEmoji={CHARACTER_EMOJI}
+                startScenario={startScenario}
+                onSuggestionClick={handleSendMessage}
+              />
           </div>
         )}
       </main>

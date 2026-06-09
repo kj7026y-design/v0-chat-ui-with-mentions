@@ -68,7 +68,7 @@ export interface StartScenario {
   content: string
 }
 
-// --- Saved Event (이벤트 카드) ---
+// --- Saved Event (이벤트 = 대화 중 얻은 이미지 장면) ---
 export interface SavedEvent {
   id: string
   chatId: string
@@ -76,6 +76,7 @@ export interface SavedEvent {
   summary: string
   emotionalTone: string[]
   relatedCharacter: string
+  imageUrl: string
   createdAt: Date
 }
 
@@ -145,9 +146,44 @@ const sampleEvents: SavedEvent[] = [
     summary: "이무기는 당신의 말에 처음으로 감정을 드러냈다.",
     emotionalTone: ["긴장", "망설임", "신뢰"],
     relatedCharacter: "이무기",
+    imageUrl: "/events/event-silence.png",
     createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
   },
 ]
+
+// 장면 저장 시 사용할 더미 이미지 풀
+const SCENE_IMAGE_POOL = [
+  "/events/event-silence.png",
+]
+
+export function pickSceneImage(seed: number): string {
+  return SCENE_IMAGE_POOL[seed % SCENE_IMAGE_POOL.length]
+}
+
+// 작가가 설정하지 않은 작품을 위한 기본 시작 설정
+export const DEFAULT_START_SETTINGS: StartScenarioSettings = {
+  allowUserChangeStartScenario: true,
+  allowCustomStartScenario: true,
+  defaultStartScenario:
+    "당신은 이 이야기의 주인공으로, 운명적인 만남을 앞두고 있다.",
+  authorStartOptions: [
+    {
+      id: "option_1",
+      title: "처음 만난 사이",
+      description: "당신은 오늘 처음으로 그를 마주한다.",
+    },
+    {
+      id: "option_2",
+      title: "오래된 인연",
+      description: "당신과 그는 이미 오래전부터 알고 지낸 사이다.",
+    },
+    {
+      id: "option_3",
+      title: "숨겨진 조력자",
+      description: "당신은 정체를 숨긴 채 그를 도와온 사람이다.",
+    },
+  ],
+}
 
 
 interface AppState {

@@ -16,13 +16,16 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
-import { useAppStore } from "@/lib/store"
+import { useAppStore, type SavedEvent } from "@/lib/store"
 import { EventCard } from "@/components/chat/event-card"
+import { EventDetailModal } from "@/components/chat/event-detail-modal"
 
 export default function MyPage() {
   const [pushEnabled, setPushEnabled] = useState(true)
+  const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
   const credits = useAppStore((s) => s.credits)
   const events = useAppStore((s) => s.events)
+  const previewEvents = events.slice(0, 6)
 
   const stats = [
     { label: "내 유니버스", value: "12" },
@@ -155,15 +158,26 @@ export default function MyPage() {
 
       {/* Event Gallery */}
       <section className="px-5 pb-6">
-        <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
-          <ImageIcon className="w-3.5 h-3.5" />
-          이벤트 갤러리
-        </h2>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <ImageIcon className="w-3.5 h-3.5" />
+            이벤트 갤러리
+          </h2>
+          {events.length > 0 && (
+            <Link
+              href="/gallery"
+              className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              전체 보기
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
+        </div>
 
         {events.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} />
+          <div className="grid grid-cols-3 gap-2">
+            {previewEvents.map((event) => (
+              <EventCard key={event.id} event={event} onClick={() => setSelectedEvent(event)} />
             ))}
           </div>
         ) : (
@@ -179,6 +193,8 @@ export default function MyPage() {
           </div>
         )}
       </section>
+
+      <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
 
       {/* App Settings */}
       <section className="px-5 pb-6">

@@ -1,45 +1,43 @@
 "use client"
 
+import Image from "next/image"
 import { type SavedEvent } from "@/lib/store"
 
 interface EventCardProps {
   event: SavedEvent
+  onClick?: () => void
 }
 
-export function EventCard({ event }: EventCardProps) {
+export function EventCard({ event, onClick }: EventCardProps) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground">{event.title}</h3>
-        <span className="text-[10px] text-muted-foreground flex-shrink-0 mt-0.5">
-          {new Date(event.createdAt).toLocaleDateString("ko-KR", {
-            month: "long",
-            day: "numeric",
-          })}
-        </span>
-      </div>
+    <button
+      onClick={onClick}
+      className="group relative aspect-[3/4] w-full overflow-hidden rounded-xl bg-muted text-left"
+    >
+      <Image
+        src={event.imageUrl || "/placeholder.svg"}
+        alt={event.title}
+        fill
+        sizes="(max-width: 640px) 33vw, 200px"
+        className="object-cover transition-transform duration-300 group-hover:scale-105"
+      />
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
 
-      <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed line-clamp-2">
-        {event.summary}
-      </p>
-
-      {/* Emotion tags */}
-      <div className="flex flex-wrap items-center gap-1.5 mt-3">
-        {event.emotionalTone.map((tag) => (
-          <span
-            key={tag}
-            className="px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[10px] font-medium"
-          >
-            {tag}
-          </span>
-        ))}
+      {/* Text */}
+      <div className="absolute inset-x-0 bottom-0 p-2.5">
+        <h3 className="text-xs font-semibold text-white line-clamp-1">{event.title}</h3>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {event.emotionalTone.slice(0, 2).map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
       </div>
-
-      {/* Related character */}
-      <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-border/60">
-        <span className="text-[10px] text-muted-foreground">관련 캐릭터</span>
-        <span className="text-[10px] font-medium text-foreground">{event.relatedCharacter}</span>
-      </div>
-    </div>
+    </button>
   )
 }

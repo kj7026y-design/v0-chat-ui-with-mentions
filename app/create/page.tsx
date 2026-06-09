@@ -44,6 +44,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { CATEGORIES, type Category } from "@/lib/store"
+import {
+  StoryRulesSection,
+  type StoryRulesData,
+} from "@/components/create/story-rules-section"
+
+type CreateMode = "simple" | "advanced"
 
 const PERSONALITY_TAGS = [
   "냉철함",
@@ -132,11 +138,19 @@ interface FormData {
 export default function CreateCharacterPage() {
   const router = useRouter()
   const speechStyleRef = useRef<HTMLTextAreaElement>(null)
+  const [mode, setMode] = useState<CreateMode>("simple")
   const [creativityLevel, setCreativityLevel] = useState([3])
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_SLASH_COMMANDS)
   const [newCommandName, setNewCommandName] = useState("")
   const [newCommandAction, setNewCommandAction] = useState("")
+  const [storyRules, setStoryRules] = useState<StoryRulesData>({
+    defaultStartScenario: "",
+    allowUserChange: true,
+    allowCustom: true,
+    startOptions: [],
+    forbiddenDevelopments: [],
+  })
   const [formData, setFormData] = useState<FormData>({
     name: "",
     category: "",
@@ -296,7 +310,7 @@ export default function CreateCharacterPage() {
       parts.push({ text: `숨겨진 과거: ${formData.secrets}`, isPlaceholder: false })
     }
     if (formData.taboos) {
-      parts.push({ text: `금기 사항: 절대로 ${formData.taboos}하지 마.`, isPlaceholder: false })
+      parts.push({ text: `금기 사항: 절대로 ${formData.taboos}하지 ���.`, isPlaceholder: false })
     }
 
     // Add slash commands to prompt
@@ -357,6 +371,30 @@ export default function CreateCharacterPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-lg font-semibold">새 캐릭터 생성</h1>
+
+          {/* Mode Toggle */}
+          <div className="ml-auto flex items-center rounded-full bg-secondary/50 p-1">
+            <button
+              onClick={() => setMode("simple")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                mode === "simple"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              간단
+            </button>
+            <button
+              onClick={() => setMode("advanced")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                mode === "advanced"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              고급
+            </button>
+          </div>
         </div>
       </header>
 
