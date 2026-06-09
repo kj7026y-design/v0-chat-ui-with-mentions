@@ -24,7 +24,7 @@ export function AuthorTools({
       icon: RefreshCw, 
       label: "다시 쓰기", 
       action: () => onRewrite?.(messageId),
-      className: "hover:text-neutral-100 hover:bg-neutral-700"
+      className: "hover:text-foreground hover:bg-accent"
     },
     { 
       icon: Pencil, 
@@ -41,14 +41,14 @@ export function AuthorTools({
   ]
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-lg bg-neutral-900/95 border border-neutral-800 shadow-lg">
+    <div className="flex items-center gap-1 p-1 rounded-lg bg-popover/95 border border-border shadow-lg">
       {tools.map((tool) => (
         <button
           key={tool.label}
           onClick={tool.action}
           className={cn(
             "flex items-center gap-1.5 px-2 py-1.5 rounded-md",
-            "text-neutral-400 text-[11px] font-medium",
+            "text-muted-foreground text-[11px] font-medium",
             "transition-all duration-150",
             tool.className
           )}

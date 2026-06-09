@@ -202,9 +202,9 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
   if (isEvent) {
     return (
       <div className="flex justify-center my-4">
-        <div className="w-full max-w-sm rounded-xl bg-neutral-800 overflow-hidden">
+        <div className="w-full max-w-sm rounded-xl bg-card overflow-hidden">
           {/* Event Image */}
-          <div className="relative aspect-video bg-neutral-700">
+          <div className="relative aspect-video bg-muted">
             {message.eventImage ? (
               <img
                 src={message.eventImage}
@@ -217,12 +217,12 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
               </div>
             )}
             {/* Gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-neutral-800/90 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
             
             {/* Event Title */}
             <div className="absolute bottom-3 left-4 right-4">
-              <span className="text-xs text-neutral-400 uppercase tracking-wider">Event</span>
-              <h4 className="text-lg font-semibold text-neutral-100 mt-0.5">
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Event</span>
+              <h4 className="text-lg font-semibold text-foreground mt-0.5">
                 {message.content}
               </h4>
             </div>
@@ -231,7 +231,7 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
           {/* Event Description */}
           {message.eventDescription && (
             <div className="px-4 py-3">
-              <p className="text-sm text-neutral-300 leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 {message.eventDescription}
               </p>
             </div>
@@ -245,12 +245,12 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
   if (isInnerThought) {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-3 rounded-2xl bg-neutral-800/50 border border-neutral-700/50 border-dashed">
+        <div className="max-w-[80%] px-4 py-3 rounded-2xl bg-muted/50 border border-border border-dashed">
           <div className="flex items-center gap-1.5 mb-1.5">
             <span className="text-sm">💭</span>
-            <span className="text-xs text-neutral-500 font-medium">/속마음</span>
+            <span className="text-xs text-muted-foreground font-medium">/속마음</span>
           </div>
-          <p className="text-sm text-neutral-400 italic leading-relaxed">
+          <p className="text-sm text-muted-foreground italic leading-relaxed">
             {message.content}
           </p>
         </div>
@@ -294,7 +294,7 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
           
           {/* Edited indicator dot */}
           {isEdited && !isUser && (
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-neutral-900" />
+            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-background" />
           )}
         </div>
       </div>
@@ -324,9 +324,9 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
           }}
           disabled={isBranching}
           className={cn(
-            "flex items-center gap-1.5 px-2 py-1 text-[10px] text-neutral-600 hover:text-neutral-400 transition-colors",
-            "border-t border-dashed border-neutral-800/50 mt-1 -mx-1 pt-2",
-            isBranching && "text-neutral-400"
+            "flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors",
+            "border-t border-dashed border-border mt-1 -mx-1 pt-2",
+            isBranching && "text-foreground"
           )}
         >
           <svg className={cn("w-3 h-3", isBranching && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -342,11 +342,11 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
 function BubbleTypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="px-4 py-3 rounded-2xl bg-neutral-800">
+      <div className="px-4 py-3 rounded-2xl bg-muted">
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-neutral-500 animate-bounce [animation-delay:0ms]" />
-          <span className="w-2 h-2 rounded-full bg-neutral-500 animate-bounce [animation-delay:150ms]" />
-          <span className="w-2 h-2 rounded-full bg-neutral-500 animate-bounce [animation-delay:300ms]" />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+          <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
         </div>
       </div>
     </div>

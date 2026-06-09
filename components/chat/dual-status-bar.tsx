@@ -21,10 +21,10 @@ export function DualStatusBar({
   userStatus 
 }: DualStatusBarProps) {
   return (
-    <div className="border-b border-neutral-800/50 bg-black">
+    <div className="border-b border-border bg-background">
       {/* Character Status Row */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-neutral-800/30">
-        <span className="text-[10px] text-neutral-500 font-medium min-w-[52px]">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50">
+        <span className="text-[10px] text-muted-foreground font-medium min-w-[52px]">
           {characterName}
         </span>
         <div className="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
@@ -36,7 +36,7 @@ export function DualStatusBar({
       
       {/* User Status Row */}
       <div className="flex items-center gap-2 px-4 py-2">
-        <span className="text-[10px] text-neutral-500 font-medium min-w-[52px]">
+        <span className="text-[10px] text-muted-foreground font-medium min-w-[52px]">
           나의 자아
         </span>
         <div className="flex items-center gap-2 flex-1 overflow-x-auto scrollbar-hide">
@@ -53,12 +53,12 @@ function StatusBadge({ status }: { status: StatusItem }) {
   return (
     <div className={cn(
       "flex items-center gap-1 px-2 py-0.5 rounded-full",
-      "bg-neutral-900 border border-neutral-800"
+      "bg-card border border-border"
     )}>
-      <span className="text-[10px] text-neutral-500">{status.label}:</span>
+      <span className="text-[10px] text-muted-foreground">{status.label}:</span>
       <span className={cn(
         "text-[10px] font-medium",
-        status.color || "text-neutral-300"
+        status.color || "text-foreground"
       )}>
         {status.value}
       </span>

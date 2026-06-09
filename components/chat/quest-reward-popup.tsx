@@ -48,8 +48,8 @@ export function QuestRewardPopup({
       
       {/* Popup Content */}
       <div className={cn(
-        "relative w-[90%] max-w-sm max-h-[85vh] mx-auto bg-neutral-900 rounded-2xl overflow-y-auto",
-        "border border-neutral-800",
+        "relative w-[90%] max-w-sm max-h-[85vh] mx-auto bg-background rounded-2xl overflow-y-auto",
+        "border border-border",
         "transform transition-all duration-300",
         showContent ? "scale-100 opacity-100" : "scale-95 opacity-0"
       )}>
@@ -58,11 +58,11 @@ export function QuestRewardPopup({
           onClick={onClose}
           className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 transition-colors"
         >
-          <X className="w-4 h-4 text-neutral-400" />
+          <X className="w-4 h-4 text-white" />
         </button>
 
         {/* Quest Complete Header */}
-        <div className="relative px-6 pt-8 pb-4 text-center bg-gradient-to-b from-neutral-800/50 to-transparent">
+        <div className="relative px-6 pt-8 pb-4 text-center bg-gradient-to-b from-muted/50 to-transparent">
           <div className="flex items-center justify-center gap-2 mb-2">
             <Sparkles className="w-5 h-5 text-yellow-500" />
             <span className="text-xs font-semibold text-yellow-500 uppercase tracking-wider">
@@ -70,11 +70,11 @@ export function QuestRewardPopup({
             </span>
             <Sparkles className="w-5 h-5 text-yellow-500" />
           </div>
-          <h3 className="text-lg font-bold text-neutral-100">{questTitle}</h3>
+          <h3 className="text-lg font-bold text-foreground">{questTitle}</h3>
         </div>
 
         {/* Reward Image */}
-        <div className="relative mx-6 aspect-square rounded-xl overflow-hidden bg-neutral-800 border border-neutral-700">
+        <div className="relative mx-6 aspect-square rounded-xl overflow-hidden bg-muted border border-border">
           {rewardImage ? (
             <img
               src={rewardImage}
@@ -83,10 +83,10 @@ export function QuestRewardPopup({
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-              <div className="w-16 h-16 rounded-full bg-neutral-700 flex items-center justify-center">
-                <ImageIcon className="w-8 h-8 text-neutral-500" />
+              <div className="w-16 h-16 rounded-full bg-muted-foreground/20 flex items-center justify-center">
+                <ImageIcon className="w-8 h-8 text-muted-foreground" />
               </div>
-              <span className="text-sm text-neutral-500">희귀 이미지</span>
+              <span className="text-sm text-muted-foreground">희귀 이미지</span>
             </div>
           )}
           
@@ -116,10 +116,10 @@ export function QuestRewardPopup({
           )}
 
           {/* Gallery Save Notice */}
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-neutral-800/50 border border-neutral-700/50">
-            <ImageIcon className="w-4 h-4 text-neutral-500" />
-            <p className="text-xs text-neutral-400">
-              이미지가 <span className="text-neutral-300 font-medium">갤러리</span>에 저장되었습니다.
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border border-border">
+            <ImageIcon className="w-4 h-4 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">
+              이미지가 <span className="text-foreground font-medium">갤러리</span>에 저장되었습니다.
             </p>
           </div>
         </div>
@@ -128,7 +128,7 @@ export function QuestRewardPopup({
         <div className="px-6 pb-6">
           <button
             onClick={onClose}
-            className="w-full py-3.5 rounded-xl bg-neutral-100 text-neutral-900 font-semibold hover:bg-neutral-200 transition-colors"
+            className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-colors"
           >
             확인
           </button>
