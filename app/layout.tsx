@@ -46,9 +46,9 @@ export default function RootLayout({
           enableSystem={true}
           disableTransitionOnChange
         >
-          {/* App Shell - flex column. Each page is a flex item that owns its own scroll. */}
+          {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}
           <div className="flex flex-col h-[100dvh] overflow-hidden">
-            <div className="flex-1 min-h-0 flex flex-col">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               {children}
             </div>
 
