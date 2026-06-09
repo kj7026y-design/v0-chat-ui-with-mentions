@@ -16,9 +16,13 @@ import {
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
+import { useAppStore } from "@/lib/store"
+import { EventCard } from "@/components/chat/event-card"
 
 export default function MyPage() {
   const [pushEnabled, setPushEnabled] = useState(true)
+  const credits = useAppStore((s) => s.credits)
+  const events = useAppStore((s) => s.events)
 
   const stats = [
     { label: "내 유니버스", value: "12" },
@@ -30,7 +34,7 @@ export default function MyPage() {
     {
       icon: Gem,
       label: "나의 크레딧",
-      value: "350",
+      value: credits.toLocaleString(),
       action: "충전",
       href: "/credits",
     },
@@ -39,12 +43,6 @@ export default function MyPage() {
       label: "세계관 아카이브",
       description: "내가 저장하거나 만든 세계관",
       href: "/archive",
-    },
-    {
-      icon: ImageIcon,
-      label: "이벤트 갤러리",
-      description: "대화 중 발생한 이미지 모음",
-      href: "/gallery",
     },
   ]
 
@@ -153,6 +151,33 @@ export default function MyPage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      {/* Event Gallery */}
+      <section className="px-5 pb-6">
+        <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
+          <ImageIcon className="w-3.5 h-3.5" />
+          이벤트 갤러리
+        </h2>
+
+        {events.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {events.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-xl px-4 py-8 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+              <ImageIcon className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
+              아직 저장한 장면이 없어요.
+              <br />
+              채팅 중 마음에 드는 장면을 저장해보세요.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* App Settings */}

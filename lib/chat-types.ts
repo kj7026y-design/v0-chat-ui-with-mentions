@@ -17,21 +17,27 @@ export interface Command {
 
 export const SLASH_COMMANDS: Command[] = [
   {
+    id: "status",
+    name: "상태바",
+    description: "현재 캐릭터의 감정과 관계 상태를 확인해요",
+    icon: "📊",
+  },
+  {
     id: "inner-thought",
     name: "속마음",
-    description: "캐릭터의 내면을 들여다봅니다",
+    description: "캐릭터의 내면 독백을 확인해요",
     icon: "💭",
   },
   {
-    id: "event",
-    name: "이벤트",
-    description: "특별한 이벤트를 발생시킵니다",
-    icon: "✨",
+    id: "image",
+    name: "이미지",
+    description: "현재 장면의 이미지 생성을 준비해요",
+    icon: "🖼️",
   },
   {
-    id: "memory",
-    name: "기억",
-    description: "과거의 기억을 회상합니다",
+    id: "summary",
+    name: "요약",
+    description: "지금까지의 흐름을 짧게 정리해요",
     icon: "📖",
   },
 ]

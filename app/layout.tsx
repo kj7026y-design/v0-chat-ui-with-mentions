@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { BottomNavBar } from '@/components/chat/bottom-nav-bar'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -51,6 +52,8 @@ export default function RootLayout({
           <div className="fixed bottom-0 left-0 right-0 z-50 sm:hidden">
             <BottomNavBar />
           </div>
+
+          <Toaster position="top-center" />
         </ThemeProvider>
         
         {process.env.NODE_ENV === 'production' && <Analytics />}

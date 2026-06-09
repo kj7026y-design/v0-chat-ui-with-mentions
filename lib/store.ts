@@ -14,6 +14,7 @@ export interface Character {
   personality: string
   tags: string[]
   category: Category
+  startScenarioSettings?: StartScenarioSettings
 }
 
 export interface Story {
@@ -37,6 +38,63 @@ export interface Scenario {
   situation: string
 }
 
+// --- Persona (내 자아) ---
+export interface Persona {
+  id: string
+  name: string
+  ageOrStatus: string
+  intro: string
+  relationship: string
+  isSecret: boolean
+}
+
+// --- Start Scenario (첫 시작 설정) ---
+export interface AuthorStartOption {
+  id: string
+  title: string
+  description: string
+}
+
+export interface StartScenarioSettings {
+  allowUserChangeStartScenario: boolean
+  allowCustomStartScenario: boolean
+  defaultStartScenario: string
+  authorStartOptions: AuthorStartOption[]
+}
+
+export interface StartScenario {
+  type: "default" | "author_option" | "custom"
+  title: string
+  content: string
+}
+
+// --- Saved Event (이벤트 카드) ---
+export interface SavedEvent {
+  id: string
+  chatId: string
+  title: string
+  summary: string
+  emotionalTone: string[]
+  relatedCharacter: string
+  createdAt: Date
+}
+
+// --- Branch (대화 분기) ---
+export interface Branch {
+  id: string
+  originalChatId: string
+  fromMessageId: string
+  title: string
+  createdAt: Date
+}
+
+// 더미 크레딧 차감 규칙
+export const CREDIT_COSTS = {
+  message: 1,
+  branch: 3,
+  image: 10,
+} as const
+
 export interface Message {
   id: string
   role: "user" | "character"
@@ -44,11 +102,65 @@ export interface Message {
   timestamp: Date
 }
 
+const samplePersonas: Persona[] = [
+  {
+    id: "persona-1",
+    name: "지은",
+    ageOrStatus: "22세 / 대학생",
+    intro: "평범한 일상 속에서 특별한 이야기를 꿈꾸는 대학생.",
+    relationship: "우연히 만난 사이",
+    isSecret: false,
+  },
+  {
+    id: "persona-2",
+    name: "몰락 귀족의 딸",
+    ageOrStatus: "19세 / 귀족",
+    intro: "가문의 몰락 후 신분을 숨기고 살아가는 소녀.",
+    relationship: "정략적 관계",
+    isSecret: true,
+  },
+  {
+    id: "persona-3",
+    name: "정체를 숨긴 자객",
+    ageOrStatus: "25세 / 자객",
+    intro: "임무를 위해 정체를 감춘 채 접근한 자객.",
+    relationship: "겉으로는 조력자",
+    isSecret: true,
+  },
+  {
+    id: "persona-4",
+    name: "신입 마케터",
+    ageOrStatus: "27세 / 직장인",
+    intro: "큰 꿈을 안고 입사한 열정 가득한 신입.",
+    relationship: "직장 동료",
+    isSecret: false,
+  },
+]
+
+const sampleEvents: SavedEvent[] = [
+  {
+    id: "event-1",
+    chatId: "1",
+    title: "흔들린 침묵",
+    summary: "이무기는 당신의 말에 처음으로 감정을 드러냈다.",
+    emotionalTone: ["긴장", "망설임", "신뢰"],
+    relatedCharacter: "이무기",
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
+  },
+]
+
+
 interface AppState {
   characters: Character[]
   stories: Story[]
+  personas: Persona[]
+  events: SavedEvent[]
+  branches: Branch[]
+  credits: number
   selectedCharacter: Character | null
   selectedStory: Story | null
+  selectedPersona: Persona | null
+  startScenario: StartScenario | null
   scenario: Scenario | null
   messages: Message[]
   isScenarioModalOpen: boolean
@@ -64,6 +176,18 @@ interface AppState {
   closeStoryDrawer: () => void
   setUserName: (name: string) => void
   clearChat: () => void
+  // Persona
+  selectPersona: (persona: Persona | null) => void
+  addPersona: (persona: Omit<Persona, "id">) => void
+  // Start scenario
+  selectStartScenario: (scenario: StartScenario | null) => void
+  // Events
+  saveEvent: (event: Omit<SavedEvent, "id" | "createdAt">) => void
+  // Branches
+  createBranch: (branch: Omit<Branch, "id" | "createdAt">) => void
+  // Credits
+  chargeCredit: (amount: number) => void
+  spendCredit: (amount: number) => boolean
 }
 
 const sampleCharacters: Character[] = [
@@ -206,7 +330,7 @@ const sampleStories: Story[] = [
     id: "story-3",
     title: "마케팅 전쟁",
     synopsis: "대기업의 치열한 경쟁 속 생존기",
-    fullSynopsis: "신입사원으로 입사한 당신은 김대리와 박부장 사이에서 치열한 마케팅 전쟁에 휘말리게 된다. 경쟁사의 스파이, 내부의 배신자, 그리고 뜻밖의 로맨스까지. 과연 당신은 살아남을 수 있을까?",
+    fullSynopsis: "신입사원으로 입사한 당신은 김대리와 박부장 사이에서 치��한 마케팅 전쟁에 휘말리게 된다. 경쟁사의 스파이, 내부의 배신자, 그리고 뜻밖의 로맨스까지. 과연 당신은 살아남을 수 있을까?",
     coverImage: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=600&fit=crop",
     tags: ["회사", "드라마"],
     characters: [
@@ -240,11 +364,17 @@ const sampleStories: Story[] = [
   },
 ]
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   characters: sampleCharacters,
   stories: sampleStories,
+  personas: samplePersonas,
+  events: sampleEvents,
+  branches: [],
+  credits: 100,
   selectedCharacter: null,
   selectedStory: null,
+  selectedPersona: null,
+  startScenario: null,
   scenario: null,
   messages: [],
   isScenarioModalOpen: false,
@@ -270,4 +400,48 @@ export const useAppStore = create<AppState>((set) => ({
   closeStoryDrawer: () => set({ isStoryDrawerOpen: false }),
   setUserName: (name) => set({ userName: name }),
   clearChat: () => set({ messages: [] }),
+  // Persona
+  selectPersona: (persona) => set({ selectedPersona: persona }),
+  addPersona: (persona) =>
+    set((state) => ({
+      personas: [
+        ...state.personas,
+        { ...persona, id: `persona-${Date.now()}` },
+      ],
+    })),
+  // Start scenario
+  selectStartScenario: (scenario) => set({ startScenario: scenario }),
+  // Events
+  saveEvent: (event) =>
+    set((state) => ({
+      events: [
+        {
+          ...event,
+          id: `event-${Date.now()}`,
+          createdAt: new Date(),
+        },
+        ...state.events,
+      ],
+    })),
+  // Branches
+  createBranch: (branch) =>
+    set((state) => ({
+      branches: [
+        ...state.branches,
+        {
+          ...branch,
+          id: `branch-${Date.now()}`,
+          createdAt: new Date(),
+        },
+      ],
+    })),
+  // Credits
+  chargeCredit: (amount) =>
+    set((state) => ({ credits: state.credits + amount })),
+  spendCredit: (amount) => {
+    const current = get().credits
+    if (current < amount) return false
+    set({ credits: current - amount })
+    return true
+  },
 }))

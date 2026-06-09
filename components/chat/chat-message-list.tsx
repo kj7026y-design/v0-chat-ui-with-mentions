@@ -93,6 +93,7 @@ interface ChatMessageListProps {
   onEditMessage?: (messageId: string) => void
   onDeleteMessage?: (messageId: string) => void
   onBranchFromMessage?: (messageId: string) => void
+  onSaveEvent?: (messageId: string) => void
   editedMessageIds?: Set<string>
   chatId?: string
   chatTheme?: ChatThemeId
@@ -106,6 +107,7 @@ export function ChatMessageList({
   onEditMessage,
   onDeleteMessage,
   onBranchFromMessage,
+  onSaveEvent,
   editedMessageIds = new Set(),
   chatId,
   chatTheme: externalChatTheme
@@ -162,6 +164,7 @@ export function ChatMessageList({
           onEdit={onEditMessage}
           onDelete={onDeleteMessage}
           onBranch={onBranchFromMessage}
+          onSaveEvent={onSaveEvent}
           isEdited={editedMessageIds.has(message.id)}
           themeConfig={themeConfig}
         />
@@ -186,11 +189,12 @@ interface BubbleMessageBubbleProps {
   onEdit?: (messageId: string) => void
   onDelete?: (messageId: string) => void
   onBranch?: (messageId: string) => void
+  onSaveEvent?: (messageId: string) => void
   isEdited?: boolean
   themeConfig: ChatThemeConfig
 }
 
-function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, isEdited, themeConfig }: BubbleMessageBubbleProps) {
+function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, onSaveEvent, isEdited, themeConfig }: BubbleMessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const isUser = message.type === "user"
@@ -312,28 +316,39 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, i
         </div>
       )}
       
-      {/* Branch Button - always visible below AI messages */}
+      {/* Branch + Save Event Buttons - below AI messages */}
       {isAI && (
-        <button
-          onClick={() => {
-            setIsBranching(true)
-            setTimeout(() => {
-              onBranch?.(message.id)
-              setIsBranching(false)
-            }, 800)
-          }}
-          disabled={isBranching}
-          className={cn(
-            "flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors",
-            "border-t border-dashed border-border mt-1 -mx-1 pt-2",
-            isBranching && "text-foreground"
-          )}
-        >
-          <svg className={cn("w-3 h-3", isBranching && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <span>{isBranching ? "분기 생성 중..." : "여기서부터 새로운 채팅으로 분기"}</span>
-        </button>
+        <div className="flex items-center gap-3 mt-1 -mx-1 pt-2 border-t border-dashed border-border">
+          <button
+            onClick={() => {
+              setIsBranching(true)
+              setTimeout(() => {
+                onBranch?.(message.id)
+                setIsBranching(false)
+              }, 800)
+            }}
+            disabled={isBranching}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors",
+              isBranching && "text-foreground"
+            )}
+          >
+            <svg className={cn("w-3 h-3", isBranching && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>{isBranching ? "분기 생성 중..." : "여기서부터 분기"}</span>
+          </button>
+
+          <button
+            onClick={() => onSaveEvent?.(message.id)}
+            className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>이 장면 저장</span>
+          </button>
+        </div>
       )}
     </div>
   )
