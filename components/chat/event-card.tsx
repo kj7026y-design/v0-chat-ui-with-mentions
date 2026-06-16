@@ -31,7 +31,7 @@ export function EventCard({ event, onClick }: EventCardProps) {
           {event.emotionalTone.slice(0, 2).map((tag) => (
             <span
               key={tag}
-              className="rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm"
+              className="rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm"
             >
               {tag}
             </span>

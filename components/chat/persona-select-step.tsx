@@ -36,8 +36,8 @@ export function PersonaSelectStep({
               className={cn(
                 "w-full rounded-xl border p-3.5 text-left transition-colors",
                 isSelected
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-card hover:bg-accent/50"
+                  ? "border-primary bg-accent"
+                  : "border-border bg-card hover:bg-accent"
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -61,7 +61,7 @@ export function PersonaSelectStep({
                 {persona.intro}
               </p>
               <p className="mt-1.5 text-[11px] text-muted-foreground">
-                관계 · <span className="text-foreground/80">{persona.relationship}</span>
+                관계 · <span className="text-foreground">{persona.relationship}</span>
               </p>
             </button>
           )
@@ -69,7 +69,7 @@ export function PersonaSelectStep({
 
         <button
           onClick={onCreateNew}
-          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:bg-accent/50 transition-colors"
+          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:bg-accent transition-colors"
         >
           <Plus className="h-4 w-4" />
           새 자아 만들기

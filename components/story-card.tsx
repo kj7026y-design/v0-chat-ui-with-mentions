@@ -31,7 +31,7 @@ export function StoryCard({ story, onClick }: StoryCardProps) {
 
         {/* Author badge */}
         {story.author && (
-          <span className="absolute top-2 left-2 text-[10px] font-medium text-white/90 bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-full">
+          <span className="absolute top-2 left-2 text-[10px] font-medium text-white bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded-full">
             @{story.author}
           </span>
         )}
@@ -42,7 +42,7 @@ export function StoryCard({ story, onClick }: StoryCardProps) {
           </h3>
 
           {/* Stats */}
-          <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-white/80">
+          <div className="flex items-center gap-2.5 mt-1.5 text-[10px] text-white">
             <span className="flex items-center gap-0.5">
               <Play className="w-2.5 h-2.5 fill-current" />
               {formatCount(story.playCount)}
@@ -57,7 +57,7 @@ export function StoryCard({ story, onClick }: StoryCardProps) {
             {story.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
-                className="text-[10px] text-white/70 bg-white/10 px-1.5 py-0.5 rounded"
+                className="text-[10px] text-white bg-black/60 px-1.5 py-0.5 rounded"
               >
                 {tag}
               </span>

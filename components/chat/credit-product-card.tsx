@@ -26,8 +26,8 @@ export function CreditProductCard({
       className={cn(
         "relative flex items-center justify-between gap-3 rounded-xl border p-4 text-left transition-colors w-full",
         highlighted
-          ? "border-primary/60 bg-primary/5 hover:bg-primary/10"
-          : "border-border bg-card hover:bg-accent/50"
+          ? "border-primary bg-accent hover:bg-secondary"
+          : "border-border bg-card hover:bg-accent"
       )}
     >
       {badge && (
@@ -40,7 +40,7 @@ export function CreditProductCard({
         <div
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full",
-            highlighted ? "bg-primary/15" : "bg-muted"
+            highlighted ? "bg-accent" : "bg-muted"
           )}
         >
           <Gem className={cn("h-5 w-5", highlighted ? "text-primary" : "text-muted-foreground")} />

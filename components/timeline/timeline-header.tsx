@@ -12,11 +12,11 @@ export function TimelineHeader({ onAddEvent }: TimelineHeaderProps) {
   const router = useRouter()
 
   return (
-    <header className="flex items-center justify-between mb-8 sm:mb-12">
+    <header className="sticky top-0 z-40 -mx-5 mb-8 flex items-center justify-between border-b border-border bg-background px-5 py-4 backdrop-blur-sm sm:mb-12">
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.back()}
-          className="flex items-center justify-center w-9 h-9 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+          className="flex items-center justify-center w-9 h-9 rounded-full bg-secondary hover:bg-secondary transition-colors"
           aria-label="뒤로 가기"
         >
           <ArrowLeft className="w-5 h-5 text-foreground" />

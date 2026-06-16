@@ -24,7 +24,7 @@ export default function CreditsPage() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm px-4 py-4 border-b border-border">
+      <header className="sticky top-0 z-40 bg-background backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2">
           <Link
             href="/mypage"
@@ -47,12 +47,12 @@ export default function CreditsPage() {
               {credits.toLocaleString()}
             </span>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted/50 p-3">
+          <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-muted p-3">
             <div className="text-center">
               <p className="text-sm font-semibold text-foreground">{CREDIT_COSTS.message}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">메시지</p>
             </div>
-            <div className="text-center border-x border-border/60">
+            <div className="text-center border-x border-border">
               <p className="text-sm font-semibold text-foreground">{CREDIT_COSTS.branch}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">분기</p>
             </div>
@@ -93,7 +93,7 @@ export default function CreditsPage() {
           </h2>
           <button
             onClick={handlePurchase}
-            className="w-full rounded-2xl border border-primary/50 bg-primary/5 p-5 text-left transition-colors hover:bg-primary/10"
+            className="w-full rounded-2xl border border-primary bg-accent p-5 text-left transition-colors hover:bg-secondary"
           >
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
@@ -116,7 +116,7 @@ export default function CreditsPage() {
         </section>
 
         {/* Notice */}
-        <div className="flex items-start gap-2 rounded-xl bg-muted/50 px-4 py-3">
+        <div className="flex items-start gap-2 rounded-xl bg-muted px-4 py-3">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
           <p className="text-[11px] leading-relaxed text-muted-foreground text-pretty">
             실제 결제 기능은 준비 중이에요. 현재는 크레딧 구조를 미리 체험하실 수 있어요.

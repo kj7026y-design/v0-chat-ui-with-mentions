@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight, Check, Sun, Moon, MessageSquare, Send, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useTheme } from "next-themes"
+import { useTheme } from "@/components/theme-provider"
+import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
@@ -91,6 +92,8 @@ interface ChatSettingsDrawerProps {
   characterEmoji: string
   chatId: string
   onChatThemeChange?: (theme: ChatThemeId) => void
+  onClearChat?: () => void
+  onLeaveChat?: () => void
 }
 
 const timelineEvents = [
@@ -99,28 +102,22 @@ const timelineEvents = [
   { id: "3", title: "우리의 100일", date: "2024년 6월 9일" },
 ]
 
-const sharedMedia = [
-  "/placeholder-media-1.jpg",
-  "/placeholder-media-2.jpg",
-  "/placeholder-media-3.jpg",
-  "/placeholder-media-4.jpg",
-  "/placeholder-media-5.jpg",
-  "/placeholder-media-6.jpg",
-]
-
 export function ChatSettingsDrawer({ 
   isOpen, 
   onClose, 
   characterName, 
   characterEmoji,
   chatId,
-  onChatThemeChange
+  onChatThemeChange,
+  onClearChat,
+  onLeaveChat,
 }: ChatSettingsDrawerProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("system")
   const [spicyLevel, setSpicyLevel] = useState(50)
   const [uniqueLevel, setUniqueLevel] = useState(70)
+  const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([])
 
   // Load chat-specific theme on mount
   useEffect(() => {
@@ -129,7 +126,15 @@ export function ChatSettingsDrawer({
     if (savedTheme) {
       setSelectedChatTheme(savedTheme)
     }
-  }, [chatId])
+    const syncMedia = () => setSharedMedia(getChatMedia(chatId, characterName))
+    syncMedia()
+    window.addEventListener("storychat-chat-media-updated", syncMedia)
+    window.addEventListener("storage", syncMedia)
+    return () => {
+      window.removeEventListener("storychat-chat-media-updated", syncMedia)
+      window.removeEventListener("storage", syncMedia)
+    }
+  }, [characterName, chatId])
 
   const handleChatThemeChange = (theme: ChatThemeId) => {
     setSelectedChatTheme(theme)
@@ -157,7 +162,7 @@ export function ChatSettingsDrawer({
       {/* Overlay */}
       <div
         className={cn(
-          "fixed inset-0 z-50 bg-black/60 transition-opacity duration-300",
+          "fixed inset-0 z-50 bg-black/70 transition-opacity duration-300",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onClick={onClose}
@@ -166,12 +171,12 @@ export function ChatSettingsDrawer({
       {/* Drawer */}
       <div
         className={cn(
-          "fixed right-0 top-0 bottom-0 z-50 w-[80%] max-w-sm bg-background shadow-2xl transition-transform duration-300 ease-out overflow-y-auto",
+          "fixed right-0 top-0 bottom-0 z-50 w-[80%] max-w-sm overflow-y-auto border-l border-border bg-card shadow-2xl shadow-black/60 transition-transform duration-300 ease-out dark:border-white/25 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),-24px_0_48px_rgba(0,0,0,0.72)]",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm px-4 py-4 flex items-center justify-between border-b border-border">
+        <div className="sticky top-0 z-10 bg-card px-4 py-4 flex items-center justify-between border-b border-border dark:border-white/20">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
               <span className="text-lg">{characterEmoji}</span>
@@ -208,7 +213,7 @@ export function ChatSettingsDrawer({
                     onClick={() => handleChatThemeChange(theme.id)}
                     className={cn(
                       "relative p-2 rounded-lg transition-all duration-200",
-                      "bg-muted/50 hover:bg-muted",
+                      "bg-muted hover:bg-muted",
                       isSelected && "ring-2 ring-primary"
                     )}
                   >
@@ -262,7 +267,7 @@ export function ChatSettingsDrawer({
               <Clock className="w-4 h-4 text-muted-foreground" />
               <h3 className="text-sm font-medium text-foreground">타임라인</h3>
             </div>
-            <div className="bg-muted/50 rounded-lg overflow-hidden">
+            <div className="bg-muted rounded-lg overflow-hidden">
               {timelineEvents.map((event, index) => (
                 <div
                   key={event.id}
@@ -276,9 +281,13 @@ export function ChatSettingsDrawer({
                 </div>
               ))}
             </div>
-            <button className="w-full mt-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="/timeline"
+              onClick={onClose}
+              className="block w-full mt-2 py-2 text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
               전체 보기 →
-            </button>
+            </Link>
           </section>
 
           {/* Personality Tuning Section */}
@@ -329,18 +338,22 @@ export function ChatSettingsDrawer({
               <h3 className="text-sm font-medium text-foreground">공유 미디어</h3>
             </div>
             <div className="grid grid-cols-3 gap-1.5">
-              {sharedMedia.map((_, index) => (
+              {sharedMedia.slice(0, 3).map((media) => (
                 <div
-                  key={index}
-                  className="aspect-square bg-muted rounded-md flex items-center justify-center"
+                  key={media.id}
+                  className="aspect-square overflow-hidden rounded-md bg-muted"
                 >
-                  <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                  <img src={media.imageUrl} alt={media.title} className="h-full w-full object-cover" />
                 </div>
               ))}
             </div>
-            <button className="w-full mt-2 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href={`/chat/${chatId}/media`}
+              onClick={onClose}
+              className="block w-full mt-2 py-2 text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
               전체 보기 →
-            </button>
+            </Link>
           </section>
 
           {/* My Persona Section */}
@@ -349,7 +362,7 @@ export function ChatSettingsDrawer({
               <User className="w-4 h-4 text-muted-foreground" />
               <h3 className="text-sm font-medium text-foreground">내 자아</h3>
             </div>
-            <div className="bg-muted/50 rounded-lg p-3">
+            <div className="bg-muted rounded-lg p-3">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
                   <User className="w-6 h-6 text-muted-foreground" />
@@ -358,21 +371,31 @@ export function ChatSettingsDrawer({
                   <p className="text-sm font-medium text-foreground">지은</p>
                   <p className="text-xs text-muted-foreground">22세 / 대학생</p>
                 </div>
-                <button className="px-3 py-1.5 text-xs text-foreground bg-muted hover:bg-accent rounded-md transition-colors">
+                <Link
+                  href="/my-works?tab=personas"
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs text-foreground bg-muted hover:bg-accent rounded-md transition-colors"
+                >
                   수정
-                </button>
+                </Link>
               </div>
             </div>
           </section>
         </div>
 
         {/* Danger Zone */}
-        <div className="px-4 py-6 mt-4 border-t border-border space-y-2">
-          <button className="w-full flex items-center justify-center gap-2 py-3 text-sm text-destructive bg-destructive/10 hover:bg-destructive/20 rounded-lg transition-colors">
+        <div className="px-4 py-6 mt-4 border-t border-border dark:border-white/20 space-y-2">
+          <button
+            onClick={onClearChat}
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-700 bg-red-50 py-3 text-sm font-semibold text-red-950 transition-colors hover:bg-red-100 dark:border-red-500 dark:bg-red-950 dark:text-red-50 dark:hover:bg-red-900"
+          >
             <Trash2 className="w-4 h-4" />
             대화 초기화
           </button>
-          <button className="w-full flex items-center justify-center gap-2 py-3 text-sm text-destructive hover:bg-accent rounded-lg transition-colors">
+          <button
+            onClick={onLeaveChat}
+            className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-700 bg-red-50 py-3 text-sm font-semibold text-red-950 transition-colors hover:bg-red-100 dark:border-red-500 dark:bg-red-950 dark:text-red-50 dark:hover:bg-red-900"
+          >
             <LogOut className="w-4 h-4" />
             채팅방 나가기
           </button>

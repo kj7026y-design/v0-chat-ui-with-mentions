@@ -9,7 +9,7 @@ export default function LandingPage() {
   const [showLoginModal, setShowLoginModal] = useState(false)
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Background Pattern */}
       <div className="fixed inset-0 opacity-[0.03]">
         <div className="absolute inset-0" style={{
@@ -22,7 +22,7 @@ export default function LandingPage() {
       <main className="flex-1 flex flex-col items-center justify-center px-6 relative z-10">
         {/* Logo */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-neutral-100 tracking-tight">
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">
             StoryChat
           </h1>
         </div>
@@ -34,7 +34,7 @@ export default function LandingPage() {
             <br />
             완성하세요
           </h2>
-          <p className="text-neutral-500 text-sm leading-relaxed">
+          <p className="text-muted-foreground text-sm leading-relaxed">
             AI와 함께 캐릭터를 만들고, 세계관을 설정하고,
             <br />
             당신만의 이야기를 펼쳐보세요.
@@ -44,17 +44,17 @@ export default function LandingPage() {
         {/* CTA Button */}
         <button
           onClick={() => setShowLoginModal(true)}
-          className="px-8 py-4 bg-white text-black font-semibold text-base rounded-full hover:bg-neutral-200 transition-colors"
+          className="px-8 py-4 bg-primary text-primary-foreground font-semibold text-base rounded-full hover:bg-primary/90 transition-colors"
         >
           지금 시작하기
         </button>
 
         {/* Secondary Link */}
-        <p className="mt-6 text-neutral-600 text-sm">
+        <p className="mt-6 text-muted-foreground text-sm">
           이미 계정이 있으신가요?{" "}
           <button 
             onClick={() => setShowLoginModal(true)}
-            className="text-neutral-400 hover:text-white transition-colors underline underline-offset-2"
+            className="text-foreground hover:text-primary transition-colors underline underline-offset-2"
           >
             로그인
           </button>
@@ -63,7 +63,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="py-6 text-center relative z-10">
-        <p className="text-neutral-700 text-xs">
+        <p className="text-muted-foreground text-xs">
           계속 진행하면 서비스 약관 및 개인정보 처리방침에 동의하게 됩니다.
         </p>
       </footer>
@@ -104,7 +104,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
       id: "google",
       name: "Google로 계속하기",
       bgColor: "bg-white",
-      textColor: "text-neutral-800",
+      textColor: "text-black",
       icon: (
         <svg viewBox="0 0 24 24" className="w-5 h-5">
           <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -117,7 +117,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     {
       id: "x",
       name: "X로 계속하기",
-      bgColor: "bg-black border border-neutral-700",
+      bgColor: "bg-background border border-border",
       textColor: "text-white",
       icon: (
         <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
@@ -137,21 +137,21 @@ function LoginModal({ onClose }: { onClose: () => void }) {
       
       {/* Modal */}
       <div className="fixed inset-x-4 bottom-0 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 z-50 sm:w-full sm:max-w-md">
-        <div className="bg-neutral-900 rounded-t-2xl sm:rounded-2xl border border-neutral-800 overflow-hidden animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:fade-in duration-300">
+        <div className="bg-popover rounded-t-2xl sm:rounded-2xl border border-border overflow-hidden animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:fade-in duration-300">
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800">
-            <h3 className="text-lg font-semibold text-neutral-100">로그인</h3>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <h3 className="text-lg font-semibold text-popover-foreground">로그인</h3>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-800 transition-colors"
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
             >
-              <X className="w-5 h-5 text-neutral-400" />
+              <X className="w-5 h-5 text-muted-foreground" />
             </button>
           </div>
 
           {/* Content */}
           <div className="p-5 space-y-3">
-            <p className="text-neutral-500 text-sm text-center mb-4">
+            <p className="text-muted-foreground text-sm text-center mb-4">
               소셜 계정으로 간편하게 시작하세요
             </p>
 
@@ -172,8 +172,8 @@ function LoginModal({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Footer */}
-          <div className="px-5 py-4 border-t border-neutral-800">
-            <p className="text-neutral-600 text-xs text-center">
+          <div className="px-5 py-4 border-t border-border">
+            <p className="text-muted-foreground text-xs text-center">
               로그인 시 서비스 이용약관 및 개인정보 처리방침에 동의합니다.
             </p>
           </div>

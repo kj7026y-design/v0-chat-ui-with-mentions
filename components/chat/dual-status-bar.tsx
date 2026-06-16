@@ -23,7 +23,7 @@ export function DualStatusBar({
   return (
     <div className="border-b border-border bg-background">
       {/* Character Status Row */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
         <span className="text-[10px] text-muted-foreground font-medium min-w-[52px]">
           {characterName}
         </span>

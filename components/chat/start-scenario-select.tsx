@@ -39,7 +39,7 @@ export function StartScenarioSelect({
             이 작품은 작가가 설정한 시작 상황으로만 진행돼요.
           </p>
         </div>
-        <div className="rounded-xl border border-primary bg-primary/5 p-4">
+        <div className="rounded-xl border border-primary bg-accent p-4">
           <span className="flex items-center gap-1 text-[11px] font-medium text-primary">
             <Lock className="h-3 w-3" />
             기존 설정 유지
@@ -88,7 +88,7 @@ export function StartScenarioSelect({
           <div
             className={cn(
               "rounded-xl border p-3.5 transition-colors",
-              selected?.type === "custom" ? "border-primary bg-primary/5" : "border-border bg-card"
+              selected?.type === "custom" ? "border-primary bg-accent" : "border-border bg-card"
             )}
           >
             <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -131,7 +131,7 @@ function OptionCard({
       onClick={onClick}
       className={cn(
         "w-full rounded-xl border p-3.5 text-left transition-colors",
-        selected ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-accent/50"
+        selected ? "border-primary bg-accent" : "border-border bg-card hover:bg-accent"
       )}
     >
       <div className="flex items-start justify-between gap-2">

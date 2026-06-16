@@ -1,5 +1,5 @@
 import { TimelineCard } from "./timeline-card"
-import type { TimelineEvent } from "@/app/timeline/page"
+import type { TimelineEvent } from "@/lib/timeline-storage"
 
 interface TimelineListProps {
   events: TimelineEvent[]

@@ -73,13 +73,13 @@ export function StoryDrawer() {
 
   return (
     <Drawer open={isStoryDrawerOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DrawerContent className="max-h-[88vh] bg-popover/95 backdrop-blur-xl border-t border-border/50">
+      <DrawerContent className="max-h-[88vh] bg-popover backdrop-blur-xl border-t border-border">
         <div className="mx-auto w-full max-w-2xl">
           <DrawerHeader className="relative pt-6 pb-2">
             {step !== "intro" && (
               <button
                 onClick={() => setStep(step === "scenario" ? "persona" : "intro")}
-                className="absolute left-4 top-4 p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+                className="absolute left-4 top-4 p-2 rounded-full bg-secondary hover:bg-secondary transition-colors"
                 aria-label="이전"
               >
                 <ChevronLeft className="w-4 h-4 text-muted-foreground" />
@@ -87,7 +87,7 @@ export function StoryDrawer() {
             )}
             <button
               onClick={handleClose}
-              className="absolute right-4 top-4 p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+              className="absolute right-4 top-4 p-2 rounded-full bg-secondary hover:bg-secondary transition-colors"
               aria-label="닫기"
             >
               <X className="w-4 h-4 text-muted-foreground" />
@@ -127,7 +127,7 @@ export function StoryDrawer() {
                   <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     줄거리
                   </h4>
-                  <p className="text-sm text-foreground/90 leading-relaxed">
+                  <p className="text-sm text-foreground leading-relaxed">
                     {selectedStory.fullSynopsis}
                   </p>
                 </div>
@@ -140,7 +140,7 @@ export function StoryDrawer() {
                     {selectedStory.characters.map((char) => (
                       <div
                         key={char.name}
-                        className="flex items-center gap-3 bg-secondary/50 rounded-lg px-4 py-3 flex-1"
+                        className="flex items-center gap-3 bg-secondary rounded-lg px-4 py-3 flex-1"
                       >
                         <span className="text-2xl">{char.avatar}</span>
                         <div>
@@ -160,7 +160,7 @@ export function StoryDrawer() {
                     value={localName}
                     onChange={(e) => setLocalName(e.target.value)}
                     placeholder="이름 입력..."
-                    className="bg-secondary/50 border-0 h-12 text-foreground placeholder:text-muted-foreground/50 focus-visible:ring-1 focus-visible:ring-ring"
+                    className="bg-secondary border border-border h-12 text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                   />
                 </div>
               </div>

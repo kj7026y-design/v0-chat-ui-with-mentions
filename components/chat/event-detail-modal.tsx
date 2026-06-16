@@ -31,7 +31,7 @@ export function EventDetailModal({ event, onClose }: EventDetailModalProps) {
           />
           <button
             onClick={onClose}
-            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 transition-colors"
+            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm hover:bg-black/80 transition-colors"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
@@ -59,7 +59,7 @@ export function EventDetailModal({ event, onClose }: EventDetailModalProps) {
             ))}
           </div>
 
-          <div className="mt-4 flex items-center gap-1.5 border-t border-border/60 pt-4">
+          <div className="mt-4 flex items-center gap-1.5 border-t border-border pt-4">
             <span className="text-[11px] text-muted-foreground">관련 캐릭터</span>
             <span className="text-[11px] font-medium text-foreground">{event.relatedCharacter}</span>
           </div>

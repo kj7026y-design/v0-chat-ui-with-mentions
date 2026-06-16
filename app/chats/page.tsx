@@ -1,87 +1,82 @@
 "use client"
 
-import { useState } from "react"
-import { Search, MoreHorizontal } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Copy, Edit3, MoreHorizontal, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-
-interface ChatItem {
-  id: string
-  characterName: string
-  characterEmoji: string
-  lastMessage: string
-  timestamp: Date
-  unreadCount: number
-}
-
-const chatList: ChatItem[] = [
-  {
-    id: "1",
-    characterName: "이무기",
-    characterEmoji: "🐉",
-    lastMessage: "그래, 알겠어. 조금 더 이야기해볼까?",
-    timestamp: new Date(Date.now() - 1000 * 60 * 5),
-    unreadCount: 2,
-  },
-  {
-    id: "2",
-    characterName: "하늘",
-    characterEmoji: "🌸",
-    lastMessage: "오늘 날씨가 좋아서 기분이 좋아!",
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    unreadCount: 0,
-  },
-  {
-    id: "3",
-    characterName: "별이",
-    characterEmoji: "⭐",
-    lastMessage: "내일 같이 영화 보러 갈래?",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    unreadCount: 5,
-  },
-  {
-    id: "4",
-    characterName: "루나",
-    characterEmoji: "🌙",
-    lastMessage: "고마워, 덕분에 많이 위로가 됐어.",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    unreadCount: 0,
-  },
-  {
-    id: "5",
-    characterName: "제이",
-    characterEmoji: "🎸",
-    lastMessage: "새로운 곡을 만들었는데 들어볼래?",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48),
-    unreadCount: 1,
-  },
-]
-
-function formatTimestamp(date: Date): string {
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
-  if (minutes < 60) return `${minutes}분 전`
-  if (hours < 24) return `${hours}시간 전`
-  if (days === 1) return "어제"
-  return `${days}일 전`
-}
+import {
+  createChatId,
+  defaultChats,
+  getChatList,
+  saveChatList,
+  type ChatListItemData,
+} from "@/lib/chat-list-storage"
 
 export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [chats, setChats] = useState<ChatListItemData[]>(defaultChats)
 
-  const filteredChats = chatList.filter((chat) =>
+  useEffect(() => {
+    const syncChats = () => setChats(getChatList())
+    syncChats()
+    window.addEventListener("storage", syncChats)
+    window.addEventListener("storychat-chats-updated", syncChats)
+    return () => {
+      window.removeEventListener("storage", syncChats)
+      window.removeEventListener("storychat-chats-updated", syncChats)
+    }
+  }, [])
+
+  const persistChats = (nextChats: ChatListItemData[]) => {
+    setChats(nextChats)
+    saveChatList(nextChats)
+  }
+
+  const handleRenameChat = (chatId: string) => {
+    const chat = chats.find((item) => item.id === chatId)
+    if (!chat) return
+
+    const nextName = window.prompt("채팅방 이름을 입력하세요.", chat.characterName)
+    if (!nextName?.trim()) return
+
+    persistChats(chats.map((item) => item.id === chatId ? { ...item, characterName: nextName.trim() } : item))
+    toast("이름을 바꿨어요.")
+  }
+
+  const handleDuplicateChat = (chatId: string) => {
+    const chat = chats.find((item) => item.id === chatId)
+    if (!chat) return
+
+    persistChats([
+      {
+        ...chat,
+        id: createChatId(),
+        characterName: `${chat.characterName} 복제본`,
+        timestamp: new Date(),
+        unreadCount: 0,
+      },
+      ...chats,
+    ])
+    toast("채팅방을 복제했어요.")
+  }
+
+  const handleDeleteChat = (chatId: string) => {
+    if (!window.confirm("채팅방을 삭제할까요?")) return
+
+    persistChats(chats.filter((chat) => chat.id !== chatId))
+    toast("채팅방을 삭제했어요.")
+  }
+
+  const filteredChats = chats.filter((chat) =>
     chat.characterName.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm px-4 py-4 border-b border-border">
+      <header className="sticky top-0 z-40 bg-background backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-foreground">채팅</h1>
           <button
@@ -114,7 +109,13 @@ export default function ChatsPage() {
       {/* Chat List */}
       <div className="divide-y divide-border">
         {filteredChats.map((chat) => (
-          <ChatListItem key={chat.id} chat={chat} />
+          <ChatListItem
+            key={chat.id}
+            chat={chat}
+            onRename={handleRenameChat}
+            onDuplicate={handleDuplicateChat}
+            onDelete={handleDeleteChat}
+          />
         ))}
       </div>
 
@@ -127,14 +128,24 @@ export default function ChatsPage() {
   )
 }
 
-function ChatListItem({ chat }: { chat: ChatItem }) {
+function ChatListItem({
+  chat,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: {
+  chat: ChatListItemData
+  onRename: (chatId: string) => void
+  onDuplicate: (chatId: string) => void
+  onDelete: (chatId: string) => void
+}) {
   const [showMenu, setShowMenu] = useState(false)
 
   return (
     <div className="relative">
       <Link
         href={`/chat/${chat.id}`}
-        className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 active:bg-accent transition-colors"
+        className="flex items-center gap-3 px-4 py-3 hover:bg-accent active:bg-accent transition-colors"
       >
         {/* Avatar */}
         <div className="relative flex-shrink-0">
@@ -152,20 +163,17 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             <span className={cn(
               "font-semibold truncate",
               chat.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
             )}>
               {chat.characterName}
             </span>
-            <span className="text-xs text-muted-foreground flex-shrink-0">
-              {formatTimestamp(chat.timestamp)}
-            </span>
           </div>
           <p className={cn(
             "text-sm truncate mt-0.5",
-            chat.unreadCount > 0 ? "text-foreground/80" : "text-muted-foreground"
+            chat.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
           )}>
             {chat.lastMessage}
           </p>
@@ -193,37 +201,64 @@ function ChatListItem({ chat }: { chat: ChatItem }) {
             onClick={() => setShowMenu(false)} 
           />
           <div className="absolute right-2 top-14 z-50 bg-popover rounded-xl shadow-xl py-1.5 min-w-[140px] border border-border">
-            <button 
+            <ContextMenuButton
+              icon={Trash2}
+              label="삭제"
+              destructive
               onClick={() => {
-                // Handle duplicate
                 setShowMenu(false)
+                onDelete(chat.id)
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-accent transition-colors"
-            >
-              채팅방 복제
-            </button>
-            <button 
+            />
+            <ContextMenuButton
+              icon={Copy}
+              label="복제"
               onClick={() => {
-                // Handle rename
                 setShowMenu(false)
+                onDuplicate(chat.id)
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-accent transition-colors"
-            >
-              이름 변경
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button 
+            />
+            <ContextMenuButton
+              icon={Edit3}
+              label="이름 바꾸기"
               onClick={() => {
-                // Handle delete
                 setShowMenu(false)
+                onRename(chat.id)
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-accent transition-colors"
-            >
-              삭제
-            </button>
+            />
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function ContextMenuButton({
+  icon: Icon,
+  label,
+  destructive,
+  onClick,
+}: {
+  icon: typeof MoreHorizontal
+  label: string
+  destructive?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onClick()
+      }}
+      className={cn(
+        "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-accent transition-colors",
+        destructive ? "text-destructive" : "text-popover-foreground",
+      )}
+    >
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
   )
 }

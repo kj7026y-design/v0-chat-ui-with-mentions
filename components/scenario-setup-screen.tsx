@@ -125,7 +125,7 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
       {/* Close Button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+        className="absolute top-4 right-4 z-10 p-2 rounded-full bg-secondary hover:bg-secondary transition-colors"
       >
         <X className="w-5 h-5 text-muted-foreground" />
       </button>
@@ -134,7 +134,7 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
         <div className="max-w-2xl mx-auto px-4 py-8 pb-32">
           {/* Character Mini Profile */}
           {selectedCharacter && (
-            <div className="flex items-center gap-4 p-4 rounded-xl bg-secondary/30 border border-border/50 mb-8">
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-secondary border border-border mb-8">
               <div className="w-14 h-14 rounded-full bg-secondary flex items-center justify-center text-3xl">
                 {selectedCharacter.avatar}
               </div>
@@ -170,13 +170,13 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
           </div>
 
           {/* Segmented Control */}
-          <div className="flex p-1 rounded-lg bg-secondary/50 mb-6">
+          <div className="flex p-1 rounded-lg bg-secondary mb-6">
             <button
               onClick={() => setMode("load")}
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all",
                 mode === "load"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-sm border border-border"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -188,7 +188,7 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-sm font-medium transition-all",
                 mode === "create"
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-sm border border-border"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -208,8 +208,8 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
                     className={cn(
                       "flex-shrink-0 w-48 p-4 rounded-xl border text-left transition-all",
                       selectedScenarioId === scenario.id
-                        ? "border-primary bg-primary/10 ring-1 ring-primary/50"
-                        : "border-border/50 bg-secondary/30 hover:bg-secondary/50 hover:border-border"
+                        ? "border-primary bg-accent ring-1 ring-primary"
+                        : "border-border bg-secondary hover:bg-secondary hover:border-border"
                     )}
                   >
                     <div className={cn(
@@ -241,8 +241,8 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
                 value={backgroundStory}
                 onChange={(e) => setBackgroundStory(e.target.value)}
                 className={cn(
-                  "min-h-[140px] bg-secondary/30 border-border/50 text-foreground placeholder:text-muted-foreground resize-none transition-all duration-500",
-                  isFieldHighlighted && "ring-2 ring-primary/50 bg-primary/5"
+                  "min-h-[140px] bg-secondary border-border text-foreground placeholder:text-muted-foreground resize-none transition-all duration-500",
+                  isFieldHighlighted && "ring-2 ring-primary bg-accent"
                 )}
               />
             </div>
@@ -259,8 +259,8 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className={cn(
-                  "bg-secondary/30 border-border/50 text-foreground placeholder:text-muted-foreground transition-all duration-500",
-                  isFieldHighlighted && "ring-2 ring-primary/50 bg-primary/5"
+                  "bg-secondary border-border text-foreground placeholder:text-muted-foreground transition-all duration-500",
+                  isFieldHighlighted && "ring-2 ring-primary bg-accent"
                 )}
               />
             </div>
@@ -282,8 +282,8 @@ export function ScenarioSetupScreen({ isOpen, onClose }: ScenarioSetupScreenProp
                       value={event}
                       onChange={(e) => handleEventChange(index, e.target.value)}
                       className={cn(
-                        "flex-1 bg-secondary/30 border-border/50 text-foreground placeholder:text-muted-foreground transition-all duration-500",
-                        isFieldHighlighted && "ring-2 ring-primary/50 bg-primary/5"
+                        "flex-1 bg-secondary border-border text-foreground placeholder:text-muted-foreground transition-all duration-500",
+                        isFieldHighlighted && "ring-2 ring-primary bg-accent"
                       )}
                     />
                   </div>

@@ -21,7 +21,12 @@ function formatCount(n?: number): string {
 export default function HomePage() {
   const { stories, setSelectedStory, openStoryDrawer } = useAppStore()
   const [activeTab, setActiveTab] = useState<Tab>("discover")
+  const [isCarouselDragging, setIsCarouselDragging] = useState(false)
   const carouselRef = useRef<HTMLDivElement>(null)
+  const carouselDragStartXRef = useRef(0)
+  const carouselScrollStartRef = useRef(0)
+  const carouselHasDraggedRef = useRef(false)
+  const suppressCarouselClickRef = useRef(false)
 
   const featuredStory = stories.find((s) => s.featured)
   const regularStories = stories.filter((s) => !s.featured)
@@ -39,6 +44,46 @@ export default function HomePage() {
         behavior: "smooth",
       })
     }
+  }
+
+  const handleCarouselWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!carouselRef.current) return
+    const scrollDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+    carouselRef.current.scrollLeft += scrollDelta
+  }
+
+  const handleCarouselMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !carouselRef.current) return
+    setIsCarouselDragging(true)
+    carouselHasDraggedRef.current = false
+    carouselDragStartXRef.current = event.clientX
+    carouselScrollStartRef.current = carouselRef.current.scrollLeft
+  }
+
+  const handleCarouselMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isCarouselDragging || !carouselRef.current) return
+    const dragDistance = event.clientX - carouselDragStartXRef.current
+    if (Math.abs(dragDistance) > 4) {
+      carouselHasDraggedRef.current = true
+      suppressCarouselClickRef.current = true
+    }
+    carouselRef.current.scrollLeft = carouselScrollStartRef.current - dragDistance
+  }
+
+  const stopCarouselDrag = () => {
+    setIsCarouselDragging(false)
+    if (suppressCarouselClickRef.current) {
+      window.setTimeout(() => {
+        suppressCarouselClickRef.current = false
+      }, 0)
+    }
+  }
+
+  const handleCarouselClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressCarouselClickRef.current && !carouselHasDraggedRef.current) return
+    event.preventDefault()
+    event.stopPropagation()
+    carouselHasDraggedRef.current = false
   }
 
   return (
@@ -142,7 +187,7 @@ export default function HomePage() {
                   {featuredStory.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="text-xs font-medium text-foreground/80 bg-foreground/10 backdrop-blur-sm px-3 py-1 rounded-full"
+                    className="text-xs font-medium text-foreground bg-background backdrop-blur-sm px-3 py-1 rounded-full"
                     >
                       #{tag}
                     </span>
@@ -155,7 +200,7 @@ export default function HomePage() {
                 </h2>
 
                 {/* Author + Stats */}
-                <div className="flex items-center gap-4 text-sm text-foreground/70">
+                <div className="flex items-center gap-4 text-sm text-foreground">
                   {featuredStory.author && <span>@{featuredStory.author}</span>}
                   <span className="flex items-center gap-1">
                     <Play className="w-3.5 h-3.5 fill-current" />
@@ -168,7 +213,7 @@ export default function HomePage() {
                 </div>
 
                 {/* Synopsis */}
-                <p className="text-lg sm:text-xl text-foreground/80 leading-relaxed text-pretty">
+                <p className="text-lg sm:text-xl text-foreground leading-relaxed text-pretty">
                   {featuredStory.synopsis}
                 </p>
 
@@ -199,13 +244,13 @@ export default function HomePage() {
             <div className="hidden sm:flex items-center gap-2">
               <button
                 onClick={() => scrollCarousel("left")}
-                className="p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+                className="p-2 rounded-full bg-secondary hover:bg-secondary transition-colors"
               >
                 <ChevronLeft className="w-5 h-5 text-foreground" />
               </button>
               <button
                 onClick={() => scrollCarousel("right")}
-                className="p-2 rounded-full bg-secondary/50 hover:bg-secondary transition-colors"
+                className="p-2 rounded-full bg-secondary hover:bg-secondary transition-colors"
               >
                 <ChevronRight className="w-5 h-5 text-foreground" />
               </button>
@@ -215,7 +260,16 @@ export default function HomePage() {
           {/* Carousel */}
           <div
             ref={carouselRef}
-            className="flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4 sm:mx-0 sm:px-0"
+            onWheel={handleCarouselWheel}
+            onMouseDown={handleCarouselMouseDown}
+            onMouseMove={handleCarouselMouseMove}
+            onMouseUp={stopCarouselDrag}
+            onMouseLeave={stopCarouselDrag}
+            onClickCapture={handleCarouselClickCapture}
+            className={cn(
+              "flex gap-3 sm:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 select-none",
+              isCarouselDragging ? "cursor-grabbing" : "cursor-grab",
+            )}
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
             {regularStories.map((story) => (

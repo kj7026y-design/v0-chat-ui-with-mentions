@@ -45,14 +45,169 @@ function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+export interface ChatInputCharacter {
+  id: string
+  name: string
+}
+
+export interface ChatIntroContext {
+  title: string
+  scene?: string
+  firstMessage?: string
+}
+
+export type ParsedChatInput =
+  | {
+      kind: "plain"
+      content: string
+      mentionCharacterIds?: string[]
+      mentionAll?: boolean
+    }
+  | {
+      kind: "character_line"
+      speakerId: string
+      speakerName: string
+      content: string
+      originalContent: string
+      isEmptyLine: boolean
+    }
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+export function getSubjectParticle(name: string): "이" | "가" {
+  const lastChar = name.trim().at(-1)
+  if (!lastChar) return "가"
+  const code = lastChar.charCodeAt(0)
+  if (code < 0xac00 || code > 0xd7a3) return "가"
+  return (code - 0xac00) % 28 === 0 ? "가" : "이"
+}
+
+function extractMentionIds(content: string, characters: ChatInputCharacter[], explicitMentions?: string[]) {
+  const mentionIds = new Set<string>()
+  let mentionAll = explicitMentions?.includes("all") ?? false
+
+  explicitMentions?.forEach((id) => {
+    if (id === "all") return
+    mentionIds.add(id)
+  })
+
+  if (/(^|\s)@모두(?=\s|$)/.test(content)) {
+    mentionAll = true
+  }
+
+  characters.forEach((character) => {
+    const pattern = new RegExp(`(^|\\s)@${escapeRegExp(character.name)}(?=\\s|$)`, "u")
+    if (pattern.test(content)) mentionIds.add(character.id)
+  })
+
+  return {
+    mentionCharacterIds: [...mentionIds],
+    mentionAll,
+  }
+}
+
+export function parseChatInput(
+  content: string,
+  characters: ChatInputCharacter[],
+  explicitMentions?: string[],
+): ParsedChatInput {
+  const originalContent = content.trim()
+
+  for (const character of characters) {
+    if (character.name === "모두") continue
+    const speechPattern = new RegExp(
+      `^ⓣ${escapeRegExp(character.name)}:\\s*([\\s\\S]*)$`,
+      "u",
+    )
+    const match = originalContent.match(speechPattern)
+    if (!match) continue
+
+    const lineContent = (match[1] ?? "").trim()
+    return {
+      kind: "character_line",
+      speakerId: character.id,
+      speakerName: character.name,
+      content: lineContent,
+      originalContent,
+      isEmptyLine: lineContent.length === 0,
+    }
+  }
+
+  const mentions = extractMentionIds(originalContent, characters, explicitMentions)
+  return {
+    kind: "plain",
+    content: originalContent,
+    mentionCharacterIds: mentions.mentionCharacterIds,
+    mentionAll: mentions.mentionAll,
+  }
+}
+
+export function formatMessageForAIContext(message: ChatMessage) {
+  if (message.isUserAuthoredCharacterLine && message.speakerName) {
+    return `[사용자가 ${message.speakerName}의 대사로 작성함]: ${message.content}`
+  }
+
+  if (message.mentionAll) {
+    return `[사용자가 모든 캐릭터를 언급함]: ${message.content}`
+  }
+
+  if (message.mentionCharacterIds?.length || message.mentions?.length) {
+    const mentioned = message.mentionCharacterIds?.join(", ") || message.mentions?.join(", ")
+    return `[사용자가 ${mentioned}를 언급함]: ${message.content}`
+  }
+
+  return message.content
+}
+
+export function formatIntroForAIContext(intro?: ChatIntroContext | null) {
+  if (!intro) return ""
+  return [
+    "[선택된 도입부]",
+    `제목: ${intro.title}`,
+    intro.scene ? `장면: ${intro.scene}` : "",
+    intro.firstMessage ? `첫 메시지: ${intro.firstMessage}` : "",
+    "사용자는 이 도입부 직후의 장면에서 첫 응답을 보냈다.",
+    "AI는 도입부를 반복하지 말고 이어서 진행한다.",
+  ].filter(Boolean).join("\n")
+}
+
 /** 유저 메시지 객체 생성 */
-export function buildUserMessage(content: string, mentions?: string[]): ChatMessage {
+export function buildUserMessage(
+  content: string,
+  characters: ChatInputCharacter[] = [],
+  mentions?: string[],
+  image?: { url: string; name?: string },
+): ChatMessage {
+  const parsedInput = parseChatInput(content, characters, mentions)
+
+  if (parsedInput.kind === "character_line") {
+    return {
+      id: makeId(),
+      type: "user",
+      content: parsedInput.content,
+      timestamp: new Date(),
+      speakerType: "character",
+      speakerId: parsedInput.speakerId,
+      speakerName: parsedInput.speakerName,
+      isUserAuthoredCharacterLine: true,
+      originalContent: parsedInput.originalContent,
+      imageUrl: image?.url,
+      imageName: image?.name,
+    }
+  }
+
   return {
     id: makeId(),
     type: "user",
-    content,
+    content: parsedInput.content,
     timestamp: new Date(),
-    mentions,
+    mentions: parsedInput.mentionAll ? ["all"] : parsedInput.mentionCharacterIds,
+    mentionCharacterIds: parsedInput.mentionCharacterIds,
+    mentionAll: parsedInput.mentionAll,
+    imageUrl: image?.url,
+    imageName: image?.name,
   }
 }
 
@@ -61,9 +216,12 @@ export function buildUserMessage(content: string, mentions?: string[]): ChatMess
  * @returns Promise<ChatMessage> - 추후 fetch("/api/chat") 등으로 교체
  */
 export async function generateAssistantReply(
-  _history: ChatMessage[],
+  history: ChatMessage[],
   _userContent: string,
+  introContext?: ChatIntroContext | null,
 ): Promise<ChatMessage> {
+  void formatIntroForAIContext(introContext)
+  void history.map(formatMessageForAIContext)
   await new Promise((resolve) => setTimeout(resolve, 1200))
   return {
     id: makeId(),

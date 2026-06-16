@@ -80,7 +80,7 @@ export function StoryRulesSection({ data, onChange }: StoryRulesSectionProps) {
         </Field>
 
         {/* 토글들 */}
-        <div className="flex items-center justify-between rounded-lg bg-secondary/30 px-3 py-3">
+        <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-3">
           <div>
             <p className="text-sm font-medium">사용자의 시작 상황 변경 허용</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -93,7 +93,7 @@ export function StoryRulesSection({ data, onChange }: StoryRulesSectionProps) {
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-secondary/30 px-3 py-3">
+        <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-3">
           <div>
             <p className="text-sm font-medium">직접 입력 허용</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -119,7 +119,7 @@ export function StoryRulesSection({ data, onChange }: StoryRulesSectionProps) {
         </div>
 
         {data.startOptions.map((opt) => (
-          <div key={opt.id} className="space-y-2 rounded-lg border border-border/50 p-3">
+          <div key={opt.id} className="space-y-2 rounded-lg border border-border p-3">
             <div className="flex gap-2">
               <Input
                 placeholder="옵션 제목 (예: 오래된 인연)"

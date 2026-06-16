@@ -10,11 +10,17 @@ import { EventDetailModal } from "@/components/chat/event-detail-modal"
 export default function GalleryPage() {
   const events = useAppStore((s) => s.events)
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
+  const groupedEvents = events.reduce<Record<string, SavedEvent[]>>((groups, event) => {
+    const character = event.relatedCharacter || "기타"
+    groups[character] = [...(groups[character] ?? []), event]
+    return groups
+  }, {})
+  const characterGroups = Object.entries(groupedEvents)
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm px-4 py-4 border-b border-border">
+      <header className="sticky top-0 z-40 bg-background backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2">
           <Link
             href="/mypage"
@@ -32,10 +38,22 @@ export default function GalleryPage() {
           대화 중 얻은 장면 {events.length}개
         </p>
 
-        {events.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} onClick={() => setSelectedEvent(event)} />
+        {characterGroups.length > 0 ? (
+          <div className="space-y-7">
+            {characterGroups.map(([character, characterEvents]) => (
+              <section key={character} className="space-y-3">
+                <div className="flex items-end justify-between px-1">
+                  <div>
+                    <h2 className="text-base font-bold text-foreground">{character}</h2>
+                    <p className="text-xs text-muted-foreground">저장한 장면 {characterEvents.length}개</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {characterEvents.map((event) => (
+                    <EventCard key={event.id} event={event} onClick={() => setSelectedEvent(event)} />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         ) : (

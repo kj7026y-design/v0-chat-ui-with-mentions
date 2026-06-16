@@ -56,7 +56,7 @@ export function QuestRewardPopup({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+          className="absolute top-3 right-3 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/70 hover:bg-black/80 transition-colors"
         >
           <X className="w-4 h-4 text-white" />
         </button>
@@ -83,7 +83,7 @@ export function QuestRewardPopup({
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-              <div className="w-16 h-16 rounded-full bg-muted-foreground/20 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-muted border border-border flex items-center justify-center">
                 <ImageIcon className="w-8 h-8 text-muted-foreground" />
               </div>
               <span className="text-sm text-muted-foreground">희귀 이미지</span>
@@ -116,7 +116,7 @@ export function QuestRewardPopup({
           )}
 
           {/* Gallery Save Notice */}
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border border-border">
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-muted border border-border">
             <ImageIcon className="w-4 h-4 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">
               이미지가 <span className="text-foreground font-medium">갤러리</span>에 저장되었습니다.

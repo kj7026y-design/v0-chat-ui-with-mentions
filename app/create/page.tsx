@@ -1,25 +1,34 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useEffect, useMemo, useState } from "react"
+import type React from "react"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
-  Sparkles,
-  X,
-  Eye,
-  Dices,
-  Rocket,
+  ArrowDown,
+  ArrowUp,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleUserRound,
+  Layers3,
+  PenTool,
   Plus,
-  MessageSquare,
-  Heart,
-  BarChart3,
-  Smartphone,
+  Rocket,
+  Save,
+  Sparkles,
   Trash2,
+  UserRound,
 } from "lucide-react"
+import { toast } from "sonner"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -27,825 +36,2013 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { FieldGroup, Field, FieldLabel } from "@/components/ui/field"
-import { Slider } from "@/components/ui/slider"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { GenreSelectWithCustomInput } from "@/components/create/genre-select-with-custom-input"
+import { IntroScenariosFormSection } from "@/components/my-works/intro-scenarios-form-section"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import { CATEGORIES, type Category } from "@/lib/store"
-import {
-  StoryRulesSection,
-  type StoryRulesData,
-} from "@/components/create/story-rules-section"
+  cleanIntroScenarios,
+  createId,
+  defaultLibrary,
+  defaultStoryChapter,
+  defaultStoryProgressSettings,
+  getStoryChatLibrary,
+  saveStoryChatLibrary,
+  type StoryChapter,
+  type StoryCharacter,
+  type StoryChatLibrary,
+  type IntroScenario,
+  type StoryPersona,
+  type StoryWork,
+  type StoryWorld,
+} from "@/lib/storychat-storage"
+import { cn } from "@/lib/utils"
 
-type CreateMode = "simple" | "advanced"
+type EntryMode = "menu" | "work" | "character" | "world" | "persona"
+type WorkStep = "character" | "world" | "review"
+type WorkFormMode = "simple" | "advanced"
+type SourceMode = "select" | "new"
 
-const PERSONALITY_TAGS = [
-  "냉철함",
-  "다정함",
-  "츤데레",
-  "능글맞음",
-  "천진난만",
-  "신비로움",
-  "열정적",
-  "차분함",
-  "유머러스",
-  "도도함",
-  "순수함",
-  "카리스마",
+const WORK_DRAFT_KEY = "storychat_work_create_draft"
+const WORK_FORM_MODE_KEY = "workFormMode"
+const CHARACTER_DRAFT_KEY = "storychat_character_draft"
+const WORLD_DRAFT_KEY = "storychat_world_draft"
+const PERSONA_DRAFT_KEY = "storychat_persona_draft"
+
+const workSteps: { id: WorkStep; label: string }[] = [
+  { id: "character", label: "캐릭터" },
+  { id: "world", label: "세계관" },
+  { id: "review", label: "완성본" },
 ]
 
-// Random data pools based on creativity level
-const RANDOM_DATA = {
-  names: {
-    low: ["김철수", "박영희", "이준호", "최민지", "정수빈"],
-    mid: ["아리아", "카이젠", "미르", "세라핀", "로완"],
-    high: ["제드 엑스", "네뷸라 7", "샤도우 위스퍼", "크림슨 페이트", "에코 프라임"],
+const createOptions = [
+  {
+    mode: "work" as EntryMode,
+    title: "작품 만들기",
+    description: "캐릭터와 세계관을 연결해서 바로 채팅할 수 있는 완성본을 만들어요.",
+    icon: Layers3,
   },
-  categories: {
-    low: ["회사", "학교"] as Category[],
-    mid: ["고대 서양", "고대 아시아"] as Category[],
-    high: ["판타지"] as Category[],
+  {
+    mode: "character" as EntryMode,
+    title: "캐릭터 만들기",
+    description: "캐릭터만 따로 만들고 내 작품에 저장해요.",
+    icon: UserRound,
   },
-  personalities: {
-    low: [["다정함", "차분함"], ["열정적", "유머러스"], ["순수함", "다정함"]],
-    mid: [["냉철함", "카리스마"], ["신비로움", "차분함"], ["도도함", "츤데레"]],
-    high: [["신비로움", "냉철함", "카리스마"], ["능글맞음", "도도함", "츤데레"], ["천진난만", "신비로움"]],
+  {
+    mode: "world" as EntryMode,
+    title: "세계관 만들기",
+    description: "이야기의 배경과 규칙만 따로 만들어요.",
+    icon: BookOpen,
   },
-  relationships: {
-    low: ["직장 동료", "같은 반 친구", "이웃 주민", "동아리 선배"],
-    mid: ["오랜 라이벌", "수호자", "스승", "계약된 파트너"],
-    high: ["차원을 넘어온 수호령", "기억을 공유하는 존재", "운명에 얽힌 숙적", "영혼의 계약자"],
+  {
+    mode: "persona" as EntryMode,
+    title: "자아 만들기",
+    description: "채팅에서 사용할 나의 역할을 따로 만들어요.",
+    icon: CircleUserRound,
   },
-  speechStyles: {
-    low: [
-      "{char}는 존댓말을 사용하며 예의 바르게 말한다. {user}를 '님'으로 부른다.",
-      "{char}는 반말을 쓰며 친근하게 대한다. 가끔 {user}에게 장난을 친다.",
-    ],
-    mid: [
-      "{char}는 고풍스러운 말투를 사용한다. '~하오', '~이로다' 등의 어미를 쓴다.",
-      "{char}는 차갑고 간결하게 말한다. {user}에게 감정을 잘 드러내지 않는다.",
-    ],
-    high: [
-      "{char}는 수수께끼 같은 말투로 대화한다. 직접적인 대답 대신 은유를 사용한다.",
-      "{char}는 여러 인격을 가진 듯 말투가 수시로 변한다. {user}를 혼란스럽게 만든다.",
-    ],
-  },
-  backstories: {
-    low: "평범한 가정에서 자랐으며, 안정적인 삶을 살아왔다.",
-    mid: "어린 시절 큰 사건을 겪었고, 그로 인해 강인한 성격이 형성되었다.",
-    high: "다른 차원에서 넘어왔으며, 이 세계의 기억과 원래 세계의 기억이 뒤섞여 있다.",
-  },
-}
-
-interface SlashCommand {
-  id: string
-  name: string
-  action: string
-  icon: React.ReactNode
-  isCustom?: boolean
-}
-
-const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
-  { id: "1", name: "/속마음", action: "캐릭터의 진짜 속마음을 독백으로 보여준다", icon: <Heart className="h-4 w-4" /> },
-  { id: "2", name: "/상태바", action: "현재 감정, 호감도, 상황을 상태창으로 표시한다", icon: <BarChart3 className="h-4 w-4" /> },
-  { id: "3", name: "/카톡", action: "카카오톡 채팅 형식으로 대화를 진행한다", icon: <Smartphone className="h-4 w-4" /> },
 ]
 
-interface FormData {
-  name: string
-  category: Category | ""
-  personalities: string[]
-  relationship: string
-  speechStyle: string
-  appearance: string
-  preferences: string
-  secrets: string
-  taboos: string
+const emptyCharacter = (): StoryCharacter => ({
+  id: "",
+  name: "",
+  genre: "",
+  age: "",
+  role: "",
+  residence: "",
+  appearance: "",
+  summary: "",
+  personality: "",
+  speechStyle: "",
+  relationship: "",
+  secret: "",
+  forbiddenDevelopments: "",
+  defaultStartScenario: "",
+  allowStartChange: true,
+  allowCustomStart: true,
+  startOptions: ["", "", ""],
+  tags: [],
+  emoji: "✨",
+  createdAt: "",
+})
+
+const emptyWorld = (): StoryWorld => ({
+  id: "",
+  name: "",
+  genre: "",
+  era: "",
+  coreSetting: "",
+  places: "",
+  events: "",
+  mood: "",
+  currentChapter: "",
+  currentGoal: "",
+  worldDate: "",
+  progress: 0,
+  forbiddenSettings: "",
+  coverColor: "from-neutral-800 to-neutral-950",
+  storyProgressSettings: defaultStoryProgressSettings(),
+  createdAt: "",
+})
+
+const emptyPersona = (): StoryPersona => ({
+  id: "",
+  name: "",
+  age: "",
+  role: "",
+  summary: "",
+  personality: "",
+  speechStyle: "",
+  appearance: "",
+  relationship: "",
+  secret: "",
+  preferredDevelopments: "",
+  forbiddenDevelopments: "",
+  createdAt: "",
+})
+
+interface WorkDraft {
+  step: WorkStep
+  characterSource: SourceMode
+  worldSource: SourceMode
+  selectedCharacterId: string
+  selectedWorldId: string
+  character: StoryCharacter
+  world: StoryWorld
+  title: string
+  genre: string
+  tagline: string
+  coreSetting: string
+  coverImageUrl: string
+  mood: string
+  majorLocations: string
+  majorEvents: string
+  currentChapter: string
+  currentGoal: string
+  worldDate: string
+  startScenario: string
+  introScenarios: IntroScenario[]
+  statusBarEnabled: boolean
+  statusBarText: string
+  savedAt: string
 }
 
-export default function CreateCharacterPage() {
+interface ItemDraft<T> {
+  item: T
+  savedAt: string
+}
+
+const emptyWorkDraft = (): WorkDraft => ({
+  step: "character",
+  characterSource: "select",
+  worldSource: "select",
+  selectedCharacterId: "",
+  selectedWorldId: "",
+  character: emptyCharacter(),
+  world: emptyWorld(),
+  title: "",
+  genre: "",
+  tagline: "",
+  coreSetting: "",
+  coverImageUrl: "",
+  mood: "",
+  majorLocations: "",
+  majorEvents: "",
+  currentChapter: "",
+  currentGoal: "",
+  worldDate: "",
+  startScenario: "",
+  introScenarios: [],
+  statusBarEnabled: false,
+  statusBarText: "",
+  savedAt: "",
+})
+
+export default function CreatePage() {
   const router = useRouter()
-  const speechStyleRef = useRef<HTMLTextAreaElement>(null)
-  const [mode, setMode] = useState<CreateMode>("simple")
-  const [creativityLevel, setCreativityLevel] = useState([3])
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(DEFAULT_SLASH_COMMANDS)
-  const [newCommandName, setNewCommandName] = useState("")
-  const [newCommandAction, setNewCommandAction] = useState("")
-  const [storyRules, setStoryRules] = useState<StoryRulesData>({
-    defaultStartScenario: "",
-    allowUserChange: true,
-    allowCustom: true,
-    startOptions: [],
-    forbiddenDevelopments: [],
-  })
-  const [formData, setFormData] = useState<FormData>({
-    name: "",
-    category: "",
-    personalities: [],
-    relationship: "",
-    speechStyle: "",
-    appearance: "",
-    preferences: "",
-    secrets: "",
-    taboos: "",
-  })
+  const [mode, setMode] = useState<EntryMode>("menu")
+  const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
+  const [workDraft, setWorkDraft] = useState<WorkDraft>(() => emptyWorkDraft())
+  const [showWorkContinue, setShowWorkContinue] = useState(false)
+  const [characterDraft, setCharacterDraft] = useState<StoryCharacter>(() => emptyCharacter())
+  const [worldDraft, setWorldDraft] = useState<StoryWorld>(() => emptyWorld())
+  const [personaDraft, setPersonaDraft] = useState<StoryPersona>(() => emptyPersona())
+  const [showItemContinue, setShowItemContinue] = useState<Partial<Record<EntryMode, boolean>>>({})
+  const [isExitPromptOpen, setIsExitPromptOpen] = useState(false)
 
-  const getCreativityTier = (level: number): "low" | "mid" | "high" => {
-    if (level <= 2) return "low"
-    if (level <= 4) return "mid"
-    return "high"
-  }
+  useEffect(() => {
+    setLibrary(getStoryChatLibrary())
+    loadDrafts()
+    const requestedMode = new URLSearchParams(window.location.search).get("mode") as EntryMode | null
+    if (
+      requestedMode === "work" ||
+      requestedMode === "character" ||
+      requestedMode === "world" ||
+      requestedMode === "persona"
+    ) {
+      setMode(requestedMode)
+    }
+  }, [])
 
-  const pickRandom = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]
-
-  // Random generate all required fields at once
-  const handleRandomGenerate = () => {
-    const tier = getCreativityTier(creativityLevel[0])
-
-    setFormData((prev) => ({
-      ...prev,
-      name: pickRandom(RANDOM_DATA.names[tier]),
-      category: pickRandom(RANDOM_DATA.categories[tier]),
-      personalities: pickRandom(RANDOM_DATA.personalities[tier]),
-      relationship: pickRandom(RANDOM_DATA.relationships[tier]),
-      speechStyle: pickRandom(RANDOM_DATA.speechStyles[tier]),
-      secrets: RANDOM_DATA.backstories[tier],
-    }))
-  }
-
-  // Individual random generators
-  const randomizeName = () => {
-    const tier = getCreativityTier(creativityLevel[0])
-    setFormData((prev) => ({ ...prev, name: pickRandom(RANDOM_DATA.names[tier]) }))
-  }
-
-  const togglePersonality = (tag: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      personalities: prev.personalities.includes(tag)
-        ? prev.personalities.filter((t) => t !== tag)
-        : [...prev.personalities, tag],
-    }))
-  }
-
-  // Insert variable at cursor position
-  const insertVariable = (variable: "{user}" | "{char}") => {
-    const textarea = speechStyleRef.current
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const text = formData.speechStyle
-    const newText = text.substring(0, start) + variable + text.substring(end)
-
-    setFormData((prev) => ({ ...prev, speechStyle: newText }))
-
-    setTimeout(() => {
-      textarea.focus()
-      const newCursorPos = start + variable.length
-      textarea.setSelectionRange(newCursorPos, newCursorPos)
-    }, 0)
-  }
-
-  // Slash command handlers
-  const addCustomCommand = () => {
-    if (!newCommandName || !newCommandAction) return
-    const commandName = newCommandName.startsWith("/") ? newCommandName : `/${newCommandName}`
-    setSlashCommands((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        name: commandName,
-        action: newCommandAction,
-        icon: <MessageSquare className="h-4 w-4" />,
-        isCustom: true,
-      },
-    ])
-    setNewCommandName("")
-    setNewCommandAction("")
-  }
-
-  const removeCommand = (id: string) => {
-    setSlashCommands((prev) => prev.filter((cmd) => cmd.id !== id))
-  }
-
-  // Render text with variable replacement
-  const renderWithVariables = (text: string) => {
-    if (!text) return null
-
-    const charName = formData.name || "[캐릭터 이름]"
-    const parts = text.split(/(\{user\}|\{char\})/g)
-
-    return parts.map((part, index) => {
-      if (part === "{user}") {
-        return (
-          <strong key={index} className="text-primary">
-            사용자
-          </strong>
-        )
-      }
-      if (part === "{char}") {
-        return (
-          <strong key={index} className="text-primary">
-            {charName}
-          </strong>
-        )
-      }
-      return <span key={index}>{part}</span>
-    })
-  }
-
-  const generateSystemPrompt = () => {
-    const parts: { text: string; isPlaceholder: boolean }[] = []
-
-    parts.push({
-      text: `너의 이름은 ${formData.name || "[캐릭터 이름]"}이고, ${formData.category || "[세계관]"}에 살고 있어.`,
-      isPlaceholder: !formData.name || !formData.category,
-    })
-
-    if (formData.personalities.length > 0) {
-      parts.push({
-        text: `너의 성격은 ${formData.personalities.join(", ")}한 특징을 가지고 있어.`,
-        isPlaceholder: false,
-      })
-    } else {
-      parts.push({
-        text: "너의 성격은 [핵심 성격]한 특징을 가지고 있어.",
-        isPlaceholder: true,
-      })
+  const loadDrafts = () => {
+    const work = readDraft<WorkDraft>(WORK_DRAFT_KEY)
+    if (work) {
+      setWorkDraft({ ...emptyWorkDraft(), ...work, step: (work.step as string) === "persona" ? "review" : work.step })
+      setShowWorkContinue(true)
     }
 
-    parts.push({
-      text: `사용자와의 관계는 ${formData.relationship || "[관계 설정]"}이야.`,
-      isPlaceholder: !formData.relationship,
-    })
-
-    parts.push({
-      text: formData.speechStyle
-        ? `말투 규칙: ${formData.speechStyle}`
-        : "말투 규칙: [말투 및 말버릇 설정]",
-      isPlaceholder: !formData.speechStyle,
-    })
-
-    if (formData.appearance) {
-      parts.push({ text: `외모 및 특징: ${formData.appearance}`, isPlaceholder: false })
-    }
-    if (formData.preferences) {
-      parts.push({ text: `취향 및 호불호: ${formData.preferences}`, isPlaceholder: false })
-    }
-    if (formData.secrets) {
-      parts.push({ text: `숨겨진 과거: ${formData.secrets}`, isPlaceholder: false })
-    }
-    if (formData.taboos) {
-      parts.push({ text: `금기 사항: 절대로 ${formData.taboos}하지 ���.`, isPlaceholder: false })
+    const character = readDraft<ItemDraft<StoryCharacter>>(CHARACTER_DRAFT_KEY)
+    if (character?.item) {
+      setCharacterDraft({ ...emptyCharacter(), ...character.item })
+      setShowItemContinue((prev) => ({ ...prev, character: true }))
     }
 
-    // Add slash commands to prompt
-    if (slashCommands.length > 0) {
-      parts.push({
-        text: `\n[슬래시 명령어]\n${slashCommands.map((cmd) => `${cmd.name}: ${cmd.action}`).join("\n")}`,
-        isPlaceholder: false,
-      })
+    const world = readDraft<ItemDraft<StoryWorld>>(WORLD_DRAFT_KEY)
+    if (world?.item) {
+      setWorldDraft({ ...emptyWorld(), ...world.item })
+      setShowItemContinue((prev) => ({ ...prev, world: true }))
     }
 
-    return parts
+    const persona = readDraft<ItemDraft<StoryPersona>>(PERSONA_DRAFT_KEY)
+    if (persona?.item) {
+      setPersonaDraft({ ...emptyPersona(), ...persona.item })
+      setShowItemContinue((prev) => ({ ...prev, persona: true }))
+    }
   }
 
-  const handleSubmit = () => {
-    router.push("/")
-  }
-
-  const isFormValid =
-    formData.name &&
-    formData.category &&
-    formData.personalities.length > 0 &&
-    formData.relationship &&
-    formData.speechStyle
-
-  const creativityLabels = ["평범함", "", "", "중립", "", "독특함"]
-
-  // Preview Content Component
-  const PreviewContent = () => (
-    <ScrollArea className="flex-1">
-      <div className="p-6">
-        <div className="space-y-4 text-sm leading-relaxed">
-          {generateSystemPrompt().map((part, index) => (
-            <p
-              key={index}
-              className={part.isPlaceholder ? "text-muted-foreground" : "text-foreground whitespace-pre-wrap"}
-            >
-              {part.text.includes("{user}") || part.text.includes("{char}")
-                ? renderWithVariables(part.text)
-                : part.text}
-            </p>
-          ))}
-        </div>
-      </div>
-    </ScrollArea>
+  const selectedCharacter = useMemo(
+    () =>
+      workDraft.characterSource === "select"
+        ? library.characters.find((item) => item.id === workDraft.selectedCharacterId)
+        : workDraft.character,
+    [library.characters, workDraft],
   )
+
+  const selectedWorld = useMemo(
+    () =>
+      workDraft.worldSource === "select"
+        ? library.worlds.find((item) => item.id === workDraft.selectedWorldId)
+        : workDraft.world,
+    [library.worlds, workDraft],
+  )
+
+  const currentStepIndex = workSteps.findIndex((step) => step.id === workDraft.step)
+  const previousStep = workSteps[currentStepIndex - 1]?.id
+  const nextStep = workSteps[currentStepIndex + 1]?.id
+
+  const setLibraryAndPersist = (nextLibrary: StoryChatLibrary) => {
+    setLibrary(nextLibrary)
+    saveStoryChatLibrary(nextLibrary)
+  }
+
+  const saveWorkDraft = () => {
+    const nextDraft = { ...workDraft, savedAt: new Date().toISOString() }
+    setWorkDraft(nextDraft)
+    window.localStorage.setItem(WORK_DRAFT_KEY, JSON.stringify(nextDraft))
+    setShowWorkContinue(false)
+    toast("임시저장했어요.")
+  }
+
+  const saveItemDraft = (target: "character" | "world" | "persona") => {
+    const key =
+      target === "character"
+        ? CHARACTER_DRAFT_KEY
+        : target === "world"
+          ? WORLD_DRAFT_KEY
+          : PERSONA_DRAFT_KEY
+    const item =
+      target === "character" ? characterDraft : target === "world" ? worldDraft : personaDraft
+
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({ item, savedAt: new Date().toISOString() }),
+    )
+    setShowItemContinue((prev) => ({ ...prev, [target]: false }))
+    toast("임시저장했어요.")
+  }
+
+  const completeCharacter = () => {
+    if (!isCharacterReady(characterDraft)) return
+    const saved = normalizeCharacter(characterDraft)
+    setLibraryAndPersist({ ...library, characters: upsertById(library.characters, saved) })
+    window.localStorage.removeItem(CHARACTER_DRAFT_KEY)
+    toast("내 캐릭터에 저장했어요.")
+    setCharacterDraft(emptyCharacter())
+    setMode("menu")
+  }
+
+  const completeWorld = () => {
+    if (!isWorldReady(worldDraft)) return
+    const saved = normalizeWorld(worldDraft)
+    setLibraryAndPersist({ ...library, worlds: upsertById(library.worlds, saved) })
+    window.localStorage.removeItem(WORLD_DRAFT_KEY)
+    toast("내 세계관에 저장했어요.")
+    setWorldDraft(emptyWorld())
+    setMode("menu")
+  }
+
+  const completePersona = () => {
+    if (!isPersonaReady(personaDraft)) return
+    const saved = normalizePersona(personaDraft)
+    setLibraryAndPersist({ ...library, personas: upsertById(library.personas, saved) })
+    window.localStorage.removeItem(PERSONA_DRAFT_KEY)
+    toast("내 자아에 저장했어요.")
+    setPersonaDraft(emptyPersona())
+    setMode("menu")
+  }
+
+  const completeWork = (goChat: boolean) => {
+    const character = resolveWorkCharacter()
+    const world = resolveWorkWorld()
+    if (!character || !world || !workDraft.title) return
+
+    const now = new Date().toISOString()
+    const work: StoryWork = {
+      id: createId("work"),
+      title: workDraft.title,
+      characterId: character.id,
+      worldId: world.id,
+      personaId: "",
+      startScenario: workDraft.startScenario || character.defaultStartScenario,
+      introScenarios: cleanIntroScenarios(workDraft.introScenarios),
+      storyProgressSettings: world.storyProgressSettings,
+      genre: workDraft.genre.trim() || String(world.genre),
+      tagline: workDraft.tagline.trim() || world.tagline,
+      coreSetting: workDraft.coreSetting.trim() || workDraft.tagline.trim() || world.coreSetting,
+      majorLocations: workDraft.majorLocations.trim() || world.places,
+      majorEvents: workDraft.majorEvents.trim() || world.events,
+      mood: workDraft.mood.trim() || world.mood,
+      currentChapter: workDraft.currentChapter.trim() || world.currentChapter,
+      currentGoal: workDraft.currentGoal.trim() || world.currentGoal,
+      worldDate: workDraft.worldDate.trim() || world.worldDate,
+      coverImageUrl: workDraft.coverImageUrl.trim() || world.coverImageUrl,
+      statusBarEnabled: workDraft.statusBarEnabled,
+      statusBarText: workDraft.statusBarText,
+      statusBarUpdatedAt: workDraft.statusBarEnabled ? new Date().toISOString() : undefined,
+      createdAt: now,
+      updatedAt: "오늘",
+    }
+
+    const nextLibrary = {
+      characters: upsertById(library.characters, character),
+      worlds: upsertById(library.worlds, world),
+      personas: library.personas,
+      works: [work, ...library.works],
+    }
+
+    setLibraryAndPersist(nextLibrary)
+    window.localStorage.removeItem(WORK_DRAFT_KEY)
+    toast(goChat ? "작품을 저장하고 채팅을 시작해요." : "내 완성본에 저장했어요.")
+    setWorkDraft(emptyWorkDraft())
+    if (goChat) router.push(`/chat/${work.id}`)
+    else setMode("menu")
+  }
+
+  const resolveWorkCharacter = () => {
+    if (workDraft.characterSource === "select") return selectedCharacter
+    return isCharacterReady(workDraft.character) ? normalizeCharacter(workDraft.character) : null
+  }
+
+  const resolveWorkWorld = () => {
+    if (workDraft.worldSource === "select") return selectedWorld
+    return isWorldReady(workDraft.world) ? normalizeWorld(workDraft.world) : null
+  }
+
+  const canGoNext =
+    workDraft.step === "character"
+      ? Boolean(resolveWorkCharacter())
+      : workDraft.step === "world"
+        ? Boolean(resolveWorkWorld())
+        : Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
+
+  const goBack = () => {
+    if (mode === "menu") router.push("/")
+    else setMode("menu")
+  }
+
+  const saveCurrentDraft = () => {
+    if (mode === "work") {
+      saveWorkDraft()
+      return
+    }
+
+    if (mode === "character" || mode === "world" || mode === "persona") {
+      saveItemDraft(mode)
+    }
+  }
+
+  const leaveCreateMode = () => {
+    setIsExitPromptOpen(false)
+    setMode("menu")
+  }
+
+  const handleSaveAndExit = () => {
+    saveCurrentDraft()
+    leaveCreateMode()
+  }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-background text-foreground">
-      {/* Header */}
-      <header className="shrink-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
+      <header className="shrink-0 z-50 border-b border-border bg-background backdrop-blur supports-[backdrop-filter]:bg-background">
         <div className="flex h-14 items-center gap-4 px-4 md:px-6">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/")}
-            className="shrink-0"
-          >
+          <Button variant="ghost" size="icon" onClick={goBack} className="shrink-0">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-lg font-semibold">새 캐릭터 생성</h1>
-
-          {/* Mode Toggle */}
-          <div className="ml-auto flex items-center rounded-full bg-secondary/50 p-1">
-            <button
-              onClick={() => setMode("simple")}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                mode === "simple"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              간단
-            </button>
-            <button
-              onClick={() => setMode("advanced")}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                mode === "advanced"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              고급
-            </button>
-          </div>
+          <h1 className="text-lg font-semibold">
+            {mode === "menu"
+              ? "만들기"
+              : mode === "work"
+                ? "작품 만들기"
+                : mode === "character"
+                  ? "캐릭터 만들기"
+                  : mode === "world"
+                    ? "세계관 만들기"
+                    : "자아 만들기"}
+          </h1>
+          {mode !== "menu" && (
+            <Button variant="outline" size="sm" onClick={() => setIsExitPromptOpen(true)} className="ml-auto">
+              나가기
+            </Button>
+          )}
         </div>
+        {mode === "work" && <WorkStepper step={workDraft.step} />}
       </header>
 
-      {/* Main Content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Input Form */}
-        <div className="w-full md:w-1/2 flex flex-col min-h-0">
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-4 md:p-8 space-y-6 md:space-y-8 pb-8">
-              {/* Random Generator Section (advanced only) */}
-              {mode === "advanced" && (
-              <section className="space-y-4">
-                <Card className="bg-card/50 border-border/50">
-                  <CardContent className="p-4 md:p-6 space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-sm font-medium">창의력 조절 (Creativity Level)</span>
-                        <span className="text-xs text-muted-foreground">
-                          {creativityLevel[0]} / 5
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">평범함</span>
-                        <Slider
-                          value={creativityLevel}
-                          onValueChange={setCreativityLevel}
-                          min={1}
-                          max={5}
-                          step={1}
-                          className="flex-1"
-                        />
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">독특함</span>
-                      </div>
-                    </div>
-                    <Button
-                      size="lg"
-                      className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                      onClick={handleRandomGenerate}
-                    >
-                      <Sparkles className="mr-2 h-5 w-5" />
-                      이 설정으로 캐릭터 랜덤 생성
-                    </Button>
-                  </CardContent>
-                </Card>
-              </section>
-              )}
-
-              {/* Step 1: Core Identity */}
-              <section className="space-y-5 md:space-y-6">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                    1
-                  </div>
-                  <h2 className="text-lg font-semibold">필수 정보 (Core Identity)</h2>
-                </div>
-
-                <FieldGroup className="space-y-4 md:space-y-5">
-                  {/* Character Name with Random Button */}
-                  <Field>
-                    <FieldLabel htmlFor="name">캐릭터 이름</FieldLabel>
-                    <div className="flex gap-2">
-                      <Input
-                        id="name"
-                        placeholder="예: 아리아, 김대리"
-                        value={formData.name}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, name: e.target.value }))
-                        }
-                        className="bg-input flex-1"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={randomizeName}
-                        className="shrink-0"
-                        title="이름 랜덤 생성"
-                      >
-                        <Dices className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </Field>
-
-                  {/* Category */}
-                  <Field>
-                    <FieldLabel htmlFor="category">세계관 / 카테고리</FieldLabel>
-                    <Select
-                      value={formData.category}
-                      onValueChange={(value: Category) =>
-                        setFormData((prev) => ({ ...prev, category: value }))
-                      }
-                    >
-                      <SelectTrigger id="category" className="bg-input">
-                        <SelectValue placeholder="세계관을 선택하세요" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </Field>
-
-                  {/* Personality Tags */}
-                  <Field>
-                    <FieldLabel>핵심 성격 (복수 선택 가능)</FieldLabel>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {PERSONALITY_TAGS.map((tag) => (
-                        <Badge
-                          key={tag}
-                          variant={
-                            formData.personalities.includes(tag) ? "default" : "outline"
-                          }
-                          className={`cursor-pointer transition-all ${
-                            formData.personalities.includes(tag)
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-secondary"
-                          }`}
-                          onClick={() => togglePersonality(tag)}
-                        >
-                          #{tag}
-                          {formData.personalities.includes(tag) && (
-                            <X className="ml-1 h-3 w-3" />
-                          )}
-                        </Badge>
-                      ))}
-                    </div>
-                  </Field>
-
-                  {/* Relationship */}
-                  <Field>
-                    <FieldLabel htmlFor="relationship">사용자와의 관계</FieldLabel>
-                    <Input
-                      id="relationship"
-                      placeholder="예: 직장 상사, 소꿉친구, 스승"
-                      value={formData.relationship}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          relationship: e.target.value,
-                        }))
-                      }
-                      className="bg-input"
-                    />
-                  </Field>
-
-                  {/* Speech Style with Variable Buttons */}
-                  <Field>
-                    <FieldLabel htmlFor="speechStyle">말투 및 규칙</FieldLabel>
-                    <div className="flex gap-2 mb-2">
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs"
-                        onClick={() => insertVariable("{user}")}
-                      >
-                        {"{user}"} 추가
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors text-xs"
-                        onClick={() => insertVariable("{char}")}
-                      >
-                        {"{char}"} 추가
-                      </Badge>
-                    </div>
-                    <Textarea
-                      id="speechStyle"
-                      ref={speechStyleRef}
-                      placeholder={`캐릭터의 말투나 말버릇을 구체적으로 입력하세요.\n예: {char}는 문장 끝에 '~이다'를 붙이며 {user}에게 존댓말을 사용함.`}
-                      value={formData.speechStyle}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          speechStyle: e.target.value,
-                        }))
-                      }
-                      className="bg-input min-h-[100px]"
-                    />
-                  </Field>
-                </FieldGroup>
-              </section>
-
-              {/* Step 2: Deep Persona (Accordion) - advanced only */}
-              {mode === "advanced" && (
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
-                    2
-                  </div>
-                  <h2 className="text-lg font-semibold text-muted-foreground">
-                    선택 정보 (Deep Persona)
-                  </h2>
-                </div>
-
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="deep-persona" className="border-border/50">
-                    <AccordionTrigger className="text-muted-foreground hover:text-foreground">
-                      상세 설정 펼치기
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <FieldGroup className="space-y-4 md:space-y-5 pt-4">
-                        <Field>
-                          <FieldLabel htmlFor="appearance">외모 및 특징</FieldLabel>
-                          <Input
-                            id="appearance"
-                            placeholder="예: 은발에 푸른 눈, 항상 검은 망토를 걸침"
-                            value={formData.appearance}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                appearance: e.target.value,
-                              }))
-                            }
-                            className="bg-input"
-                          />
-                        </Field>
-
-                        <Field>
-                          <FieldLabel htmlFor="preferences">취향 및 호불호</FieldLabel>
-                          <Input
-                            id="preferences"
-                            placeholder="예: 커피를 좋아하고 시끄러운 곳을 싫어함"
-                            value={formData.preferences}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                preferences: e.target.value,
-                              }))
-                            }
-                            className="bg-input"
-                          />
-                        </Field>
-
-                        <Field>
-                          <FieldLabel htmlFor="secrets">숨겨진 비밀 / 과거사</FieldLabel>
-                          <Textarea
-                            id="secrets"
-                            placeholder="캐릭터가 숨기고 있는 비밀이나 과거의 사건을 입력하세요."
-                            value={formData.secrets}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                secrets: e.target.value,
-                              }))
-                            }
-                            className="bg-input min-h-[80px]"
-                          />
-                        </Field>
-
-                        <Field>
-                          <FieldLabel htmlFor="taboos">금기 사항</FieldLabel>
-                          <Input
-                            id="taboos"
-                            placeholder="예: 과거에 대해 묻는 것, 반말하는 것"
-                            value={formData.taboos}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                taboos: e.target.value,
-                              }))
-                            }
-                            className="bg-input"
-                          />
-                        </Field>
-                      </FieldGroup>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </section>
-              )}
-
-              {/* Story Rules: start scenario + forbidden developments - advanced only */}
-              {mode === "advanced" && (
-                <StoryRulesSection data={storyRules} onChange={setStoryRules} />
-              )}
-
-              {/* Step 3: Slash Commands (Accordion) - advanced only */}
-              {mode === "advanced" && (
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-medium">
-                    3
-                  </div>
-                  <h2 className="text-lg font-semibold text-muted-foreground">
-                    명령어 정의 (Slash Commands)
-                  </h2>
-                </div>
-
-                <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="slash-commands" className="border-border/50">
-                    <AccordionTrigger className="text-muted-foreground hover:text-foreground">
-                      슬래시 명령어 설정
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="space-y-4 pt-4">
-                        {/* Existing Commands */}
-                        <div className="space-y-2">
-                          {slashCommands.map((cmd) => (
-                            <div
-                              key={cmd.id}
-                              className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30"
-                            >
-                              <div className="text-primary">{cmd.icon}</div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm">{cmd.name}</p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {cmd.action}
-                                </p>
-                              </div>
-                              {cmd.isCustom && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                                  onClick={() => removeCommand(cmd.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Add Custom Command */}
-                        <div className="space-y-3 pt-2 border-t border-border/50">
-                          <p className="text-sm font-medium">커스텀 명령어 추가</p>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="명령어 (예: /힌트)"
-                              value={newCommandName}
-                              onChange={(e) => setNewCommandName(e.target.value)}
-                              className="bg-input flex-1"
-                            />
-                          </div>
-                          <Input
-                            placeholder="동작 설명 (예: 다음 행동에 대한 힌트를 준다)"
-                            value={newCommandAction}
-                            onChange={(e) => setNewCommandAction(e.target.value)}
-                            className="bg-input"
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={addCustomCommand}
-                            disabled={!newCommandName || !newCommandAction}
-                            className="w-full"
-                          >
-                            <Plus className="mr-2 h-4 w-4" />
-                            명령어 추가
-                          </Button>
-                        </div>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </section>
-              )}
-
-              {/* Desktop Submit Button */}
-              <div className="hidden md:block pt-4 pb-8">
-                <Button
-                  size="lg"
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={handleSubmit}
-                  disabled={!isFormValid}
-                >
-                  <Rocket className="mr-2 h-5 w-5" />
-                  캐릭터 생성 및 대화 시작
-                </Button>
-              </div>
-            </div>
-          </ScrollArea>
-
-          {/* Mobile Bottom Action Bar - normal block */}
-          <div className="shrink-0 md:hidden bg-background border-t border-border p-4 space-y-3">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setIsPreviewOpen(true)}
-            >
-              <Eye className="mr-2 h-4 w-4" />
-              프롬프트 미리보기
+      <AlertDialog open={isExitPromptOpen} onOpenChange={setIsExitPromptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>임시 저장할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              작성 중인 내용이 있어요. 임시저장하면 다음에 이어서 작성할 수 있습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <Button variant="outline" onClick={leaveCreateMode}>
+              저장 안 함
             </Button>
+            <AlertDialogAction onClick={handleSaveAndExit}>
+              임시저장 후 나가기
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-            <Button
-              size="lg"
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={handleSubmit}
-              disabled={!isFormValid}
+      <ScrollArea className="flex-1 min-h-0 overflow-hidden">
+        <main className="mx-auto w-full max-w-5xl p-4 md:p-8 pb-28 space-y-6">
+          {mode === "menu" && (
+            <CreateMenu
+              showWorkContinue={showWorkContinue}
+              onContinueWork={() => {
+                setShowWorkContinue(false)
+                setMode("work")
+              }}
+              onStart={(nextMode) => {
+                setMode(nextMode)
+                if (nextMode === "work" && !showWorkContinue) {
+                  setWorkDraft(emptyWorkDraft())
+                }
+              }}
+            />
+          )}
+
+          {mode === "work" && (
+            <>
+              {showWorkContinue && (
+                <ContinueCard
+                  title="작성 중인 작품이 있어요. 이어서 작성할까요?"
+                  onContinue={() => setShowWorkContinue(false)}
+                  onDiscard={() => {
+                    window.localStorage.removeItem(WORK_DRAFT_KEY)
+                    setShowWorkContinue(false)
+                    setWorkDraft(emptyWorkDraft())
+                  }}
+                />
+              )}
+              {workDraft.step === "character" && (
+                <CharacterWorkStep
+                  library={library}
+                  draft={workDraft}
+                  setDraft={setWorkDraft}
+                />
+              )}
+              {workDraft.step === "world" && (
+                <WorldWorkStep library={library} draft={workDraft} setDraft={setWorkDraft} />
+              )}
+              {workDraft.step === "review" && (
+                <ReviewStep
+                  draft={workDraft}
+                  setDraft={setWorkDraft}
+                  character={selectedCharacter}
+                  world={selectedWorld}
+                />
+              )}
+            </>
+          )}
+
+          {mode === "character" && (
+            <IndividualShell
+              showContinue={Boolean(showItemContinue.character)}
+              onContinue={() => setShowItemContinue((prev) => ({ ...prev, character: false }))}
+              onDiscard={() => {
+                window.localStorage.removeItem(CHARACTER_DRAFT_KEY)
+                setCharacterDraft(emptyCharacter())
+                setShowItemContinue((prev) => ({ ...prev, character: false }))
+              }}
             >
-              <Rocket className="mr-2 h-5 w-5" />
-              캐릭터 생성 및 대화 시작
+              <CharacterForm value={characterDraft} onChange={setCharacterDraft} />
+            </IndividualShell>
+          )}
+
+          {mode === "world" && (
+            <IndividualShell
+              showContinue={Boolean(showItemContinue.world)}
+              onContinue={() => setShowItemContinue((prev) => ({ ...prev, world: false }))}
+              onDiscard={() => {
+                window.localStorage.removeItem(WORLD_DRAFT_KEY)
+                setWorldDraft(emptyWorld())
+                setShowItemContinue((prev) => ({ ...prev, world: false }))
+              }}
+            >
+              <WorldForm value={worldDraft} onChange={setWorldDraft} />
+            </IndividualShell>
+          )}
+
+          {mode === "persona" && (
+            <IndividualShell
+              showContinue={Boolean(showItemContinue.persona)}
+              onContinue={() => setShowItemContinue((prev) => ({ ...prev, persona: false }))}
+              onDiscard={() => {
+                window.localStorage.removeItem(PERSONA_DRAFT_KEY)
+                setPersonaDraft(emptyPersona())
+                setShowItemContinue((prev) => ({ ...prev, persona: false }))
+              }}
+            >
+              <PersonaForm value={personaDraft} onChange={setPersonaDraft} />
+            </IndividualShell>
+          )}
+        </main>
+      </ScrollArea>
+
+      {mode === "work" && (
+        <BottomActions>
+          <Button
+            variant="outline"
+            className="flex-1"
+            disabled={!previousStep}
+            onClick={() => previousStep && setWorkDraft((prev) => ({ ...prev, step: previousStep }))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            이전
+          </Button>
+          <Button variant="outline" className="flex-1" onClick={saveWorkDraft}>
+            <Save className="h-4 w-4" />
+            임시저장
+          </Button>
+          {nextStep ? (
+            <Button
+              className="flex-1"
+              disabled={!canGoNext}
+              onClick={() => setWorkDraft((prev) => ({ ...prev, step: nextStep }))}
+            >
+              다음
+              <ChevronRight className="h-4 w-4" />
             </Button>
-          </div>
-        </div>
+          ) : (
+            <>
+              <Button variant="outline" className="flex-1" disabled={!canGoNext} onClick={() => completeWork(false)}>
+                내 작품에 저장
+              </Button>
+              <Button className="flex-1" disabled={!canGoNext} onClick={() => completeWork(true)}>
+                <Rocket className="h-4 w-4" />
+                바로 채팅 시작
+              </Button>
+            </>
+          )}
+        </BottomActions>
+      )}
 
-        {/* Right: System Prompt Preview (Desktop only) */}
-        <div className="hidden md:block w-1/2 bg-secondary/10">
-          <div className="h-full p-8">
-            <Card className="h-full bg-card/50 border-border/50 flex flex-col">
-              <CardHeader className="border-b border-border/50 shrink-0">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  시스템 프롬프트 (실시간 조립)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
-                <PreviewContent />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+      {mode === "character" && (
+        <BottomActions>
+          <Button variant="outline" className="flex-1" onClick={() => saveItemDraft("character")}>
+            <Save className="h-4 w-4" />
+            임시저장
+          </Button>
+          <Button className="flex-1" disabled={!isCharacterReady(characterDraft)} onClick={completeCharacter}>
+            내 캐릭터에 저장
+          </Button>
+        </BottomActions>
+      )}
 
-      {/* Mobile Bottom Fixed Area */}
-      <div className="fixed bottom-16 left-0 right-0 md:hidden bg-background/95 backdrop-blur border-t border-border p-4 space-y-3 z-40">
-        <Button
-          variant="outline"
-          className="w-full"
-          onClick={() => setIsPreviewOpen(true)}
-        >
-          <Eye className="mr-2 h-4 w-4" />
-          프롬프트 미리보기
-        </Button>
+      {mode === "world" && (
+        <BottomActions>
+          <Button variant="outline" className="flex-1" onClick={() => saveItemDraft("world")}>
+            <Save className="h-4 w-4" />
+            임시저장
+          </Button>
+          <Button className="flex-1" disabled={!isWorldReady(worldDraft)} onClick={completeWorld}>
+            내 세계관에 저장
+          </Button>
+        </BottomActions>
+      )}
 
-        <Button
-          size="lg"
-          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-          onClick={handleSubmit}
-          disabled={!isFormValid}
-        >
-          <Rocket className="mr-2 h-5 w-5" />
-          캐릭터 생성 및 대화 시작
-        </Button>
-      </div>
+      {mode === "persona" && (
+        <BottomActions>
+          <Button variant="outline" className="flex-1" onClick={() => saveItemDraft("persona")}>
+            <Save className="h-4 w-4" />
+            임시저장
+          </Button>
+          <Button className="flex-1" disabled={!isPersonaReady(personaDraft)} onClick={completePersona}>
+            내 자아에 저장
+          </Button>
+        </BottomActions>
+      )}
 
-      {/* Mobile Preview Sheet */}
-      <Sheet open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <SheetContent side="bottom" className="h-[80vh] p-0">
-          <SheetHeader className="border-b border-border/50 p-4">
-            <SheetTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4 text-primary" />
-              시스템 프롬프트 (실시간 조립)
-            </SheetTitle>
-          </SheetHeader>
-          <div className="flex flex-col h-[calc(80vh-60px)]">
-            <PreviewContent />
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   )
+}
+
+function CreateMenu({
+  showWorkContinue,
+  onContinueWork,
+  onStart,
+}: {
+  showWorkContinue: boolean
+  onContinueWork: () => void
+  onStart: (mode: EntryMode) => void
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h2 className="text-2xl font-bold tracking-tight">무엇을 만들까요?</h2>
+        <p className="text-sm text-muted-foreground">
+          필요한 항목만 따로 만들거나, 완성본으로 묶어 바로 채팅을 시작할 수 있어요.
+        </p>
+      </div>
+
+      {showWorkContinue && (
+        <ContinueCard
+          title="작성 중인 작품이 있어요. 이어서 작성할까요?"
+          onContinue={onContinueWork}
+        />
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {createOptions.map((option) => (
+          <button
+            key={option.mode}
+            onClick={() => onStart(option.mode)}
+            className="group rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-accent"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                <option.icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <h3 className="font-semibold text-foreground">{option.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {option.description}
+                </p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WorkStepper({ step }: { step: WorkStep }) {
+  const activeIndex = workSteps.findIndex((item) => item.id === step)
+
+  return (
+    <div className="px-4 md:px-8 py-4 border-t border-border">
+      <div className="flex items-center gap-2">
+        {workSteps.map((item, index) => {
+          const active = item.id === step
+          const complete = index < activeIndex
+          return (
+            <div key={item.id} className="flex flex-1 items-center gap-2">
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full border px-3 py-2 text-xs font-medium",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : complete
+                      ? "border-border bg-secondary text-foreground"
+                      : "border-border bg-secondary text-muted-foreground",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px]",
+                    active
+                      ? "bg-primary-foreground/20"
+                      : complete
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {complete ? <Check className="h-3 w-3" /> : index + 1}
+                </span>
+                <span className="truncate">{item.label}</span>
+              </div>
+              {index < workSteps.length - 1 && <div className="hidden h-px w-5 bg-border sm:block" />}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ContinueCard({
+  title,
+  onContinue,
+  onDiscard,
+}: {
+  title: string
+  onContinue: () => void
+  onDiscard?: () => void
+}) {
+  return (
+    <Card className="bg-card border-border">
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-medium">{title}</p>
+          <div className="flex gap-2">
+            {onDiscard && (
+              <Button variant="outline" size="sm" onClick={onDiscard}>
+                삭제
+              </Button>
+            )}
+            <Button size="sm" onClick={onContinue}>
+              이어서 작성
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function CharacterWorkStep({
+  library,
+  draft,
+  setDraft,
+}: {
+  library: StoryChatLibrary
+  draft: WorkDraft
+  setDraft: React.Dispatch<React.SetStateAction<WorkDraft>>
+}) {
+  return (
+    <StepSection title="캐릭터 선택 또는 새로 만들기" number="1">
+      <Tabs
+        value={draft.characterSource}
+        onValueChange={(value) => setDraft((prev) => ({ ...prev, characterSource: value as SourceMode }))}
+      >
+        <TabsList className="w-full">
+          <TabsTrigger value="select">내 캐릭터에서 선택</TabsTrigger>
+          <TabsTrigger value="new">새 캐릭터 만들기</TabsTrigger>
+        </TabsList>
+        <TabsContent value="select" className="pt-4">
+          {library.characters.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {library.characters.map((character) => (
+                <CharacterSelectCard
+                  key={character.id}
+                  character={character}
+                  selected={draft.selectedCharacterId === character.id}
+                  onClick={() => setDraft((prev) => ({ ...prev, selectedCharacterId: character.id }))}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptySelectState
+              title="현재 생성된 캐릭터가 없습니다."
+              description="새 캐릭터 만들기 버튼을 눌러 캐릭터를 생성해 주세요."
+              actionLabel="새 캐릭터 만들기"
+              onAction={() => setDraft((prev) => ({ ...prev, characterSource: "new" }))}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="new" className="pt-4">
+          <CharacterForm
+            value={draft.character}
+            onChange={(character) => setDraft((prev) => ({ ...prev, character }))}
+          />
+        </TabsContent>
+      </Tabs>
+    </StepSection>
+  )
+}
+
+function WorldWorkStep({
+  library,
+  draft,
+  setDraft,
+}: {
+  library: StoryChatLibrary
+  draft: WorkDraft
+  setDraft: React.Dispatch<React.SetStateAction<WorkDraft>>
+}) {
+  return (
+    <StepSection title="세계관 선택 또는 새로 만들기" number="2">
+      <Tabs
+        value={draft.worldSource}
+        onValueChange={(value) => setDraft((prev) => ({ ...prev, worldSource: value as SourceMode }))}
+      >
+        <TabsList className="w-full">
+          <TabsTrigger value="select">내 세계관에서 선택</TabsTrigger>
+          <TabsTrigger value="new">새 세계관 만들기</TabsTrigger>
+        </TabsList>
+        <TabsContent value="select" className="pt-4">
+          {library.worlds.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {library.worlds.map((world) => (
+                <WorldSelectCard
+                  key={world.id}
+                  world={world}
+                  selected={draft.selectedWorldId === world.id}
+                  onClick={() => setDraft((prev) => ({ ...prev, selectedWorldId: world.id }))}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptySelectState
+              title="현재 생성된 세계관이 없습니다."
+              description="새 세계관 만들기 버튼을 눌러 세계관을 생성해 주세요."
+              actionLabel="새 세계관 만들기"
+              onAction={() => setDraft((prev) => ({ ...prev, worldSource: "new" }))}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="new" className="pt-4">
+          <WorldForm
+            value={draft.world}
+            onChange={(world) => setDraft((prev) => ({ ...prev, world }))}
+          />
+        </TabsContent>
+      </Tabs>
+    </StepSection>
+  )
+}
+
+function ReviewStep({
+  draft,
+  setDraft,
+  character,
+  world,
+}: {
+  draft: WorkDraft
+  setDraft: React.Dispatch<React.SetStateAction<WorkDraft>>
+  character?: StoryCharacter
+  world?: StoryWorld
+}) {
+  const [formMode, setFormMode] = useState<WorkFormMode>("simple")
+  const genre = draft.genre || String(world?.genre || "")
+  const tagline = draft.tagline || world?.tagline || draft.coreSetting || world?.coreSetting || ""
+  const coreSetting = draft.coreSetting || draft.tagline || world?.coreSetting || ""
+  const simpleIntro = draft.introScenarios[0]?.scene ?? draft.startScenario
+
+  const changeMode = (nextMode: WorkFormMode) => {
+    setFormMode(nextMode)
+    window.localStorage.setItem(WORK_FORM_MODE_KEY, nextMode)
+  }
+
+  const update = <K extends keyof WorkDraft>(key: K, value: WorkDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const updateSimpleIntro = (scene: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      startScenario: scene,
+      introScenarios: mergeSimpleIntro(prev.introScenarios, scene),
+    }))
+  }
+
+  return (
+    <StepSection title="완성본 확인" number="3">
+      <div className="grid gap-3 lg:grid-cols-2">
+        {character && <CharacterSelectCard character={character} selected />}
+        {world && <WorldSelectCard world={world} selected />}
+      </div>
+
+      <WorkModeSwitch value={formMode} onChange={changeMode} />
+
+      {formMode === "simple" ? (
+        <Card className="bg-card border-border">
+          <CardContent className="p-4 md:p-6">
+            <FieldGroup className="space-y-4">
+              <Field>
+                <FieldLabel htmlFor="workTitle">작품 제목</FieldLabel>
+                <Input
+                  id="workTitle"
+                  placeholder="예: 이무기와 잊혀진 왕국"
+                  value={draft.title}
+                  onChange={(event) => update("title", event.target.value)}
+                  className="bg-input"
+                />
+              </Field>
+              <Field>
+                <FieldLabel>장르</FieldLabel>
+                <GenreSelectWithCustomInput value={genre} onChange={(value) => update("genre", value)} />
+              </Field>
+              <Field>
+                <FieldLabel>한 줄 소개</FieldLabel>
+                <Textarea
+                  value={tagline}
+                  onChange={(event) => {
+                    update("tagline", event.target.value)
+                    update("coreSetting", event.target.value)
+                  }}
+                  className="min-h-[82px] bg-input"
+                  placeholder="작품을 한 문장으로 설명해 주세요."
+                />
+              </Field>
+              <Field>
+                <FieldLabel>첫 상황 / 도입부 간단 입력</FieldLabel>
+                <Textarea
+                  value={simpleIntro}
+                  onChange={(event) => updateSimpleIntro(event.target.value)}
+                  className="min-h-[90px] bg-input"
+                  placeholder="바로 채팅을 시작할 첫 장면을 적어 주세요."
+                />
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <Card className="bg-card border-border">
+            <CardContent className="p-4 md:p-6">
+              <FieldGroup className="space-y-4">
+                <Field>
+                  <FieldLabel htmlFor="workTitleAdvanced">작품 제목</FieldLabel>
+                  <Input
+                    id="workTitleAdvanced"
+                    value={draft.title}
+                    onChange={(event) => update("title", event.target.value)}
+                    className="bg-input"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel>장르</FieldLabel>
+                  <GenreSelectWithCustomInput value={genre} onChange={(value) => update("genre", value)} />
+                </Field>
+                <Field>
+                  <FieldLabel>한 줄 소개</FieldLabel>
+                  <Textarea value={tagline} onChange={(event) => update("tagline", event.target.value)} className="min-h-[76px] bg-input" />
+                </Field>
+                <Field>
+                  <FieldLabel>대표 이미지 URL</FieldLabel>
+                  <Input value={draft.coverImageUrl || world?.coverImageUrl || ""} onChange={(event) => update("coverImageUrl", event.target.value)} className="bg-input" />
+                </Field>
+              </FieldGroup>
+            </CardContent>
+          </Card>
+
+          <AdvancedCreateSection title="세계관 설정" defaultOpen>
+            <Field>
+              <FieldLabel>핵심 설정</FieldLabel>
+              <Textarea value={coreSetting} onChange={(event) => update("coreSetting", event.target.value)} className="min-h-[90px] bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>분위기</FieldLabel>
+              <Input value={draft.mood || world?.mood || ""} onChange={(event) => update("mood", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>주요 장소</FieldLabel>
+              <Textarea value={draft.majorLocations || world?.places || ""} onChange={(event) => update("majorLocations", event.target.value)} className="min-h-[80px] bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>주요 사건</FieldLabel>
+              <Textarea value={draft.majorEvents || world?.events || ""} onChange={(event) => update("majorEvents", event.target.value)} className="min-h-[80px] bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>세계관 날짜</FieldLabel>
+              <Input value={draft.worldDate || world?.worldDate || ""} onChange={(event) => update("worldDate", event.target.value)} className="bg-input" />
+            </Field>
+          </AdvancedCreateSection>
+
+          <AdvancedCreateSection title="진행 상태">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              상태바는 채팅 중 현재 위치, 목표, 장면 정보를 보여주는 보조 정보입니다.
+            </p>
+            <Field>
+              <FieldLabel>현재 챕터</FieldLabel>
+              <Input value={draft.currentChapter || world?.currentChapter || ""} onChange={(event) => update("currentChapter", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>현재 목표</FieldLabel>
+              <Input value={draft.currentGoal || world?.currentGoal || ""} onChange={(event) => update("currentGoal", event.target.value)} className="bg-input" />
+            </Field>
+            <StatusBarSettingsFields
+              enabled={draft.statusBarEnabled}
+              text={draft.statusBarText}
+              onEnabledChange={(statusBarEnabled) => update("statusBarEnabled", statusBarEnabled)}
+              onTextChange={(statusBarText) => update("statusBarText", statusBarText)}
+            />
+          </AdvancedCreateSection>
+
+          <IntroScenariosFormSection
+            value={draft.introScenarios}
+            onChange={(introScenarios) => update("introScenarios", introScenarios)}
+          />
+        </>
+      )}
+    </StepSection>
+  )
+}
+
+function WorkModeSwitch({ value, onChange }: { value: WorkFormMode; onChange: (value: WorkFormMode) => void }) {
+  return (
+    <Card className="border-border bg-card">
+      <CardContent className="space-y-3 p-3">
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-background/70 p-1">
+          {(["simple", "advanced"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onChange(mode)}
+              className={cn(
+                "rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+                value === mode
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {mode === "simple" ? "쉬운 모드" : "상세 모드"}
+            </button>
+          ))}
+        </div>
+        <p className="px-1 text-xs leading-relaxed text-muted-foreground">
+          {value === "simple"
+            ? "처음이라면 쉬운 모드로 시작해도 충분해요. 나중에 상세 모드에서 세계관과 도입부를 더 추가할 수 있어요."
+            : "작품의 분위기, 시작 장면, 상태바, 세계관 정보를 세밀하게 설정할 수 있어요."}
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AdvancedCreateSection({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <Card className="border-border bg-card">
+      <button type="button" onClick={() => setOpen((current) => !current)} className="flex w-full items-center gap-3 p-4 text-left">
+        <h3 className="flex-1 text-base font-bold text-foreground">{title}</h3>
+        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <CardContent className="space-y-4 border-t border-border p-4">
+          <FieldGroup className="space-y-4">{children}</FieldGroup>
+        </CardContent>
+      )}
+    </Card>
+  )
+}
+
+function mergeSimpleIntro(intros: IntroScenario[], scene: string): IntroScenario[] {
+  const [firstIntro, ...rest] = intros
+  if (!scene.trim() && !firstIntro) return intros
+  return [
+    {
+      id: firstIntro?.id || createId("intro"),
+      title: firstIntro?.title || "첫 장면",
+      scene,
+      firstMessage: firstIntro?.firstMessage || "",
+      imageUrl: firstIntro?.imageUrl || "",
+      options: firstIntro?.options || [],
+    },
+    ...rest,
+  ]
+}
+
+function EmptySelectState({
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  title: string
+  description: string
+  actionLabel: string
+  onAction: () => void
+}) {
+  return (
+    <Card className="border-dashed bg-card">
+      <CardContent className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
+        <Button type="button" onClick={onAction}>
+          {actionLabel}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function StepSection({
+  title,
+  number,
+  children,
+}: {
+  title: string
+  number: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-5">
+      <div className="flex items-center gap-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+          {number}
+        </div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function CharacterForm({
+  value,
+  onChange,
+}: {
+  value: StoryCharacter
+  onChange: (value: StoryCharacter) => void
+}) {
+  const update = <K extends keyof StoryCharacter>(key: K, nextValue: StoryCharacter[K]) => {
+    onChange({ ...value, [key]: nextValue })
+  }
+
+  return (
+    <Card className="bg-card border-border">
+      <CardContent className="p-4 md:p-6">
+        <FieldGroup className="space-y-6">
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">필수 정보</h3>
+              <p className="mt-1 text-xs text-muted-foreground">캐릭터를 저장하려면 아래 항목을 입력해 주세요.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>이름</FieldLabel>
+                <Input value={value.name} onChange={(event) => update("name", event.target.value)} className="bg-input" />
+              </Field>
+              <Field>
+                <FieldLabel>나이</FieldLabel>
+                <Input value={value.age ?? ""} onChange={(event) => update("age", event.target.value)} className="bg-input" />
+              </Field>
+              <Field>
+                <FieldLabel>직업</FieldLabel>
+                <Input value={value.role ?? ""} onChange={(event) => update("role", event.target.value)} className="bg-input" />
+              </Field>
+              <Field>
+                <FieldLabel>사는곳</FieldLabel>
+                <Input value={value.residence ?? ""} onChange={(event) => update("residence", event.target.value)} className="bg-input" />
+              </Field>
+            </div>
+            <Field>
+              <FieldLabel>한줄소개</FieldLabel>
+              <Input value={value.summary} onChange={(event) => update("summary", event.target.value)} className="bg-input" />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>성격</FieldLabel>
+                <Textarea value={value.personality} onChange={(event) => update("personality", event.target.value)} className="bg-input min-h-[80px]" />
+              </Field>
+              <Field>
+                <FieldLabel>외모</FieldLabel>
+                <Textarea value={value.appearance ?? ""} onChange={(event) => update("appearance", event.target.value)} className="bg-input min-h-[80px]" />
+              </Field>
+            </div>
+            <Field>
+              <FieldLabel>사용자와의 기본 관계</FieldLabel>
+              <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
+            </Field>
+          </section>
+
+          <section className="space-y-4 border-t border-border pt-5">
+            <div>
+              <h3 className="text-sm font-bold text-foreground">선택 정보</h3>
+              <p className="mt-1 text-xs text-muted-foreground">필요할 때만 추가로 입력해 주세요.</p>
+            </div>
+            <Field>
+              <FieldLabel>장르</FieldLabel>
+              <GenreSelectWithCustomInput value={String(value.genre)} onChange={(genre) => update("genre", genre)} />
+            </Field>
+            <Field>
+              <FieldLabel>말투 규칙</FieldLabel>
+              <Textarea value={value.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="bg-input min-h-[90px]" />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>비밀 설정</FieldLabel>
+                <Textarea value={value.secret} onChange={(event) => update("secret", event.target.value)} className="bg-input min-h-[80px]" />
+              </Field>
+              <Field>
+                <FieldLabel>금지 전개</FieldLabel>
+                <Textarea value={value.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ImageUploadField
+                label="대표 아바타"
+                value={value.avatarUrl}
+                onChange={(avatarUrl) => update("avatarUrl", avatarUrl)}
+              />
+              <ImageUploadField
+                label="대표 이미지"
+                value={value.coverImageUrl}
+                onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
+              />
+            </div>
+            <Field>
+              <FieldLabel>대표 대사</FieldLabel>
+              <Input value={value.quote ?? ""} onChange={(event) => update("quote", event.target.value)} className="bg-input" />
+            </Field>
+          </section>
+        </FieldGroup>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value?: string
+  onChange: (value: string | undefined) => void
+}) {
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      window.alert("이미지 파일만 업로드할 수 있어요.")
+      event.target.value = ""
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === "string") onChange(reader.result)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ""
+  }
+
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <div className="flex items-center gap-3">
+        <label
+          className="inline-flex h-9 cursor-pointer items-center justify-center rounded-lg border border-border bg-secondary px-3 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent"
+        >
+          이미지 업로드
+          <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+        </label>
+        {value && (
+          <div className="relative h-14 w-14 overflow-hidden rounded-xl border border-border bg-muted">
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(true)}
+              className="h-full w-full"
+              aria-label={`${label} 미리보기`}
+            >
+              <img src={value} alt={label} className="h-full w-full object-cover" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange(undefined)}
+              className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[11px] font-bold leading-none text-white hover:bg-black"
+              aria-label={`${label} 삭제`}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+      {isPreviewOpen && value && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => setIsPreviewOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setIsPreviewOpen(false)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-lg font-bold leading-none text-white hover:bg-black"
+              aria-label="미리보기 닫기"
+            >
+              ×
+            </button>
+            <img src={value} alt={label} className="max-h-[78dvh] w-full object-contain" />
+          </div>
+        </div>
+      )}
+    </Field>
+  )
+}
+
+function WorldForm({
+  value,
+  onChange,
+}: {
+  value: StoryWorld
+  onChange: (value: StoryWorld) => void
+}) {
+  const update = <K extends keyof StoryWorld>(key: K, nextValue: StoryWorld[K]) => {
+    onChange({ ...value, [key]: nextValue })
+  }
+
+  return (
+    <Card className="bg-card border-border">
+      <CardContent className="p-4 md:p-6">
+        <FieldGroup className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>세계관 이름</FieldLabel>
+              <Input value={value.name} onChange={(event) => update("name", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>세계관 장르</FieldLabel>
+              <GenreSelectWithCustomInput value={String(value.genre)} onChange={(genre) => update("genre", genre)} />
+            </Field>
+          </div>
+          <Field>
+            <FieldLabel>시대/배경</FieldLabel>
+            <Input value={value.era} onChange={(event) => update("era", event.target.value)} className="bg-input" />
+          </Field>
+          <Field>
+            <FieldLabel>핵심 설정</FieldLabel>
+            <Textarea value={value.coreSetting} onChange={(event) => update("coreSetting", event.target.value)} className="bg-input min-h-[90px]" />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>주요 장소</FieldLabel>
+              <Textarea value={value.places} onChange={(event) => update("places", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+            <Field>
+              <FieldLabel>주요 사건</FieldLabel>
+              <Textarea value={value.events} onChange={(event) => update("events", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>세계관 분위기</FieldLabel>
+              <Input value={value.mood} onChange={(event) => update("mood", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>세계관 날짜</FieldLabel>
+              <Input value={value.worldDate} onChange={(event) => update("worldDate", event.target.value)} className="bg-input" />
+            </Field>
+          </div>
+          <Field>
+            <FieldLabel>금지 설정</FieldLabel>
+            <Textarea value={value.forbiddenSettings} onChange={(event) => update("forbiddenSettings", event.target.value)} className="bg-input min-h-[80px]" />
+          </Field>
+          <StoryProgressSettingsForm
+            value={value.storyProgressSettings}
+            onChange={(storyProgressSettings) => update("storyProgressSettings", storyProgressSettings)}
+            currentChapter={value.currentChapter}
+            currentGoal={value.currentGoal}
+            progress={value.progress}
+            onCurrentChapterChange={(currentChapter) => update("currentChapter", currentChapter)}
+            onCurrentGoalChange={(currentGoal) => update("currentGoal", currentGoal)}
+            onProgressChange={(progress) => update("progress", progress)}
+          />
+        </FieldGroup>
+      </CardContent>
+    </Card>
+  )
+}
+
+function StoryProgressSettingsForm({
+  value,
+  onChange,
+  currentChapter,
+  currentGoal,
+  progress,
+  onCurrentChapterChange,
+  onCurrentGoalChange,
+  onProgressChange,
+}: {
+  value: StoryWorld["storyProgressSettings"]
+  onChange: (value: StoryWorld["storyProgressSettings"]) => void
+  currentChapter: string
+  currentGoal: string
+  progress: number
+  onCurrentChapterChange: (value: string) => void
+  onCurrentGoalChange: (value: string) => void
+  onProgressChange: (value: number) => void
+}) {
+  const chapters = value.chapters.length ? value.chapters : [defaultStoryChapter()]
+
+  const updateChapter = (chapterId: string, nextChapter: StoryChapter) => {
+    onChange({
+      ...value,
+      chapters: chapters.map((chapter) => (chapter.id === chapterId ? nextChapter : chapter)),
+    })
+  }
+
+  const addChapter = () => {
+    onChange({
+      ...value,
+      useChapters: true,
+      chapters: [...chapters, { ...defaultStoryChapter(), title: `새 챕터 ${chapters.length + 1}` }],
+    })
+  }
+
+  const deleteChapter = (chapterId: string) => {
+    if (chapters.length <= 1) return
+    onChange({
+      ...value,
+      chapters: chapters.filter((chapter) => chapter.id !== chapterId),
+    })
+  }
+
+  const moveChapter = (chapterId: string, direction: -1 | 1) => {
+    const currentIndex = chapters.findIndex((chapter) => chapter.id === chapterId)
+    const nextIndex = currentIndex + direction
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= chapters.length) return
+
+    const nextChapters = [...chapters]
+    const [target] = nextChapters.splice(currentIndex, 1)
+    nextChapters.splice(nextIndex, 0, target)
+    onChange({ ...value, chapters: nextChapters })
+  }
+
+  return (
+    <section className="space-y-3 rounded-xl border border-border bg-secondary/40 p-3">
+      <ToggleRow
+        label="챕터 사용"
+        checked={value.useChapters}
+        onCheckedChange={(checked) =>
+          onChange({
+            ...value,
+            useChapters: checked,
+            chapters,
+          })
+        }
+      />
+
+      {value.useChapters && (
+        <div className="space-y-3">
+          <div className="grid gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-3">
+            <Field>
+              <FieldLabel>현재 챕터</FieldLabel>
+              <Input value={currentChapter} onChange={(event) => onCurrentChapterChange(event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>현재 목표</FieldLabel>
+              <Input value={currentGoal} onChange={(event) => onCurrentGoalChange(event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>진행도 기본값</FieldLabel>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={progress}
+                onChange={(event) => onProgressChange(Number(event.target.value))}
+                className="bg-input"
+              />
+            </Field>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">챕터 설정</p>
+              <p className="text-xs text-muted-foreground">작품 진행 방식과 다음 챕터 조건을 정합니다.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={addChapter}>
+              <Plus className="h-4 w-4" />
+              챕터 추가
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {chapters.map((chapter, index) => (
+              <ChapterEditorCard
+                key={chapter.id}
+                chapter={chapter}
+                index={index}
+                total={chapters.length}
+                onChange={(nextChapter) => updateChapter(chapter.id, nextChapter)}
+                onDelete={() => deleteChapter(chapter.id)}
+                onMoveUp={() => moveChapter(chapter.id, -1)}
+                onMoveDown={() => moveChapter(chapter.id, 1)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ChapterEditorCard({
+  chapter,
+  index,
+  total,
+  onChange,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+}: {
+  chapter: StoryChapter
+  index: number
+  total: number
+  onChange: (chapter: StoryChapter) => void
+  onDelete: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
+}) {
+  const [expanded, setExpanded] = useState(index === 0)
+
+  const update = <K extends keyof StoryChapter>(key: K, nextValue: StoryChapter[K]) => {
+    onChange({ ...chapter, [key]: nextValue })
+  }
+
+  const updateProgressRange = (key: keyof StoryChapter["progressRange"], nextValue: number) => {
+    onChange({
+      ...chapter,
+      progressRange: {
+        ...chapter.progressRange,
+        [key]: nextValue,
+      },
+    })
+  }
+
+  return (
+    <Card className="border-border bg-card">
+      <button
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+        className="flex w-full items-center gap-2 px-3 py-3 text-left"
+      >
+        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {index + 1}. {chapter.title || "제목 없는 챕터"}
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{chapter.goal || "챕터 목표를 입력하세요."}</p>
+        </div>
+      </button>
+
+      {expanded && (
+        <CardContent className="space-y-3 border-t border-border p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>챕터 제목</FieldLabel>
+              <Input value={chapter.title} onChange={(event) => update("title", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>챕터 시작 조건</FieldLabel>
+              <Input value={chapter.startCondition} onChange={(event) => update("startCondition", event.target.value)} className="bg-input" />
+            </Field>
+          </div>
+          <Field>
+            <FieldLabel>챕터 설명</FieldLabel>
+            <Textarea value={chapter.description} onChange={(event) => update("description", event.target.value)} className="min-h-[70px] bg-input" />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>챕터 목표</FieldLabel>
+              <Textarea value={chapter.goal} onChange={(event) => update("goal", event.target.value)} className="min-h-[70px] bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>주요 미션</FieldLabel>
+              <Textarea value={chapter.mission} onChange={(event) => update("mission", event.target.value)} className="min-h-[70px] bg-input" />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>핵심 사건</FieldLabel>
+              <Textarea value={chapter.keyEvent} onChange={(event) => update("keyEvent", event.target.value)} className="min-h-[70px] bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>감정 변화 방향</FieldLabel>
+              <Textarea value={chapter.emotionalDirection} onChange={(event) => update("emotionalDirection", event.target.value)} className="min-h-[70px] bg-input" />
+            </Field>
+          </div>
+          <Field>
+            <FieldLabel>다음 챕터로 넘어가는 조건</FieldLabel>
+            <Textarea value={chapter.nextChapterCondition} onChange={(event) => update("nextChapterCondition", event.target.value)} className="min-h-[70px] bg-input" />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>진행도 시작</FieldLabel>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={chapter.progressRange.start}
+                onChange={(event) => updateProgressRange("start", Number(event.target.value))}
+                className="bg-input"
+              />
+            </Field>
+            <Field>
+              <FieldLabel>진행도 종료</FieldLabel>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={chapter.progressRange.end}
+                onChange={(event) => updateProgressRange("end", Number(event.target.value))}
+                className="bg-input"
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={index === 0} onClick={onMoveUp}>
+              <ArrowUp className="h-4 w-4" />
+              위로
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={index === total - 1} onClick={onMoveDown}>
+              <ArrowDown className="h-4 w-4" />
+              아래로
+            </Button>
+            <Button type="button" variant="outline" size="sm" disabled={total <= 1} onClick={onDelete}>
+              <Trash2 className="h-4 w-4" />
+              삭제
+            </Button>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  )
+}
+
+function PersonaForm({
+  value,
+  onChange,
+}: {
+  value: StoryPersona
+  onChange: (value: StoryPersona) => void
+}) {
+  const update = <K extends keyof StoryPersona>(key: K, nextValue: StoryPersona[K]) => {
+    onChange({ ...value, [key]: nextValue })
+  }
+
+  return (
+    <Card className="bg-card border-border">
+      <CardContent className="p-4 md:p-6">
+        <FieldGroup className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field>
+              <FieldLabel>자아 이름</FieldLabel>
+              <Input value={value.name} onChange={(event) => update("name", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>나이</FieldLabel>
+              <Input value={value.age} onChange={(event) => update("age", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>직업/신분</FieldLabel>
+              <Input value={value.role} onChange={(event) => update("role", event.target.value)} className="bg-input" />
+            </Field>
+          </div>
+          <Field>
+            <FieldLabel>한 줄 소개</FieldLabel>
+            <Input value={value.summary} onChange={(event) => update("summary", event.target.value)} className="bg-input" />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>성격</FieldLabel>
+              <Textarea value={value.personality} onChange={(event) => update("personality", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+            <Field>
+              <FieldLabel>말투</FieldLabel>
+              <Textarea value={value.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel>외형</FieldLabel>
+              <Input value={value.appearance} onChange={(event) => update("appearance", event.target.value)} className="bg-input" />
+            </Field>
+            <Field>
+              <FieldLabel>캐릭터와의 관계</FieldLabel>
+              <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
+            </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field>
+              <FieldLabel>비밀 설정</FieldLabel>
+              <Textarea value={value.secret} onChange={(event) => update("secret", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+            <Field>
+              <FieldLabel>선호 전개</FieldLabel>
+              <Textarea value={value.preferredDevelopments} onChange={(event) => update("preferredDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+            <Field>
+              <FieldLabel>금지 전개</FieldLabel>
+              <Textarea value={value.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+            </Field>
+          </div>
+        </FieldGroup>
+      </CardContent>
+    </Card>
+  )
+}
+
+function IndividualShell({
+  showContinue,
+  onContinue,
+  onDiscard,
+  children,
+}: {
+  showContinue: boolean
+  onContinue: () => void
+  onDiscard: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-5">
+      {showContinue && (
+        <ContinueCard
+          title="작성 중인 초안이 있어요. 이어서 작성할까요?"
+          onContinue={onContinue}
+          onDiscard={onDiscard}
+        />
+      )}
+      {children}
+    </div>
+  )
+}
+
+function CharacterSelectCard({
+  character,
+  selected,
+  onClick,
+}: {
+  character: StoryCharacter
+  selected?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-xl border bg-card p-4 text-left transition-colors",
+        selected ? "border-primary bg-accent" : "border-border hover:bg-accent",
+      )}
+    >
+      <div className="flex gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted text-xl">
+          {character.emoji}
+        </div>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold">{character.name || "이름 없음"}</h3>
+              <span className="text-xs text-muted-foreground">{character.genre}</span>
+            </div>
+            <p className="text-sm text-muted-foreground">{character.summary}</p>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {character.tags.slice(0, 3).map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-[10px]">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function WorldSelectCard({
+  world,
+  selected,
+  onClick,
+}: {
+  world: StoryWorld
+  selected?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative w-full overflow-hidden rounded-xl border bg-gradient-to-br p-4 text-left transition-colors",
+        world.coverColor,
+        selected ? "border-primary" : "border-border hover:border-muted-foreground",
+      )}
+    >
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-foreground">{world.name || "이름 없음"}</h3>
+            <p className="text-xs text-muted-foreground">
+              {world.genre} · {world.era}
+            </p>
+          </div>
+          {selected && <Check className="h-4 w-4 text-primary" />}
+        </div>
+        <p className="text-sm text-muted-foreground">{world.coreSetting}</p>
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span>{world.mood}</span>
+          <span>{world.events}</span>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function PersonaSelectCard({
+  persona,
+  selected,
+  onClick,
+}: {
+  persona: StoryPersona
+  selected?: boolean
+  onClick?: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-xl border bg-card p-4 text-left transition-colors",
+        selected ? "border-primary bg-accent" : "border-border hover:bg-accent",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="font-semibold">{persona.name || "이름 없음"}</h3>
+          <p className="text-xs text-muted-foreground">
+            {persona.age} · {persona.role}
+          </p>
+          <p className="text-sm text-muted-foreground">{persona.summary}</p>
+          <p className="text-xs text-muted-foreground">관계: {persona.relationship}</p>
+        </div>
+        {selected && <Check className="h-4 w-4 text-primary" />}
+      </div>
+    </button>
+  )
+}
+
+function StatusBarSettingsFields({
+  enabled,
+  text,
+  onEnabledChange,
+  onTextChange,
+}: {
+  enabled: boolean
+  text: string
+  onEnabledChange: (value: boolean) => void
+  onTextChange: (value: string) => void
+}) {
+  return (
+    <section className="space-y-3 rounded-xl border border-border bg-secondary/40 p-3">
+      <ToggleRow label="상태바 사용" checked={enabled} onCheckedChange={onEnabledChange} />
+      {enabled && (
+        <>
+          <Field>
+            <FieldLabel>상태바 내용</FieldLabel>
+            <Textarea
+              value={text}
+              onChange={(event) => onTextChange(event.target.value)}
+              placeholder={"현재 위치: 무너진 왕성\n현재 목표: 왕국 몰락의 원인을 찾는다"}
+              className="min-h-[96px] bg-input"
+            />
+          </Field>
+          {text.trim() && (
+            <div className="rounded-lg border border-border bg-card px-3 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">미리보기</p>
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-foreground">{text}</p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onCheckedChange,
+}: {
+  label: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-secondary px-3 py-3">
+      <span className="text-sm font-medium">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  )
+}
+
+function BottomActions({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed bottom-16 left-0 right-0 z-40 border-t border-border bg-background p-4 backdrop-blur md:bottom-0 md:left-auto md:w-full">
+      <div className="mx-auto flex max-w-5xl gap-2">{children}</div>
+    </div>
+  )
+}
+
+function readDraft<T>(key: string): T | null {
+  if (typeof window === "undefined") return null
+  const raw = window.localStorage.getItem(key)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    window.localStorage.removeItem(key)
+    return null
+  }
+}
+
+function normalizeCharacter(character: StoryCharacter): StoryCharacter {
+  return {
+    ...character,
+    id: character.id || createId("character"),
+    tags: character.tags.length
+      ? character.tags
+      : character.personality
+          .split(/[,\s]+/)
+          .filter(Boolean)
+          .slice(0, 3),
+    createdAt: character.createdAt || new Date().toLocaleDateString("ko-KR"),
+  }
+}
+
+function normalizeWorld(world: StoryWorld): StoryWorld {
+  return {
+    ...world,
+    id: world.id || createId("world"),
+    coverColor: world.coverColor || "from-neutral-800 to-neutral-950",
+    storyProgressSettings: {
+      useChapters: world.storyProgressSettings?.useChapters ?? false,
+      chapters: world.storyProgressSettings?.chapters?.length
+        ? world.storyProgressSettings.chapters
+        : [defaultStoryChapter()],
+    },
+    createdAt: world.createdAt || new Date().toLocaleDateString("ko-KR"),
+  }
+}
+
+function normalizePersona(persona: StoryPersona): StoryPersona {
+  return {
+    ...persona,
+    id: persona.id || createId("persona"),
+    createdAt: persona.createdAt || new Date().toLocaleDateString("ko-KR"),
+  }
+}
+
+function upsertById<T extends { id: string }>(items: T[], item: T) {
+  const exists = items.some((current) => current.id === item.id)
+  if (exists) return items.map((current) => (current.id === item.id ? item : current))
+  return [item, ...items]
+}
+
+function isCharacterReady(character: StoryCharacter) {
+  return Boolean(
+    character.name &&
+      character.age &&
+      character.role &&
+      character.residence &&
+      character.summary &&
+      character.personality &&
+      character.appearance &&
+      character.relationship,
+  )
+}
+
+function isWorldReady(world: StoryWorld) {
+  return Boolean(world.name && world.genre && world.era && world.coreSetting && world.mood)
+}
+
+function isPersonaReady(persona: StoryPersona) {
+  return Boolean(persona.name && persona.age && persona.role && persona.summary && persona.relationship)
 }

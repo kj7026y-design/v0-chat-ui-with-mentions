@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useTheme } from "next-themes"
+import { useTheme } from "@/components/theme-provider"
 import { ArrowLeft, Check, Sun, Moon, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -61,7 +61,7 @@ export default function ThemesPage() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
       {/* Header */}
-      <header className="sticky top-0 z-40 flex items-center gap-3 px-4 py-4 bg-background/95 backdrop-blur-sm border-b border-border">
+      <header className="sticky top-0 z-40 flex items-center gap-3 px-4 py-4 bg-background backdrop-blur-sm border-b border-border">
         <button
           onClick={() => router.back()}
           className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-accent transition-colors"

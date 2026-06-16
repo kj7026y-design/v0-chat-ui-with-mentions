@@ -1,7 +1,8 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Pencil, ImageIcon } from "lucide-react"
-import type { TimelineEvent } from "@/app/timeline/page"
+import Link from "next/link"
+import type { TimelineEvent } from "@/lib/timeline-storage"
 
 interface EventDetailSheetProps {
   event: TimelineEvent | null
@@ -47,7 +48,7 @@ export function EventDetailSheet({
           {/* Content Area */}
           <div className="flex flex-col gap-5 mt-6 flex-1">
             {/* Image Placeholder - 16:9 Aspect Ratio */}
-            <div className="relative w-full aspect-video rounded-lg bg-secondary/50 overflow-hidden">
+            <div className="relative w-full aspect-video rounded-lg bg-secondary overflow-hidden">
               {event.imageUrl ? (
                 <img
                   src={event.imageUrl}
@@ -67,20 +68,23 @@ export function EventDetailSheet({
               <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                 상세 설명
               </h4>
-              <p className="text-foreground/90 leading-relaxed text-[15px]">
+              <p className="text-foreground leading-relaxed text-[15px]">
                 {event.description}
               </p>
             </div>
           </div>
 
           {/* Footer Buttons */}
-          <div className="flex gap-3 mt-6 pt-4 border-t border-border/50">
+          <div className="flex gap-3 mt-6 pt-4 border-t border-border">
           <Button
+            asChild
             variant="secondary"
             className="flex-1 bg-secondary hover:bg-accent text-secondary-foreground"
           >
-            <Pencil className="w-4 h-4 mr-2" />
-            내용 수정하기
+            <Link href={`/timeline/${event.id}/edit`} onClick={onClose}>
+              <Pencil className="w-4 h-4 mr-2" />
+              내용 수정하기
+            </Link>
           </Button>
           <Button
             variant="outline"

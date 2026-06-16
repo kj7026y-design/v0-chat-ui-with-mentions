@@ -3,9 +3,18 @@ export interface ChatMessage {
   type: "user" | "ai" | "event" | "inner-thought"
   content: string
   timestamp: Date
+  imageUrl?: string
+  imageName?: string
   eventImage?: string
   eventDescription?: string
   mentions?: string[] // Character IDs or "all"
+  speakerType?: "user" | "character"
+  speakerId?: string
+  speakerName?: string
+  mentionCharacterIds?: string[]
+  mentionAll?: boolean
+  isUserAuthoredCharacterLine?: boolean
+  originalContent?: string
 }
 
 export interface Command {

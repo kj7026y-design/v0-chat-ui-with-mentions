@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, type RefObject } from "react"
-import { useTheme } from "next-themes"
+import { useState, useEffect, type ReactNode, type RefObject } from "react"
+import { useTheme } from "@/components/theme-provider"
 import { type ChatMessage } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
@@ -30,6 +30,36 @@ const MENTION_NAMES: Record<string, string> = {
 function getMentionDisplayNames(mentions: string[] | undefined): string[] {
   if (!mentions || mentions.length === 0) return []
   return mentions.map(id => MENTION_NAMES[id] || id)
+}
+
+function renderHighlightedMentions(content: string, names: string[]) {
+  const mentionNames = [...new Set([...names, ...Object.values(MENTION_NAMES)])]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+
+  if (mentionNames.length === 0) return content
+
+  const parts: ReactNode[] = []
+  let index = 0
+
+  while (index < content.length) {
+    const matchedName = mentionNames.find((name) => content.startsWith(`@${name}`, index))
+    if (!matchedName) {
+      parts.push(content[index])
+      index += 1
+      continue
+    }
+
+    const token = `@${matchedName}`
+    parts.push(
+      <span key={`${token}-${index}`} className="rounded-md bg-amber-400/20 px-0.5 text-amber-200">
+        {token}
+      </span>,
+    )
+    index += token.length
+  }
+
+  return parts
 }
 
 const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
@@ -90,13 +120,13 @@ interface ChatMessageListProps {
   isTyping: boolean
   messagesEndRef: RefObject<HTMLDivElement | null>
   onRewriteMessage?: (messageId: string) => void
-  onEditMessage?: (messageId: string) => void
+  onEditMessage?: (messageId: string, nextContent: string) => void
   onDeleteMessage?: (messageId: string) => void
   onBranchFromMessage?: (messageId: string) => void
-  onSaveEvent?: (messageId: string) => void
   editedMessageIds?: Set<string>
   chatId?: string
   chatTheme?: ChatThemeId
+  disabled?: boolean
 }
 
 export function ChatMessageList({ 
@@ -107,14 +137,15 @@ export function ChatMessageList({
   onEditMessage,
   onDeleteMessage,
   onBranchFromMessage,
-  onSaveEvent,
   editedMessageIds = new Set(),
   chatId,
-  chatTheme: externalChatTheme
+  chatTheme: externalChatTheme,
+  disabled = false,
 }: ChatMessageListProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [internalChatTheme, setInternalChatTheme] = useState<ChatThemeId>("system")
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -160,17 +191,27 @@ export function ChatMessageList({
   // Bubble style rendering
   return (
     <div className="flex flex-col gap-3 px-4 py-4 pb-44">
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <BubbleMessageBubble 
           key={message.id} 
           message={message}
           onRewrite={onRewriteMessage}
-          onEdit={onEditMessage}
           onDelete={onDeleteMessage}
           onBranch={onBranchFromMessage}
-          onSaveEvent={onSaveEvent}
           isEdited={editedMessageIds.has(message.id)}
           themeConfig={themeConfig}
+          isLatest={index === messages.length - 1}
+          isEditing={editingMessageId === message.id}
+          disabled={disabled}
+          onStartEdit={() => {
+            if (disabled) return
+            setEditingMessageId(message.id)
+          }}
+          onCancelEdit={() => setEditingMessageId(null)}
+          onSaveEdit={(nextContent) => {
+            onEditMessage?.(message.id, nextContent)
+            setEditingMessageId(null)
+          }}
         />
       ))}
 
@@ -190,21 +231,43 @@ export function ChatMessageList({
 interface BubbleMessageBubbleProps {
   message: ChatMessage
   onRewrite?: (messageId: string) => void
-  onEdit?: (messageId: string) => void
   onDelete?: (messageId: string) => void
   onBranch?: (messageId: string) => void
-  onSaveEvent?: (messageId: string) => void
   isEdited?: boolean
   themeConfig: ChatThemeConfig
+  isLatest: boolean
+  isEditing: boolean
+  disabled?: boolean
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSaveEdit: (nextContent: string) => void
 }
 
-function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, onSaveEvent, isEdited, themeConfig }: BubbleMessageBubbleProps) {
+function BubbleMessageBubble({
+  message,
+  onRewrite,
+  onDelete,
+  onBranch,
+  isEdited,
+  themeConfig,
+  isLatest,
+  isEditing,
+  disabled = false,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+}: BubbleMessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
-  const isUser = message.type === "user"
+  const [editDraft, setEditDraft] = useState(message.content)
+  const isCharacterLine = message.isUserAuthoredCharacterLine && message.speakerType === "character"
+  const isUser = message.type === "user" && !isCharacterLine
   const isAI = message.type === "ai"
   const isEvent = message.type === "event"
   const isInnerThought = message.type === "inner-thought"
+
+  useEffect(() => {
+    if (isEditing) setEditDraft(message.content)
+  }, [isEditing, message.content])
 
   // Event Card
   if (isEvent) {
@@ -253,7 +316,7 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, o
   if (isInnerThought) {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[80%] px-4 py-3 rounded-2xl bg-muted/50 border border-border border-dashed">
+        <div className="max-w-[80%] px-4 py-3 rounded-2xl bg-muted border border-border border-dashed">
           <div className="flex items-center gap-1.5 mb-1.5">
             <span className="text-sm">💭</span>
             <span className="text-xs text-muted-foreground font-medium">/속마음</span>
@@ -267,38 +330,52 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, o
   }
 
   // Regular Message Bubble
-  const mentionNames = getMentionDisplayNames(message.mentions)
-  const hasMentions = mentionNames.length > 0
+  const mentionNames = [
+    ...getMentionDisplayNames(message.mentions),
+    ...(message.speakerName ? [message.speakerName] : []),
+  ]
 
   return (
     <div 
       className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}
-      onMouseEnter={() => isAI && setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
-      <div className="relative">
+      <div className={cn("relative flex w-full", isUser ? "justify-end" : "justify-start")}>
+        {isCharacterLine && (
+          <div className="mr-2 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs">
+            {message.speakerName?.slice(0, 1) ?? "?"}
+          </div>
+        )}
         <div
-          className="max-w-[80%] px-4 py-2.5 rounded-2xl relative"
+          className={cn(
+            "relative w-fit max-w-[82%] rounded-2xl px-4 py-2.5 sm:max-w-[80%]",
+            isUser && "ml-auto",
+          )}
           style={{
             backgroundColor: isUser ? themeConfig.preview.userBubble : themeConfig.preview.aiBubble,
             color: isUser ? themeConfig.preview.userText : themeConfig.preview.aiText,
           }}
         >
-          {/* Mention display for user messages */}
-          {isUser && hasMentions && (
-            <div className="flex items-center gap-1 mb-1.5 flex-wrap">
-              {mentionNames.map((name) => (
-                <span
-                  key={name}
-                  className="text-xs font-medium opacity-80"
-                  style={{ color: themeConfig.preview.userText }}
-                >
-                  @{name}
-                </span>
-              ))}
+          {isCharacterLine && message.speakerName && (
+            <div className="mb-1 flex items-center gap-1.5">
+              <span className="text-xs font-semibold opacity-90">{message.speakerName}</span>
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] opacity-70">직접 작성</span>
             </div>
           )}
-          <p className="text-[15px] leading-relaxed">{message.content}</p>
+          {message.imageUrl && (
+            <img
+              src={message.imageUrl}
+              alt={message.imageName ?? "첨부 이미지"}
+              className={cn(
+                "mb-2 max-h-80 w-full rounded-xl object-cover",
+                !message.content && "mb-0",
+              )}
+            />
+          )}
+          {message.content && (
+            <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed [word-break:keep-all]">
+              {renderHighlightedMentions(message.content, mentionNames)}
+            </p>
+          )}
           
           {/* Edited indicator dot */}
           {isEdited && !isUser && (
@@ -306,51 +383,82 @@ function BubbleMessageBubble({ message, onRewrite, onEdit, onDelete, onBranch, o
           )}
         </div>
       </div>
+
+      {isEditing && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (disabled) return
+            onSaveEdit(editDraft)
+          }}
+          className={cn("w-full max-w-[82%] space-y-2 sm:max-w-[80%]", isUser && "ml-auto")}
+        >
+          <textarea
+            value={editDraft}
+            onChange={(event) => setEditDraft(event.target.value)}
+            rows={3}
+            autoFocus
+            disabled={disabled}
+            className="w-full resize-none rounded-xl border border-border bg-input px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className={cn("flex items-center gap-2", isUser ? "justify-end" : "justify-start")}>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              disabled={disabled}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              disabled={disabled || !editDraft.trim()}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+            >
+              저장
+            </button>
+          </div>
+        </form>
+      )}
       
-      {/* Author Tools - visible on hover for AI messages */}
-      {isAI && isHovered && (
+      {/* Author Tools - only the latest message can be edited or deleted. */}
+      {isLatest && (isUser || isAI || isCharacterLine) && !isEditing && (
         <div className="animate-in fade-in slide-in-from-top-1 duration-150">
           <AuthorTools
             messageId={message.id}
             onRewrite={onRewrite}
-            onEdit={onEdit}
+            onEdit={onStartEdit}
             onDelete={onDelete}
             isEdited={isEdited}
+            canRewrite={isAI}
+            disabled={disabled}
           />
         </div>
       )}
       
-      {/* Branch + Save Event Buttons - below AI messages */}
-      {isAI && (
-        <div className="flex items-center gap-3 mt-1 -mx-1 pt-2 border-t border-dashed border-border">
+      {/* Branch Button - below AI messages */}
+      {isAI && !isEditing && (
+        <div className="flex items-center gap-3 -mx-1 -mt-1">
           <button
             onClick={() => {
+              if (disabled) return
               setIsBranching(true)
               setTimeout(() => {
                 onBranch?.(message.id)
                 setIsBranching(false)
               }, 800)
             }}
-            disabled={isBranching}
+            disabled={disabled || isBranching}
             className={cn(
               "flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors",
-              isBranching && "text-foreground"
+              isBranching && "text-foreground",
+              disabled && "cursor-not-allowed opacity-50",
             )}
           >
             <svg className={cn("w-3 h-3", isBranching && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <span>{isBranching ? "분기 생성 중..." : "여기서부터 분기"}</span>
-          </button>
-
-          <button
-            onClick={() => onSaveEvent?.(message.id)}
-            className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span>이 장면 저장</span>
           </button>
         </div>
       )}

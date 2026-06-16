@@ -12,7 +12,7 @@ interface CharacterCardProps {
 export function CharacterCard({ character, onClick }: CharacterCardProps) {
   return (
     <Card
-      className="cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-primary/50 bg-card border-border group"
+      className="cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:border-primary bg-card border-border group"
       onClick={onClick}
     >
       <CardContent className="p-6">
@@ -30,7 +30,7 @@ export function CharacterCard({ character, onClick }: CharacterCardProps) {
             <div className="flex flex-wrap gap-1.5">
               <Badge
                 variant="outline"
-                className="text-xs border-primary/50 text-primary"
+                className="text-xs border-primary text-primary"
               >
                 {character.category}
               </Badge>

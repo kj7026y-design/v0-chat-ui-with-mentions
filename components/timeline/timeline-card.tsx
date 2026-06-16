@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react"
-import type { TimelineEvent } from "@/app/timeline/page"
+import type { TimelineEvent } from "@/lib/timeline-storage"
 import { cn } from "@/lib/utils"
 
 interface TimelineCardProps {
@@ -27,7 +27,7 @@ export function TimelineCard({ event, onClick, isFirst, isLast }: TimelineCardPr
           className={cn(
             "w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center",
             "bg-secondary border border-border",
-            "group-hover:bg-accent group-hover:border-muted-foreground/30",
+            "group-hover:bg-accent group-hover:border-muted-foreground",
             "transition-colors duration-200"
           )}
         >
@@ -40,8 +40,8 @@ export function TimelineCard({ event, onClick, isFirst, isLast }: TimelineCardPr
         onClick={onClick}
         className={cn(
           "flex-1 flex items-center justify-between",
-          "py-4 sm:py-5 px-4 sm:px-5 rounded-lg",
-          "bg-card/50 hover:bg-card",
+          "pt-2.5 pb-4 sm:pt-3 sm:pb-5 px-4 sm:px-5 rounded-lg",
+          "bg-card hover:bg-card",
           "transition-all duration-200",
           "text-left group/card",
           isFirst && "mt-0",

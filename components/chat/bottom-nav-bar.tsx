@@ -2,13 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, MessageCircle, PlusCircle, User, BookOpen } from "lucide-react"
+import { Compass, Home, MessageCircle, PlusCircle, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { icon: Home, label: "홈", href: "/" },
+  { icon: Compass, label: "탐색", href: "/explore" },
   { icon: MessageCircle, label: "채팅", href: "/chats" },
-  { icon: BookOpen, label: "내 작품", href: "/my-works" },
   { icon: PlusCircle, label: "만들기", href: "/create" },
   { icon: User, label: "마이페이지", href: "/mypage" },
 ]
@@ -17,7 +17,7 @@ export function BottomNavBar() {
   const pathname = usePathname()
 
   return (
-    <nav className="bg-background/80 backdrop-blur-md border-t border-border">
+    <nav className="bg-background backdrop-blur-md border-t border-border">
       <div className="flex items-center justify-around py-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href || 
@@ -28,7 +28,7 @@ export function BottomNavBar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors",
+                "flex flex-col items-center gap-1 rounded-lg px-2.5 py-2 transition-colors",
                 isActive ? "text-foreground" : "text-muted-foreground"
               )}
             >
