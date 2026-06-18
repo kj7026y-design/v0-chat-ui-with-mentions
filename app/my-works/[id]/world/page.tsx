@@ -26,7 +26,6 @@ export default function WorkWorldGuidePage() {
   const characters = useMemo(() => {
     if (!world) return []
     const characterIds = new Set(library.works.filter((item) => item.worldId === world.id).map((item) => item.characterId))
-    world.characterIds?.forEach((characterId) => characterIds.add(characterId))
     return library.characters.filter((character) => characterIds.has(character.id))
   }, [library, world])
   const personas = useMemo(() => {

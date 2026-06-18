@@ -769,7 +769,6 @@ function normalizeLocations(value: MaybeList, images?: Record<string, string>): 
 function getCharactersForWorld(world: StoryWorld, library: StoryChatLibrary) {
   const works = library.works.filter((work) => work.worldId === world.id)
   const characterIds = new Set(works.map((work) => work.characterId))
-  world.characterIds?.forEach((characterId) => characterIds.add(characterId))
   return library.characters.filter((character) => characterIds.has(character.id))
 }
 

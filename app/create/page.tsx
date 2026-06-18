@@ -233,6 +233,10 @@ export default function CreatePage() {
   const [mode, setMode] = useState<EntryMode>("menu")
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [workDraft, setWorkDraft] = useState<WorkDraft>(() => emptyWorkDraft())
+  const [workFormMode, setWorkFormMode] = useState<WorkFormMode>("simple")
+  const [characterFormMode, setCharacterFormMode] = useState<WorkFormMode>("simple")
+  const [worldFormMode, setWorldFormMode] = useState<WorkFormMode>("simple")
+  const [personaFormMode, setPersonaFormMode] = useState<WorkFormMode>("simple")
   const [showWorkContinue, setShowWorkContinue] = useState(false)
   const [characterDraft, setCharacterDraft] = useState<StoryCharacter>(() => emptyCharacter())
   const [worldDraft, setWorldDraft] = useState<StoryWorld>(() => emptyWorld())
@@ -311,6 +315,11 @@ export default function CreatePage() {
     window.localStorage.setItem(WORK_DRAFT_KEY, JSON.stringify(nextDraft))
     setShowWorkContinue(false)
     toast("임시저장했어요.")
+  }
+
+  const changeWorkFormMode = (nextMode: WorkFormMode) => {
+    setWorkFormMode(nextMode)
+    window.localStorage.setItem(WORK_FORM_MODE_KEY, nextMode)
   }
 
   const saveItemDraft = (target: "character" | "world" | "persona") => {
@@ -419,11 +428,13 @@ export default function CreatePage() {
   }
 
   const canGoNext =
-    workDraft.step === "character"
-      ? Boolean(resolveWorkCharacter())
-      : workDraft.step === "world"
-        ? Boolean(resolveWorkWorld())
-        : Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
+    workFormMode === "simple"
+      ? Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
+      : workDraft.step === "character"
+        ? Boolean(resolveWorkCharacter())
+        : workDraft.step === "world"
+          ? Boolean(resolveWorkWorld())
+          : Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
 
   const goBack = () => {
     if (mode === "menu") router.push("/")
@@ -475,7 +486,7 @@ export default function CreatePage() {
             </Button>
           )}
         </div>
-        {mode === "work" && <WorkStepper step={workDraft.step} />}
+        {mode === "work" && workFormMode === "advanced" && <WorkStepper step={workDraft.step} />}
       </header>
 
       <AlertDialog open={isExitPromptOpen} onOpenChange={setIsExitPromptOpen}>
@@ -529,23 +540,35 @@ export default function CreatePage() {
                   }}
                 />
               )}
-              {workDraft.step === "character" && (
-                <CharacterWorkStep
+              <WorkModeSwitch value={workFormMode} onChange={changeWorkFormMode} />
+              {workFormMode === "simple" ? (
+                <SimpleWorkCreateStep
                   library={library}
                   draft={workDraft}
                   setDraft={setWorkDraft}
                 />
-              )}
-              {workDraft.step === "world" && (
-                <WorldWorkStep library={library} draft={workDraft} setDraft={setWorkDraft} />
-              )}
-              {workDraft.step === "review" && (
-                <ReviewStep
-                  draft={workDraft}
-                  setDraft={setWorkDraft}
-                  character={selectedCharacter}
-                  world={selectedWorld}
-                />
+              ) : (
+                <>
+                  {workDraft.step === "character" && (
+                    <CharacterWorkStep
+                      library={library}
+                      draft={workDraft}
+                      setDraft={setWorkDraft}
+                    />
+                  )}
+                  {workDraft.step === "world" && (
+                    <WorldWorkStep library={library} draft={workDraft} setDraft={setWorkDraft} />
+                  )}
+                  {workDraft.step === "review" && (
+                    <ReviewStep
+                      draft={workDraft}
+                      setDraft={setWorkDraft}
+                      character={selectedCharacter}
+                      world={selectedWorld}
+                      formMode={workFormMode}
+                    />
+                  )}
+                </>
               )}
             </>
           )}
@@ -560,7 +583,13 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, character: false }))
               }}
             >
-              <CharacterForm value={characterDraft} onChange={setCharacterDraft} />
+              <WorkModeSwitch
+                value={characterFormMode}
+                onChange={setCharacterFormMode}
+                simpleDescription="필수 정보만 입력해서 캐릭터를 빠르게 만들어요."
+                advancedDescription="말투, 비밀 설정, 이미지, 대표 대사까지 세밀하게 설정해요."
+              />
+              <CharacterForm value={characterDraft} onChange={setCharacterDraft} formMode={characterFormMode} />
             </IndividualShell>
           )}
 
@@ -574,7 +603,13 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, world: false }))
               }}
             >
-              <WorldForm value={worldDraft} onChange={setWorldDraft} />
+              <WorkModeSwitch
+                value={worldFormMode}
+                onChange={setWorldFormMode}
+                simpleDescription="세계관 이름과 핵심 분위기만 입력해서 빠르게 만들어요."
+                advancedDescription="장소, 사건, 날짜, 금지 설정, 챕터 진행까지 세밀하게 설정해요."
+              />
+              <WorldForm value={worldDraft} onChange={setWorldDraft} formMode={worldFormMode} />
             </IndividualShell>
           )}
 
@@ -588,7 +623,13 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, persona: false }))
               }}
             >
-              <PersonaForm value={personaDraft} onChange={setPersonaDraft} />
+              <WorkModeSwitch
+                value={personaFormMode}
+                onChange={setPersonaFormMode}
+                simpleDescription="자아의 기본 역할만 입력해서 빠르게 만들어요."
+                advancedDescription="말투, 외형, 비밀 설정, 선호/금지 전개까지 세밀하게 설정해요."
+              />
+              <PersonaForm value={personaDraft} onChange={setPersonaDraft} formMode={personaFormMode} />
             </IndividualShell>
           )}
         </main>
@@ -596,29 +637,11 @@ export default function CreatePage() {
 
       {mode === "work" && (
         <BottomActions>
-          <Button
-            variant="outline"
-            className="flex-1"
-            disabled={!previousStep}
-            onClick={() => previousStep && setWorkDraft((prev) => ({ ...prev, step: previousStep }))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            이전
-          </Button>
           <Button variant="outline" className="flex-1" onClick={saveWorkDraft}>
             <Save className="h-4 w-4" />
             임시저장
           </Button>
-          {nextStep ? (
-            <Button
-              className="flex-1"
-              disabled={!canGoNext}
-              onClick={() => setWorkDraft((prev) => ({ ...prev, step: nextStep }))}
-            >
-              다음
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          ) : (
+          {workFormMode === "simple" ? (
             <>
               <Button variant="outline" className="flex-1" disabled={!canGoNext} onClick={() => completeWork(false)}>
                 내 작품에 저장
@@ -627,6 +650,38 @@ export default function CreatePage() {
                 <Rocket className="h-4 w-4" />
                 바로 채팅 시작
               </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                className="flex-1"
+                disabled={!previousStep}
+                onClick={() => previousStep && setWorkDraft((prev) => ({ ...prev, step: previousStep }))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                이전
+              </Button>
+              {nextStep ? (
+                <Button
+                  className="flex-1"
+                  disabled={!canGoNext}
+                  onClick={() => setWorkDraft((prev) => ({ ...prev, step: nextStep }))}
+                >
+                  다음
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" className="flex-1" disabled={!canGoNext} onClick={() => completeWork(false)}>
+                    내 작품에 저장
+                  </Button>
+                  <Button className="flex-1" disabled={!canGoNext} onClick={() => completeWork(true)}>
+                    <Rocket className="h-4 w-4" />
+                    바로 채팅 시작
+                  </Button>
+                </>
+              )}
             </>
           )}
         </BottomActions>
@@ -796,6 +851,158 @@ function ContinueCard({
   )
 }
 
+function SimpleWorkCreateStep({
+  library,
+  draft,
+  setDraft,
+}: {
+  library: StoryChatLibrary
+  draft: WorkDraft
+  setDraft: React.Dispatch<React.SetStateAction<WorkDraft>>
+}) {
+  const selectedWorld = library.worlds.find((world) => world.id === draft.selectedWorldId)
+  const genre = draft.genre || String(selectedWorld?.genre || "")
+  const tagline = draft.tagline || selectedWorld?.tagline || draft.coreSetting || selectedWorld?.coreSetting || ""
+  const simpleIntro = draft.introScenarios[0]?.scene ?? draft.startScenario
+
+  const update = <K extends keyof WorkDraft>(key: K, value: WorkDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const updateSimpleIntro = (scene: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      startScenario: scene,
+      introScenarios: mergeSimpleIntro(prev.introScenarios, scene),
+    }))
+  }
+
+  return (
+    <section className="space-y-4">
+      <Card className="border-border bg-card">
+        <CardContent className="space-y-4 p-4 md:p-6">
+          <div>
+            <h2 className="text-base font-bold text-foreground">빠른 작품 만들기</h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              캐릭터와 세계관을 고르고, 바로 시작할 기본 정보만 입력합니다.
+            </p>
+          </div>
+
+          <FieldGroup className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field>
+                <FieldLabel>대표 캐릭터</FieldLabel>
+                {library.characters.length > 0 ? (
+                  <Select
+                    value={draft.selectedCharacterId}
+                    onValueChange={(selectedCharacterId) =>
+                      setDraft((prev) => ({ ...prev, characterSource: "select", selectedCharacterId }))
+                    }
+                  >
+                    <SelectTrigger className="w-full bg-input">
+                      <SelectValue placeholder="캐릭터 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {library.characters.map((character) => (
+                        <SelectItem key={character.id} value={character.id}>
+                          {character.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <EmptySelectState
+                    title="현재 생성된 캐릭터가 없습니다."
+                    description="캐릭터 만들기 버튼을 눌러 캐릭터를 생성해 주세요."
+                    actionLabel="캐릭터 만들기"
+                    onAction={() => setDraft((prev) => ({ ...prev, characterSource: "new" }))}
+                  />
+                )}
+              </Field>
+
+              <Field>
+                <FieldLabel>세계관</FieldLabel>
+                {library.worlds.length > 0 ? (
+                  <Select
+                    value={draft.selectedWorldId}
+                    onValueChange={(selectedWorldId) => {
+                      const world = library.worlds.find((item) => item.id === selectedWorldId)
+                      setDraft((prev) => ({
+                        ...prev,
+                        worldSource: "select",
+                        selectedWorldId,
+                        genre: prev.genre || String(world?.genre || ""),
+                        coreSetting: prev.coreSetting || world?.coreSetting || "",
+                        tagline: prev.tagline || world?.tagline || world?.coreSetting || "",
+                      }))
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-input">
+                      <SelectValue placeholder="세계관 선택" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {library.worlds.map((world) => (
+                        <SelectItem key={world.id} value={world.id}>
+                          {world.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <EmptySelectState
+                    title="현재 생성된 세계관이 없습니다."
+                    description="세계관 만들기 버튼을 눌러 세계관을 생성해 주세요."
+                    actionLabel="세계관 만들기"
+                    onAction={() => setDraft((prev) => ({ ...prev, worldSource: "new" }))}
+                  />
+                )}
+              </Field>
+            </div>
+
+            <Field>
+              <FieldLabel>작품 제목</FieldLabel>
+              <Input
+                value={draft.title}
+                onChange={(event) => update("title", event.target.value)}
+                className="bg-input"
+                placeholder="예: 이무기와 잊혀진 왕국"
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>장르</FieldLabel>
+              <GenreSelectWithCustomInput value={genre} onChange={(value) => update("genre", value)} />
+            </Field>
+
+            <Field>
+              <FieldLabel>한 줄 소개</FieldLabel>
+              <Textarea
+                value={tagline}
+                onChange={(event) => {
+                  update("tagline", event.target.value)
+                  update("coreSetting", event.target.value)
+                }}
+                className="min-h-[82px] bg-input"
+                placeholder="작품을 한 문장으로 설명해 주세요."
+              />
+            </Field>
+
+            <Field>
+              <FieldLabel>첫 상황 / 도입부 간단 입력</FieldLabel>
+              <Textarea
+                value={simpleIntro}
+                onChange={(event) => updateSimpleIntro(event.target.value)}
+                className="min-h-[90px] bg-input"
+                placeholder="바로 채팅을 시작할 첫 장면을 적어 주세요."
+              />
+            </Field>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
 function CharacterWorkStep({
   library,
   draft,
@@ -840,6 +1047,7 @@ function CharacterWorkStep({
           <CharacterForm
             value={draft.character}
             onChange={(character) => setDraft((prev) => ({ ...prev, character }))}
+            formMode="advanced"
           />
         </TabsContent>
       </Tabs>
@@ -891,6 +1099,7 @@ function WorldWorkStep({
           <WorldForm
             value={draft.world}
             onChange={(world) => setDraft((prev) => ({ ...prev, world }))}
+            formMode="advanced"
           />
         </TabsContent>
       </Tabs>
@@ -903,22 +1112,18 @@ function ReviewStep({
   setDraft,
   character,
   world,
+  formMode,
 }: {
   draft: WorkDraft
   setDraft: React.Dispatch<React.SetStateAction<WorkDraft>>
   character?: StoryCharacter
   world?: StoryWorld
+  formMode: WorkFormMode
 }) {
-  const [formMode, setFormMode] = useState<WorkFormMode>("simple")
   const genre = draft.genre || String(world?.genre || "")
   const tagline = draft.tagline || world?.tagline || draft.coreSetting || world?.coreSetting || ""
   const coreSetting = draft.coreSetting || draft.tagline || world?.coreSetting || ""
   const simpleIntro = draft.introScenarios[0]?.scene ?? draft.startScenario
-
-  const changeMode = (nextMode: WorkFormMode) => {
-    setFormMode(nextMode)
-    window.localStorage.setItem(WORK_FORM_MODE_KEY, nextMode)
-  }
 
   const update = <K extends keyof WorkDraft>(key: K, value: WorkDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }))
@@ -938,8 +1143,6 @@ function ReviewStep({
         {character && <CharacterSelectCard character={character} selected />}
         {world && <WorldSelectCard world={world} selected />}
       </div>
-
-      <WorkModeSwitch value={formMode} onChange={changeMode} />
 
       {formMode === "simple" ? (
         <Card className="bg-card border-border">
@@ -1066,7 +1269,17 @@ function ReviewStep({
   )
 }
 
-function WorkModeSwitch({ value, onChange }: { value: WorkFormMode; onChange: (value: WorkFormMode) => void }) {
+function WorkModeSwitch({
+  value,
+  onChange,
+  simpleDescription = "처음이라면 쉬운 모드로 시작해도 충분해요. 나중에 상세 모드에서 세계관과 도입부를 더 추가할 수 있어요.",
+  advancedDescription = "작품의 분위기, 시작 장면, 상태바, 세계관 정보를 세밀하게 설정할 수 있어요.",
+}: {
+  value: WorkFormMode
+  onChange: (value: WorkFormMode) => void
+  simpleDescription?: string
+  advancedDescription?: string
+}) {
   return (
     <Card className="border-border bg-card">
       <CardContent className="space-y-3 p-3">
@@ -1088,9 +1301,7 @@ function WorkModeSwitch({ value, onChange }: { value: WorkFormMode; onChange: (v
           ))}
         </div>
         <p className="px-1 text-xs leading-relaxed text-muted-foreground">
-          {value === "simple"
-            ? "처음이라면 쉬운 모드로 시작해도 충분해요. 나중에 상세 모드에서 세계관과 도입부를 더 추가할 수 있어요."
-            : "작품의 분위기, 시작 장면, 상태바, 세계관 정보를 세밀하게 설정할 수 있어요."}
+          {value === "simple" ? simpleDescription : advancedDescription}
         </p>
       </CardContent>
     </Card>
@@ -1180,9 +1391,11 @@ function StepSection({
 function CharacterForm({
   value,
   onChange,
+  formMode = "advanced",
 }: {
   value: StoryCharacter
   onChange: (value: StoryCharacter) => void
+  formMode?: WorkFormMode
 }) {
   const update = <K extends keyof StoryCharacter>(key: K, nextValue: StoryCharacter[K]) => {
     onChange({ ...value, [key]: nextValue })
@@ -1235,46 +1448,48 @@ function CharacterForm({
             </Field>
           </section>
 
-          <section className="space-y-4 border-t border-border pt-5">
-            <div>
-              <h3 className="text-sm font-bold text-foreground">선택 정보</h3>
-              <p className="mt-1 text-xs text-muted-foreground">필요할 때만 추가로 입력해 주세요.</p>
-            </div>
-            <Field>
-              <FieldLabel>장르</FieldLabel>
-              <GenreSelectWithCustomInput value={String(value.genre)} onChange={(genre) => update("genre", genre)} />
-            </Field>
-            <Field>
-              <FieldLabel>말투 규칙</FieldLabel>
-              <Textarea value={value.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="bg-input min-h-[90px]" />
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
+          {formMode === "advanced" && (
+            <section className="space-y-4 border-t border-border pt-5">
+              <div>
+                <h3 className="text-sm font-bold text-foreground">선택 정보</h3>
+                <p className="mt-1 text-xs text-muted-foreground">필요할 때만 추가로 입력해 주세요.</p>
+              </div>
               <Field>
-                <FieldLabel>비밀 설정</FieldLabel>
-                <Textarea value={value.secret} onChange={(event) => update("secret", event.target.value)} className="bg-input min-h-[80px]" />
+                <FieldLabel>장르</FieldLabel>
+                <GenreSelectWithCustomInput value={String(value.genre)} onChange={(genre) => update("genre", genre)} />
               </Field>
               <Field>
-                <FieldLabel>금지 전개</FieldLabel>
-                <Textarea value={value.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+                <FieldLabel>말투 규칙</FieldLabel>
+                <Textarea value={value.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="bg-input min-h-[90px]" />
               </Field>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <ImageUploadField
-                label="대표 아바타"
-                value={value.avatarUrl}
-                onChange={(avatarUrl) => update("avatarUrl", avatarUrl)}
-              />
-              <ImageUploadField
-                label="대표 이미지"
-                value={value.coverImageUrl}
-                onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
-              />
-            </div>
-            <Field>
-              <FieldLabel>대표 대사</FieldLabel>
-              <Input value={value.quote ?? ""} onChange={(event) => update("quote", event.target.value)} className="bg-input" />
-            </Field>
-          </section>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel>비밀 설정</FieldLabel>
+                  <Textarea value={value.secret} onChange={(event) => update("secret", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+                <Field>
+                  <FieldLabel>금지 전개</FieldLabel>
+                  <Textarea value={value.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ImageUploadField
+                  label="대표 아바타"
+                  value={value.avatarUrl}
+                  onChange={(avatarUrl) => update("avatarUrl", avatarUrl)}
+                />
+                <ImageUploadField
+                  label="대표 이미지"
+                  value={value.coverImageUrl}
+                  onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
+                />
+              </div>
+              <Field>
+                <FieldLabel>대표 대사</FieldLabel>
+                <Input value={value.quote ?? ""} onChange={(event) => update("quote", event.target.value)} className="bg-input" />
+              </Field>
+            </section>
+          )}
         </FieldGroup>
       </CardContent>
     </Card>
@@ -1369,9 +1584,11 @@ function ImageUploadField({
 function WorldForm({
   value,
   onChange,
+  formMode = "advanced",
 }: {
   value: StoryWorld
   onChange: (value: StoryWorld) => void
+  formMode?: WorkFormMode
 }) {
   const update = <K extends keyof StoryWorld>(key: K, nextValue: StoryWorld[K]) => {
     onChange({ ...value, [key]: nextValue })
@@ -1399,40 +1616,42 @@ function WorldForm({
             <FieldLabel>핵심 설정</FieldLabel>
             <Textarea value={value.coreSetting} onChange={(event) => update("coreSetting", event.target.value)} className="bg-input min-h-[90px]" />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>주요 장소</FieldLabel>
-              <Textarea value={value.places} onChange={(event) => update("places", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-            <Field>
-              <FieldLabel>주요 사건</FieldLabel>
-              <Textarea value={value.events} onChange={(event) => update("events", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>세계관 분위기</FieldLabel>
-              <Input value={value.mood} onChange={(event) => update("mood", event.target.value)} className="bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>세계관 날짜</FieldLabel>
-              <Input value={value.worldDate} onChange={(event) => update("worldDate", event.target.value)} className="bg-input" />
-            </Field>
-          </div>
           <Field>
-            <FieldLabel>금지 설정</FieldLabel>
-            <Textarea value={value.forbiddenSettings} onChange={(event) => update("forbiddenSettings", event.target.value)} className="bg-input min-h-[80px]" />
+            <FieldLabel>세계관 분위기</FieldLabel>
+            <Input value={value.mood} onChange={(event) => update("mood", event.target.value)} className="bg-input" />
           </Field>
-          <StoryProgressSettingsForm
-            value={value.storyProgressSettings}
-            onChange={(storyProgressSettings) => update("storyProgressSettings", storyProgressSettings)}
-            currentChapter={value.currentChapter}
-            currentGoal={value.currentGoal}
-            progress={value.progress}
-            onCurrentChapterChange={(currentChapter) => update("currentChapter", currentChapter)}
-            onCurrentGoalChange={(currentGoal) => update("currentGoal", currentGoal)}
-            onProgressChange={(progress) => update("progress", progress)}
-          />
+          {formMode === "advanced" && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel>주요 장소</FieldLabel>
+                  <Textarea value={value.places} onChange={(event) => update("places", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+                <Field>
+                  <FieldLabel>주요 사건</FieldLabel>
+                  <Textarea value={value.events} onChange={(event) => update("events", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel>세계관 날짜</FieldLabel>
+                <Input value={value.worldDate} onChange={(event) => update("worldDate", event.target.value)} className="bg-input" />
+              </Field>
+              <Field>
+                <FieldLabel>금지 설정</FieldLabel>
+                <Textarea value={value.forbiddenSettings} onChange={(event) => update("forbiddenSettings", event.target.value)} className="bg-input min-h-[80px]" />
+              </Field>
+              <StoryProgressSettingsForm
+                value={value.storyProgressSettings}
+                onChange={(storyProgressSettings) => update("storyProgressSettings", storyProgressSettings)}
+                currentChapter={value.currentChapter}
+                currentGoal={value.currentGoal}
+                progress={value.progress}
+                onCurrentChapterChange={(currentChapter) => update("currentChapter", currentChapter)}
+                onCurrentGoalChange={(currentGoal) => update("currentGoal", currentGoal)}
+                onProgressChange={(progress) => update("progress", progress)}
+              />
+            </>
+          )}
         </FieldGroup>
       </CardContent>
     </Card>
@@ -1699,9 +1918,11 @@ function ChapterEditorCard({
 function PersonaForm({
   value,
   onChange,
+  formMode = "advanced",
 }: {
   value: StoryPersona
   onChange: (value: StoryPersona) => void
+  formMode?: WorkFormMode
 }) {
   const update = <K extends keyof StoryPersona>(key: K, nextValue: StoryPersona[K]) => {
     onChange({ ...value, [key]: nextValue })
@@ -1729,40 +1950,42 @@ function PersonaForm({
             <FieldLabel>한 줄 소개</FieldLabel>
             <Input value={value.summary} onChange={(event) => update("summary", event.target.value)} className="bg-input" />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>성격</FieldLabel>
-              <Textarea value={value.personality} onChange={(event) => update("personality", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-            <Field>
-              <FieldLabel>말투</FieldLabel>
-              <Textarea value={value.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>외형</FieldLabel>
-              <Input value={value.appearance} onChange={(event) => update("appearance", event.target.value)} className="bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>캐릭터와의 관계</FieldLabel>
-              <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
-            </Field>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field>
-              <FieldLabel>비밀 설정</FieldLabel>
-              <Textarea value={value.secret} onChange={(event) => update("secret", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-            <Field>
-              <FieldLabel>선호 전개</FieldLabel>
-              <Textarea value={value.preferredDevelopments} onChange={(event) => update("preferredDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-            <Field>
-              <FieldLabel>금지 전개</FieldLabel>
-              <Textarea value={value.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
-            </Field>
-          </div>
+          <Field>
+            <FieldLabel>캐릭터와의 관계</FieldLabel>
+            <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
+          </Field>
+          {formMode === "advanced" && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel>성격</FieldLabel>
+                  <Textarea value={value.personality} onChange={(event) => update("personality", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+                <Field>
+                  <FieldLabel>말투</FieldLabel>
+                  <Textarea value={value.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel>외형</FieldLabel>
+                <Input value={value.appearance} onChange={(event) => update("appearance", event.target.value)} className="bg-input" />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field>
+                  <FieldLabel>비밀 설정</FieldLabel>
+                  <Textarea value={value.secret} onChange={(event) => update("secret", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+                <Field>
+                  <FieldLabel>선호 전개</FieldLabel>
+                  <Textarea value={value.preferredDevelopments} onChange={(event) => update("preferredDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+                <Field>
+                  <FieldLabel>금지 전개</FieldLabel>
+                  <Textarea value={value.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="bg-input min-h-[80px]" />
+                </Field>
+              </div>
+            </>
+          )}
         </FieldGroup>
       </CardContent>
     </Card>

@@ -49,7 +49,6 @@ export interface StoryWorld {
   forbiddenSettings: string
   coverColor: string
   storyProgressSettings: StoryProgressSettings
-  characterIds?: string[]
   coverImageUrl?: string
   thumbnailUrl?: string
   locationImages?: Record<string, string>

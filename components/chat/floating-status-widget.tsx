@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react"
 import { Activity, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -35,6 +35,8 @@ export function FloatingStatusWidget({
   const hasMountedRef = useRef(false)
   const previousAutoKeyRef = useRef<string>("")
   const autoCloseTimerRef = useRef<number | null>(null)
+  const popoverRef = useRef<HTMLElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const clearAutoCloseTimer = () => {
     if (autoCloseTimerRef.current) {
@@ -85,16 +87,24 @@ export function FloatingStatusWidget({
   useEffect(() => {
     if (!isOpen) return
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      clearAutoCloseTimer()
-      setIsOpen(false)
-      setOpenReason(null)
-      setIsHighlighted(false)
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (popoverRef.current?.contains(target)) return
+      if (buttonRef.current?.contains(target)) return
+      closeWidget()
     }
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      closeWidget()
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
     window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      window.removeEventListener("keydown", handleKeyDown)
+    }
   }, [isOpen])
 
   if (!enabled || !trimmedText) return null
@@ -137,6 +147,7 @@ export function FloatingStatusWidget({
     >
       {isOpen && (
         <StatusPopoverPanel
+          panelRef={popoverRef}
           text={trimmedText}
           compactText={compactText}
           onClose={closeWidget}
@@ -144,6 +155,7 @@ export function FloatingStatusWidget({
         />
       )}
       <StatusFloatingButton
+        buttonRef={buttonRef}
         isOpen={isOpen}
         isHighlighted={isHighlighted}
         onClick={handleButtonClick}
@@ -153,14 +165,16 @@ export function FloatingStatusWidget({
 }
 
 interface StatusFloatingButtonProps {
+  buttonRef: RefObject<HTMLButtonElement | null>
   isOpen: boolean
   isHighlighted: boolean
   onClick: () => void
 }
 
-function StatusFloatingButton({ isOpen, isHighlighted, onClick }: StatusFloatingButtonProps) {
+function StatusFloatingButton({ buttonRef, isOpen, isHighlighted, onClick }: StatusFloatingButtonProps) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       aria-label={isOpen ? "현재 상태 닫기" : "현재 상태 보기"}
       aria-expanded={isOpen}
@@ -177,15 +191,17 @@ function StatusFloatingButton({ isOpen, isHighlighted, onClick }: StatusFloating
 }
 
 interface StatusPopoverPanelProps {
+  panelRef: RefObject<HTMLElement | null>
   text: string
   compactText: string
   onClose: () => void
   onInteract: () => void
 }
 
-function StatusPopoverPanel({ text, compactText, onClose, onInteract }: StatusPopoverPanelProps) {
+function StatusPopoverPanel({ panelRef, text, compactText, onClose, onInteract }: StatusPopoverPanelProps) {
   return (
     <section
+      ref={panelRef}
       role="status"
       aria-label="현재 상태"
       onPointerDown={onInteract}

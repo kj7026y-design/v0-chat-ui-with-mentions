@@ -235,7 +235,6 @@ export default function MyWorksPage() {
           editingWorldId && detail.type === "scenarios" ? (
             <WorldEditPanel
               world={detailItem as StoryWorld}
-              characters={library.characters}
               onSave={handleSaveWorld}
               onCancel={() => setEditingWorldId(null)}
             />
@@ -729,34 +728,20 @@ function DetailView({
 
 function WorldEditPanel({
   world,
-  characters,
   onSave,
   onCancel,
 }: {
   world: StoryWorld
-  characters: StoryCharacter[]
   onSave: (world: StoryWorld) => void
   onCancel: () => void
 }) {
   const [draft, setDraft] = useState<StoryWorld>({
     ...world,
-    characterIds: world.characterIds ?? [],
     storyProgressSettings: world.storyProgressSettings ?? defaultStoryProgressSettings(),
   })
 
   const update = <K extends keyof StoryWorld>(key: K, value: StoryWorld[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
-  }
-
-  const toggleCharacter = (characterId: string) => {
-    setDraft((current) => {
-      const currentIds = current.characterIds ?? []
-      const nextIds = currentIds.includes(characterId)
-        ? currentIds.filter((id) => id !== characterId)
-        : [...currentIds, characterId]
-
-      return { ...current, characterIds: nextIds }
-    })
   }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -781,7 +766,7 @@ function WorldEditPanel({
       <section className="rounded-2xl border border-border bg-card p-4">
         <div className="mb-4">
           <h2 className="text-base font-bold text-foreground">세계관 수정</h2>
-          <p className="mt-1 text-xs text-muted-foreground">세계관 정보와 이 세계관에 등장할 캐릭터를 관리합니다.</p>
+          <p className="mt-1 text-xs text-muted-foreground">세계관의 기본 정보와 공개 소개에 쓰이는 설정을 수정합니다.</p>
         </div>
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -854,47 +839,6 @@ function WorldEditPanel({
             />
           </WorldEditField>
         </div>
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-4">
-        <div className="mb-4">
-          <h2 className="text-base font-bold text-foreground">연결 캐릭터</h2>
-          <p className="mt-1 text-xs text-muted-foreground">선택한 캐릭터는 세계관 소개 페이지의 등장 존재에 표시됩니다.</p>
-        </div>
-        {characters.length > 0 ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {characters.map((character) => {
-              const checked = draft.characterIds?.includes(character.id) ?? false
-              return (
-                <label
-                  key={character.id}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors",
-                    checked ? "border-primary bg-accent" : "border-border bg-background/50 hover:bg-accent/60",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleCharacter(character.id)}
-                    className="h-4 w-4 accent-current"
-                  />
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-lg">
-                    {character.emoji}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-foreground">{character.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{character.summary}</span>
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            아직 생성된 캐릭터가 없습니다. 캐릭터를 먼저 생성해 주세요.
-          </div>
-        )}
       </section>
 
       <div className="flex gap-2">

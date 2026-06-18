@@ -24,10 +24,15 @@ export function QuestRewardPopup({
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => setShowContent(true), 100)
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") onClose()
+      }
       // Prevent body scroll when popup is open
       document.body.style.overflow = 'hidden'
+      window.addEventListener("keydown", handleKeyDown)
       return () => {
         clearTimeout(timer)
+        window.removeEventListener("keydown", handleKeyDown)
         document.body.style.overflow = ''
       }
     } else {

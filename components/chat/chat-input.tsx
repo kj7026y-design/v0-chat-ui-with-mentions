@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, type ReactNode, type UIEvent } from "react"
+import { useState, useRef, useEffect, type ReactNode, type RefObject, type UIEvent } from "react"
 import { Send, Image as ImageIcon, MessageCircle, X, Zap } from "lucide-react"
 import { SLASH_COMMANDS } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
@@ -138,14 +138,19 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const quickBarRef = useRef<HTMLDivElement>(null)
+  const commandPopupRef = useRef<HTMLDivElement>(null)
+  const commandButtonRef = useRef<HTMLButtonElement>(null)
+  const characterContextRef = useRef<HTMLDivElement>(null)
+  const mentionButtonRef = useRef<HTMLButtonElement>(null)
+  const speechButtonRef = useRef<HTMLButtonElement>(null)
   const quickBarDragStartXRef = useRef(0)
   const quickBarScrollStartRef = useRef(0)
   const quickBarHasDraggedRef = useRef(false)
   const suppressQuickButtonClickRef = useRef(false)
 
   const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
-    input.startsWith("/")
-      ? cmd.name.toLowerCase().includes(input.slice(1).toLowerCase())
+    showCommands && (!input || input.startsWith("/"))
+      ? cmd.name.toLowerCase().includes(input.startsWith("/") ? input.slice(1).toLowerCase() : "")
       : false
   )
 
@@ -192,6 +197,51 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   }, [disabled])
 
   useEffect(() => {
+    if (!showCommands) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (commandPopupRef.current?.contains(target)) return
+      if (commandButtonRef.current?.contains(target)) return
+      setShowCommands(false)
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowCommands(false)
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [showCommands])
+
+  useEffect(() => {
+    if (contextMode === null) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (characterContextRef.current?.contains(target)) return
+      if (mentionButtonRef.current?.contains(target)) return
+      if (speechButtonRef.current?.contains(target)) return
+      closeCharacterContext()
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeCharacterContext()
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [contextMode])
+
+  useEffect(() => {
     if (!insertTextRequest || disabled) return
     insertAtCursor(insertTextRequest.text)
   }, [insertTextRequest])
@@ -233,7 +283,14 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   // Handle command button click
   const handleCommandClick = () => {
     if (disabled) return
-    setInput("/")
+    closeCharacterContext()
+    if (showCommands) {
+      setShowCommands(false)
+      textareaRef.current?.focus()
+      return
+    }
+    setShowCommands(true)
+    setSelectedCommandIndex(0)
     textareaRef.current?.focus()
   }
 
@@ -245,6 +302,11 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
 
   const openCharacterContext = (mode: CharacterContextMode) => {
     if (disabled) return
+    setShowCommands(false)
+    if (contextMode === mode) {
+      closeCharacterContext()
+      return
+    }
     setContextMode(mode)
     setMentionQuery("")
     setActiveMentionRange(null)
@@ -408,6 +470,11 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     }
     // Command navigation
     if (showCommands && filteredCommands.length > 0) {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        setShowCommands(false)
+        return
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault()
         setSelectedCommandIndex((prev) =>
@@ -460,15 +527,31 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
 
       {/* Command Popup */}
       {showCommands && filteredCommands.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 rounded-xl bg-popover overflow-hidden shadow-lg border border-border">
-          <div className="p-2">
-            <p className="text-xs text-muted-foreground px-2 py-1">명령어</p>
+        <div
+          ref={commandPopupRef}
+          role="dialog"
+          aria-label="명령어"
+          className="absolute bottom-full left-4 right-4 z-40 mb-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
+        >
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+            <p className="text-xs font-semibold text-foreground">명령어</p>
+            <button
+              type="button"
+              onClick={() => setShowCommands(false)}
+              className="rounded-full p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              aria-label="명령어 닫기"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="max-h-64 overflow-y-auto p-2">
             {filteredCommands.map((cmd, index) => (
               <button
                 key={cmd.id}
+                type="button"
                 onClick={() => handleCommandSelect(cmd.name)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-left",
+                  "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition",
                   index === selectedCommandIndex
                     ? "bg-accent"
                     : "hover:bg-accent"
@@ -490,6 +573,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       )}
 
       <CharacterContextBox
+        popoverRef={characterContextRef}
         open={!disabled && contextMode !== null}
         mode={contextMode ?? "mention"}
         characters={filteredContextCharacters}
@@ -524,6 +608,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           <ImageIcon className="w-4 h-4" />
         </button>
         <button
+          ref={commandButtonRef}
           type="button"
           onClick={handleCommandClick}
           disabled={disabled}
@@ -537,6 +622,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         <div className="w-px h-5 bg-border flex-shrink-0" />
 
         <button
+          ref={mentionButtonRef}
           type="button"
           onClick={() => openCharacterContext("mention")}
           disabled={disabled}
@@ -547,6 +633,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           @
         </button>
         <button
+          ref={speechButtonRef}
           type="button"
           onClick={() => openCharacterContext("speech")}
           disabled={disabled}
@@ -630,6 +717,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
 }
 
 interface CharacterContextBoxProps {
+  popoverRef: RefObject<HTMLDivElement | null>
   open: boolean
   mode: CharacterContextMode
   characters: ChatInputCharacter[]
@@ -639,6 +727,7 @@ interface CharacterContextBoxProps {
 }
 
 function CharacterContextBox({
+  popoverRef,
   open,
   mode,
   characters,
@@ -661,6 +750,7 @@ function CharacterContextBox({
 
   return (
     <div
+      ref={popoverRef}
       role="dialog"
       aria-label={mode === "mention" ? "멘션할 캐릭터" : "말하게 할 캐릭터"}
       className="absolute bottom-full left-4 right-4 z-40 mb-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
