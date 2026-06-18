@@ -61,6 +61,7 @@ import {
   saveStoryChatLibrary,
   type StoryChapter,
   type StoryCharacter,
+  type StoryCharacterGender,
   type StoryChatLibrary,
   type IntroScenario,
   type StoryPersona,
@@ -117,6 +118,8 @@ const emptyCharacter = (): StoryCharacter => ({
   id: "",
   name: "",
   genre: "",
+  gender: "unknown",
+  genderCustom: "",
   age: "",
   role: "",
   residence: "",
@@ -132,6 +135,7 @@ const emptyCharacter = (): StoryCharacter => ({
   allowCustomStart: true,
   startOptions: ["", "", ""],
   tags: [],
+  visualTags: [],
   emoji: "✨",
   createdAt: "",
 })
@@ -158,6 +162,8 @@ const emptyWorld = (): StoryWorld => ({
 const emptyPersona = (): StoryPersona => ({
   id: "",
   name: "",
+  gender: "unknown",
+  genderCustom: "",
   age: "",
   role: "",
   summary: "",
@@ -1407,56 +1413,62 @@ function CharacterForm({
         <FieldGroup className="space-y-6">
           <section className="space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-foreground">필수 정보</h3>
-              <p className="mt-1 text-xs text-muted-foreground">캐릭터를 저장하려면 아래 항목을 입력해 주세요.</p>
+              <h3 className="text-sm font-bold text-foreground">{formMode === "simple" ? "쉬운 모드" : "기본 정보"}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">채팅 캐릭터로 바로 쓸 수 있는 핵심 정보를 입력해 주세요.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel>이름</FieldLabel>
                 <Input value={value.name} onChange={(event) => update("name", event.target.value)} className="bg-input" />
               </Field>
+              <GenderSelectField value={value} onChange={onChange} />
               <Field>
                 <FieldLabel>나이</FieldLabel>
                 <Input value={value.age ?? ""} onChange={(event) => update("age", event.target.value)} className="bg-input" />
               </Field>
               <Field>
-                <FieldLabel>직업</FieldLabel>
+                <FieldLabel>역할/직업</FieldLabel>
                 <Input value={value.role ?? ""} onChange={(event) => update("role", event.target.value)} className="bg-input" />
               </Field>
-              <Field>
-                <FieldLabel>사는곳</FieldLabel>
-                <Input value={value.residence ?? ""} onChange={(event) => update("residence", event.target.value)} className="bg-input" />
-              </Field>
             </div>
             <Field>
-              <FieldLabel>한줄소개</FieldLabel>
+              <FieldLabel>한 줄 소개</FieldLabel>
               <Input value={value.summary} onChange={(event) => update("summary", event.target.value)} className="bg-input" />
             </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field>
-                <FieldLabel>성격</FieldLabel>
-                <Textarea value={value.personality} onChange={(event) => update("personality", event.target.value)} className="bg-input min-h-[80px]" />
-              </Field>
-              <Field>
-                <FieldLabel>외모</FieldLabel>
-                <Textarea value={value.appearance ?? ""} onChange={(event) => update("appearance", event.target.value)} className="bg-input min-h-[80px]" />
-              </Field>
-            </div>
             <Field>
-              <FieldLabel>사용자와의 기본 관계</FieldLabel>
-              <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
+              <FieldLabel>성격 키워드</FieldLabel>
+              <Textarea value={value.personality} onChange={(event) => update("personality", event.target.value)} className="bg-input min-h-[80px]" />
             </Field>
+            <ImageUploadField
+              label="대표 이미지"
+              value={value.coverImageUrl}
+              onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
+            />
           </section>
 
           {formMode === "advanced" && (
             <section className="space-y-4 border-t border-border pt-5">
               <div>
-                <h3 className="text-sm font-bold text-foreground">선택 정보</h3>
-                <p className="mt-1 text-xs text-muted-foreground">필요할 때만 추가로 입력해 주세요.</p>
+                <h3 className="text-sm font-bold text-foreground">상세 모드</h3>
+                <p className="mt-1 text-xs text-muted-foreground">외형, 관계성, 말투와 탐색용 태그를 더 세밀하게 정합니다.</p>
               </div>
               <Field>
                 <FieldLabel>장르</FieldLabel>
                 <GenreSelectWithCustomInput value={String(value.genre)} onChange={(genre) => update("genre", genre)} />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel>사는 곳</FieldLabel>
+                  <Input value={value.residence ?? ""} onChange={(event) => update("residence", event.target.value)} className="bg-input" />
+                </Field>
+                <Field>
+                  <FieldLabel>사용자와의 관계</FieldLabel>
+                  <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel>외모 상세</FieldLabel>
+                <Textarea value={value.appearance ?? ""} onChange={(event) => update("appearance", event.target.value)} className="bg-input min-h-[80px]" />
               </Field>
               <Field>
                 <FieldLabel>말투 규칙</FieldLabel>
@@ -1478,12 +1490,19 @@ function CharacterForm({
                   value={value.avatarUrl}
                   onChange={(avatarUrl) => update("avatarUrl", avatarUrl)}
                 />
-                <ImageUploadField
-                  label="대표 이미지"
-                  value={value.coverImageUrl}
-                  onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
+                <TagInputField
+                  label="태그"
+                  placeholder="신비로운, 고독한, 지혜로운"
+                  value={value.tags}
+                  onChange={(tags) => update("tags", tags)}
                 />
               </div>
+              <TagInputField
+                label="외형 키워드"
+                placeholder="흑발, 장신, 넓은 어깨, 차가운 인상"
+                value={value.visualTags ?? []}
+                onChange={(visualTags) => update("visualTags", visualTags)}
+              />
               <Field>
                 <FieldLabel>대표 대사</FieldLabel>
                 <Input value={value.quote ?? ""} onChange={(event) => update("quote", event.target.value)} className="bg-input" />
@@ -1493,6 +1512,86 @@ function CharacterForm({
         </FieldGroup>
       </CardContent>
     </Card>
+  )
+}
+
+function GenderSelectField({
+  value,
+  onChange,
+}: {
+  value: StoryCharacter
+  onChange: (value: StoryCharacter) => void
+}) {
+  const gender = value.gender ?? "unknown"
+
+  const updateGender = (nextGender: StoryCharacterGender) => {
+    onChange({
+      ...value,
+      gender: nextGender,
+      genderCustom: nextGender === "custom" ? value.genderCustom ?? "" : "",
+    })
+  }
+
+  return (
+    <Field>
+      <FieldLabel>성별</FieldLabel>
+      <Select value={gender} onValueChange={(nextValue) => updateGender(nextValue as StoryCharacterGender)}>
+        <SelectTrigger className="w-full bg-input">
+          <SelectValue placeholder="성별 선택" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="male">남성</SelectItem>
+          <SelectItem value="female">여성</SelectItem>
+          <SelectItem value="nonbinary">논바이너리/기타</SelectItem>
+          <SelectItem value="unknown">설정하지 않음</SelectItem>
+          <SelectItem value="custom">직접 입력</SelectItem>
+        </SelectContent>
+      </Select>
+      {gender === "custom" && (
+        <Input
+          value={value.genderCustom ?? ""}
+          onChange={(event) => onChange({ ...value, gender: "custom", genderCustom: event.target.value })}
+          placeholder="성별을 직접 입력하세요"
+          className="mt-2 bg-input"
+        />
+      )}
+    </Field>
+  )
+}
+
+function TagInputField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string
+  value?: string[]
+  onChange: (value: string[]) => void
+  placeholder: string
+}) {
+  const textValue = (value ?? []).join(", ")
+
+  return (
+    <Field>
+      <FieldLabel>{label}</FieldLabel>
+      <Input
+        value={textValue}
+        onChange={(event) => onChange(normalizeTagList(event.target.value))}
+        onBlur={(event) => onChange(normalizeTagList(event.target.value))}
+        placeholder={placeholder}
+        className="bg-input"
+      />
+      {(value ?? []).length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(value ?? []).map((tag) => (
+            <Badge key={tag} variant="secondary" className="text-[10px]">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </Field>
   )
 }
 
@@ -1937,19 +2036,22 @@ function PersonaForm({
               <FieldLabel>자아 이름</FieldLabel>
               <Input value={value.name} onChange={(event) => update("name", event.target.value)} className="bg-input" />
             </Field>
+            <PersonaGenderSelectField value={value} onChange={onChange} />
             <Field>
               <FieldLabel>나이</FieldLabel>
               <Input value={value.age} onChange={(event) => update("age", event.target.value)} className="bg-input" />
             </Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel>직업/신분</FieldLabel>
               <Input value={value.role} onChange={(event) => update("role", event.target.value)} className="bg-input" />
             </Field>
+            <Field>
+              <FieldLabel>한 줄 소개</FieldLabel>
+              <Input value={value.summary} onChange={(event) => update("summary", event.target.value)} className="bg-input" />
+            </Field>
           </div>
-          <Field>
-            <FieldLabel>한 줄 소개</FieldLabel>
-            <Input value={value.summary} onChange={(event) => update("summary", event.target.value)} className="bg-input" />
-          </Field>
           <Field>
             <FieldLabel>캐릭터와의 관계</FieldLabel>
             <Input value={value.relationship} onChange={(event) => update("relationship", event.target.value)} className="bg-input" />
@@ -1989,6 +2091,50 @@ function PersonaForm({
         </FieldGroup>
       </CardContent>
     </Card>
+  )
+}
+
+function PersonaGenderSelectField({
+  value,
+  onChange,
+}: {
+  value: StoryPersona
+  onChange: (value: StoryPersona) => void
+}) {
+  const gender = value.gender ?? "unknown"
+
+  const updateGender = (nextGender: StoryCharacterGender) => {
+    onChange({
+      ...value,
+      gender: nextGender,
+      genderCustom: nextGender === "custom" ? value.genderCustom ?? "" : "",
+    })
+  }
+
+  return (
+    <Field>
+      <FieldLabel>성별</FieldLabel>
+      <Select value={gender} onValueChange={(nextValue) => updateGender(nextValue as StoryCharacterGender)}>
+        <SelectTrigger className="w-full bg-input">
+          <SelectValue placeholder="성별 선택" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="male">남성</SelectItem>
+          <SelectItem value="female">여성</SelectItem>
+          <SelectItem value="nonbinary">논바이너리/기타</SelectItem>
+          <SelectItem value="unknown">설정하지 않음</SelectItem>
+          <SelectItem value="custom">직접 입력</SelectItem>
+        </SelectContent>
+      </Select>
+      {gender === "custom" && (
+        <Input
+          value={value.genderCustom ?? ""}
+          onChange={(event) => onChange({ ...value, gender: "custom", genderCustom: event.target.value })}
+          placeholder="성별을 직접 입력하세요"
+          className="mt-2 bg-input"
+        />
+      )}
+    </Field>
   )
 }
 
@@ -2043,7 +2189,9 @@ function CharacterSelectCard({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold">{character.name || "이름 없음"}</h3>
-              <span className="text-xs text-muted-foreground">{character.genre}</span>
+              <span className="text-xs text-muted-foreground">
+                {[character.genre, getCharacterGenderLabel(character)].filter(Boolean).join(" · ")}
+              </span>
             </div>
             <p className="text-sm text-muted-foreground">{character.summary}</p>
           </div>
@@ -2207,17 +2355,43 @@ function readDraft<T>(key: string): T | null {
 }
 
 function normalizeCharacter(character: StoryCharacter): StoryCharacter {
+  const tags = normalizeTagList(character.tags)
+  const visualTags = normalizeTagList(character.visualTags)
+
   return {
     ...character,
     id: character.id || createId("character"),
-    tags: character.tags.length
-      ? character.tags
+    gender: character.gender ?? "unknown",
+    genderCustom: character.gender === "custom" ? character.genderCustom?.trim() ?? "" : "",
+    tags: tags.length
+      ? tags
       : character.personality
           .split(/[,\s]+/)
+          .map((tag) => tag.trim())
           .filter(Boolean)
           .slice(0, 3),
+    visualTags,
     createdAt: character.createdAt || new Date().toLocaleDateString("ko-KR"),
   }
+}
+
+function normalizeTagList(value?: string[] | string | null): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => item.trim()).filter(Boolean)
+  }
+  if (!value) return []
+  return value
+    .split(/[,，、\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function getCharacterGenderLabel(character: StoryCharacter) {
+  if (character.gender === "custom" && character.genderCustom?.trim()) return character.genderCustom.trim()
+  if (character.gender === "male") return "남성"
+  if (character.gender === "female") return "여성"
+  if (character.gender === "nonbinary") return "논바이너리/기타"
+  return ""
 }
 
 function normalizeWorld(world: StoryWorld): StoryWorld {
@@ -2239,6 +2413,8 @@ function normalizePersona(persona: StoryPersona): StoryPersona {
   return {
     ...persona,
     id: persona.id || createId("persona"),
+    gender: persona.gender ?? "unknown",
+    genderCustom: persona.gender === "custom" ? persona.genderCustom?.trim() ?? "" : "",
     createdAt: persona.createdAt || new Date().toLocaleDateString("ko-KR"),
   }
 }
@@ -2254,11 +2430,8 @@ function isCharacterReady(character: StoryCharacter) {
     character.name &&
       character.age &&
       character.role &&
-      character.residence &&
       character.summary &&
-      character.personality &&
-      character.appearance &&
-      character.relationship,
+      character.personality,
   )
 }
 

@@ -5,7 +5,7 @@ import { useAppStore, type Story } from "@/lib/store"
 import { StoryCard } from "@/components/story-card"
 import { StoryDrawer } from "@/components/story-drawer"
 import { Button } from "@/components/ui/button"
-import { Play, ChevronLeft, ChevronRight, User, Compass, PenTool, Heart } from "lucide-react"
+import { Play, ChevronLeft, ChevronRight, Compass, PenTool, Heart } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 
@@ -127,14 +127,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Profile */}
-            <Link
-              href="/mypage"
-              className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center hover:bg-accent transition-colors"
-              aria-label="마이페이지"
-            >
-              <User className="w-4 h-4 text-muted-foreground" />
-            </Link>
           </div>
 
           {/* Mobile Tabs */}

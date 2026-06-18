@@ -2,10 +2,14 @@ import type { Category } from "@/lib/store"
 
 export const STORYCHAT_LIBRARY_KEY = "storychat_library"
 
+export type StoryCharacterGender = "male" | "female" | "nonbinary" | "unknown" | "custom"
+
 export interface StoryCharacter {
   id: string
   name: string
   genre: Category | string
+  gender?: StoryCharacterGender
+  genderCustom?: string
   age?: string
   residence?: string
   appearance?: string
@@ -90,6 +94,8 @@ export interface IntroScenario {
 export interface StoryPersona {
   id: string
   name: string
+  gender?: StoryCharacterGender
+  genderCustom?: string
   age: string
   role: string
   summary: string
@@ -177,6 +183,8 @@ export const defaultLibrary: StoryChatLibrary = {
       id: "c1",
       name: "이무기",
       genre: "판타지",
+      gender: "unknown",
+      genderCustom: "",
       age: "천년 이상",
       role: "용이 되지 못한 존재",
       residence: "잊혀진 왕국의 안개 숲",
@@ -199,6 +207,8 @@ export const defaultLibrary: StoryChatLibrary = {
       id: "c2",
       name: "하늘",
       genre: "학교",
+      gender: "female",
+      genderCustom: "",
       age: "18",
       role: "이웃집 친구",
       residence: "현대 서울",
@@ -221,6 +231,8 @@ export const defaultLibrary: StoryChatLibrary = {
       id: "c3",
       name: "루나",
       genre: "판타지",
+      gender: "female",
+      genderCustom: "",
       age: "알 수 없음",
       role: "꿈속의 안내자",
       residence: "자정의 정원",
@@ -321,6 +333,8 @@ export const defaultLibrary: StoryChatLibrary = {
     {
       id: "p1",
       name: "나",
+      gender: "unknown",
+      genderCustom: "",
       age: "24",
       role: "잊혀진 왕국의 마지막 기사",
       summary: "왕국을 지키기 위해 남은 유일한 존재",
@@ -336,6 +350,8 @@ export const defaultLibrary: StoryChatLibrary = {
     {
       id: "p2",
       name: "민지",
+      gender: "female",
+      genderCustom: "",
       age: "22",
       role: "현대 서울의 대학생",
       summary: "우연히 마법을 발견한 평범한 대학생",
@@ -351,6 +367,8 @@ export const defaultLibrary: StoryChatLibrary = {
     {
       id: "p3",
       name: "아리아",
+      gender: "female",
+      genderCustom: "",
       age: "29",
       role: "별들의 도시 탐험가",
       summary: "은하계를 여행하는 우주 탐험가",
@@ -454,11 +472,11 @@ export function getStoryChatLibrary(): StoryChatLibrary {
   try {
     const parsed = JSON.parse(raw) as Partial<StoryChatLibrary>
     return {
-      characters: Array.isArray(parsed.characters) ? parsed.characters : defaultLibrary.characters,
+      characters: Array.isArray(parsed.characters) ? parsed.characters.map(normalizeStoredCharacter) : defaultLibrary.characters,
       worlds: Array.isArray(parsed.worlds)
         ? ensureDefaultItems(parsed.worlds.map(normalizeStoredWorld), defaultLibrary.worlds, ["s4"])
         : defaultLibrary.worlds,
-      personas: Array.isArray(parsed.personas) ? parsed.personas : defaultLibrary.personas,
+      personas: Array.isArray(parsed.personas) ? parsed.personas.map(normalizeStoredPersona) : defaultLibrary.personas,
       works: Array.isArray(parsed.works)
         ? ensureDefaultItems(parsed.works.map(normalizeStoredWork), defaultLibrary.works, ["w3"])
         : defaultLibrary.works,
@@ -481,6 +499,25 @@ function normalizeStoredWorld(world: StoryWorld): StoryWorld {
   return {
     ...world,
     storyProgressSettings: normalizeProgressSettings(world.storyProgressSettings),
+  }
+}
+
+function normalizeStoredCharacter(character: StoryCharacter): StoryCharacter {
+  return {
+    ...character,
+    gender: character.gender ?? "unknown",
+    genderCustom: character.genderCustom ?? "",
+    tags: Array.isArray(character.tags) ? character.tags.filter(Boolean) : [],
+    visualTags: Array.isArray(character.visualTags) ? character.visualTags.filter(Boolean) : [],
+    startOptions: Array.isArray(character.startOptions) ? character.startOptions : [],
+  }
+}
+
+function normalizeStoredPersona(persona: StoryPersona): StoryPersona {
+  return {
+    ...persona,
+    gender: persona.gender ?? "unknown",
+    genderCustom: persona.genderCustom ?? "",
   }
 }
 

@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { ArrowUpDown, MessageCircle, Play, Search, Sparkles } from "lucide-react"
+import { ArrowUpDown, Search, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   defaultLibrary,
@@ -31,7 +30,6 @@ interface ExploreCharacter {
 const baseGenres = ["전체", "판타지", "로맨스", "현대", "학원", "무협", "SF", "공포", "미스터리", "일상"]
 
 export default function ExplorePage() {
-  const router = useRouter()
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [query, setQuery] = useState("")
   const [genre, setGenre] = useState("전체")
@@ -100,26 +98,6 @@ export default function ExplorePage() {
   const hasSearch = query.trim().length > 0
   const hasContent = exploreWorks.length > 0 || exploreCharacters.length > 0
 
-  const startWork = (item?: ExploreWork | StoryWork) => {
-    const work = "work" in (item ?? {}) ? (item as ExploreWork).work : item as StoryWork | undefined
-    if (!work) return
-    const character = library.characters.find((candidate) => candidate.id === (work.defaultCharacterId ?? work.characterId))
-    if (!character) {
-      window.alert("아직 시작 가능한 캐릭터가 없어요.")
-      router.push(`/my-works/${work.id}`)
-      return
-    }
-    router.push(`/chat/${work.id}`)
-  }
-
-  const startCharacter = (item: ExploreCharacter) => {
-    if (item.work) {
-      router.push(`/chat/${item.work.id}`)
-      return
-    }
-    window.alert("이 캐릭터로 시작 가능한 작품이 아직 없어요.")
-  }
-
   return (
     <main className="min-h-full bg-[#080808] text-foreground">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-10">
@@ -141,14 +119,14 @@ export default function ExplorePage() {
             {visibleWorks.length > 0 && (
               <ContentRail title="작품">
                 {visibleWorks.map((item) => (
-                  <WorkPosterCard key={item.work.id} item={item} onStart={() => startWork(item)} />
+                  <WorkPosterCard key={item.work.id} item={item} />
                 ))}
               </ContentRail>
             )}
             {visibleCharacters.length > 0 && (
               <ContentRail title="캐릭터">
                 {visibleCharacters.map((item) => (
-                  <CharacterExploreCard key={item.character.id} item={item} onStart={() => startCharacter(item)} />
+                  <CharacterExploreCard key={item.character.id} item={item} />
                 ))}
               </ContentRail>
             )}
@@ -160,21 +138,21 @@ export default function ExplorePage() {
           </section>
         ) : (
           <>
-            {heroWork && <ExploreHero item={heroWork} onStart={() => startWork(heroWork)} />}
+            {heroWork && <ExploreHero item={heroWork} />}
             <ContentRail title="인기 작품" subtitle="지금 많이 시작되는 이야기">
               {visibleWorks.slice(0, 10).map((item) => (
-                <WorkPosterCard key={item.work.id} item={item} onStart={() => startWork(item)} />
+                <WorkPosterCard key={item.work.id} item={item} />
               ))}
             </ContentRail>
-            <ContentRail title="인기 캐릭터" subtitle="바로 대화를 시작할 수 있어요">
+            <ContentRail title="인기 캐릭터" subtitle="매력적인 캐릭터를 둘러보세요">
               {visibleCharacters.slice(0, 10).map((item) => (
-                <CharacterExploreCard key={item.character.id} item={item} onStart={() => startCharacter(item)} />
+                <CharacterExploreCard key={item.character.id} item={item} />
               ))}
             </ContentRail>
-            <GenreRecommendation works={visibleWorks} onStart={startWork} />
+            <GenreRecommendation works={visibleWorks} />
             <ContentRail title="새로 올라온 작품" subtitle="최근 등록된 공개 콘텐츠">
               {sortWorks(visibleWorks, "latest").map((item) => (
-                <WorkPosterCard key={item.work.id} item={item} onStart={() => startWork(item)} compact />
+                <WorkPosterCard key={item.work.id} item={item} compact />
               ))}
             </ContentRail>
           </>
@@ -342,7 +320,7 @@ function GenreFilterChips({
   )
 }
 
-function ExploreHero({ item, onStart }: { item: ExploreWork; onStart: () => void }) {
+function ExploreHero({ item }: { item: ExploreWork }) {
   const { work, world, character } = item
   const title = work.title
   const description = work.tagline || work.coreSetting || world?.tagline || world?.coreSetting || "아직 기록되지 않은 이야기가 당신을 기다리고 있다."
@@ -369,14 +347,6 @@ function ExploreHero({ item, onStart }: { item: ExploreWork; onStart: () => void
         <h2 className="max-w-2xl text-3xl font-bold leading-tight text-white">{title}</h2>
         <p className="mt-2 line-clamp-2 max-w-2xl text-sm leading-relaxed text-white/70">{description}</p>
         <div className="mt-5 flex gap-2">
-          <button
-            type="button"
-            onClick={onStart}
-            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90"
-          >
-            <Play className="h-4 w-4 fill-current" />
-            바로 시작
-          </button>
           <Link
             href={`/my-works/${work.id}`}
             className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur transition hover:bg-white/15"
@@ -468,7 +438,7 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
   )
 }
 
-function WorkPosterCard({ item, onStart, compact }: { item: ExploreWork; onStart: () => void; compact?: boolean }) {
+function WorkPosterCard({ item, compact }: { item: ExploreWork; compact?: boolean }) {
   const { work, world, character } = item
   const genre = work.genre || world?.genre || character?.genre
   const description = work.tagline || work.coreSetting || world?.coreSetting || work.startScenario
@@ -502,19 +472,11 @@ function WorkPosterCard({ item, onStart, compact }: { item: ExploreWork; onStart
           </div>
         </div>
       </Link>
-      <button
-        type="button"
-        onClick={onStart}
-        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full bg-white/[0.08] px-3 py-2 text-xs font-medium text-white transition hover:bg-white/[0.14]"
-      >
-        <MessageCircle className="h-3.5 w-3.5" />
-        시작
-      </button>
     </article>
   )
 }
 
-function CharacterExploreCard({ item, onStart }: { item: ExploreCharacter; onStart: () => void }) {
+function CharacterExploreCard({ item }: { item: ExploreCharacter }) {
   const { character, work } = item
   const detailHref = `/my-works?tab=characters&detailType=characters&detailId=${character.id}`
 
@@ -545,18 +507,11 @@ function CharacterExploreCard({ item, onStart }: { item: ExploreCharacter; onSta
           <p className="line-clamp-2 min-h-8 text-xs leading-relaxed text-white/45">{character.summary}</p>
         </div>
       </Link>
-      <button
-        type="button"
-        onClick={onStart}
-        className="mt-3 flex w-full items-center justify-center rounded-full bg-white/[0.08] px-3 py-2 text-xs font-medium text-white transition hover:bg-white/[0.14]"
-      >
-        채팅 시작
-      </button>
     </article>
   )
 }
 
-function GenreRecommendation({ works, onStart }: { works: ExploreWork[]; onStart: (item: ExploreWork) => void }) {
+function GenreRecommendation({ works }: { works: ExploreWork[] }) {
   const grouped = new Map<string, ExploreWork[]>()
   works.forEach((item) => {
     const genre = String(item.work.genre || item.world?.genre || item.character?.genre || "기타")
@@ -569,7 +524,7 @@ function GenreRecommendation({ works, onStart }: { works: ExploreWork[]; onStart
       {[...grouped.entries()].slice(0, 4).map(([genre, items]) => (
         <ContentRail key={genre} title={`${genre} 추천`}>
           {items.slice(0, 8).map((item) => (
-            <WorkPosterCard key={item.work.id} item={item} onStart={() => onStart(item)} compact />
+            <WorkPosterCard key={item.work.id} item={item} compact />
           ))}
         </ContentRail>
       ))}

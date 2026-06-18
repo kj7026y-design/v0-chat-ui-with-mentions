@@ -555,22 +555,37 @@ function DetailSection({
 
 function CharacterLandingPage({ character }: { character: StoryCharacter }) {
   const quote = character.quote || character.speechStyle || "나는 아직 내 이야기를 끝내지 않았다."
+  const genderLabel = getCharacterGenderLabel(character)
+  const profileTags = [
+    genderLabel,
+    ...normalizeList(character.tags),
+    ...normalizeList(character.visualTags),
+  ].filter(Boolean)
 
   return (
     <article className="space-y-6 pb-10">
       <CharacterHero
         title={character.name}
-        subtitle={character.role || character.summary || String(character.genre)}
+        subtitle={[character.role || character.summary || String(character.genre), genderLabel].filter(Boolean).join(" · ")}
         quote={quote}
         imageUrl={character.coverImageUrl || character.avatarUrl}
         emoji={character.emoji}
         genre={character.genre}
       />
+      {profileTags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {profileTags.slice(0, 8).map((tag) => (
+            <span key={tag} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/72">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
       <CharacterProfileSection
         summary={buildCharacterIntro(character)}
         voice={character.speechStyle}
         relationship={character.relationship}
-        appearance={undefined}
+        appearance={character.appearance || normalizeList(character.visualTags).join(", ")}
       />
       <CollapsibleSecretSection title="숨겨진 진실" value={character.secret} />
       <DetailSection title="세부 설정" icon={Eye}>
@@ -578,17 +593,22 @@ function CharacterLandingPage({ character }: { character: StoryCharacter }) {
         <FriendlyDetail label="성향" value={character.personality} />
         <FriendlyDetail label="목소리" value={character.speechStyle} />
         <FriendlyDetail label="당신과의 관계" value={character.relationship} />
+        <FriendlyDetail label="성별" value={genderLabel} />
+        <FriendlyDetail label="태그" value={normalizeList(character.tags).join(", ")} />
+        <FriendlyDetail label="외형 키워드" value={normalizeList(character.visualTags).join(", ")} />
       </DetailSection>
     </article>
   )
 }
 
 function PersonaLandingPage({ persona }: { persona: StoryPersona }) {
+  const genderLabel = getPersonaGenderLabel(persona)
+
   return (
     <article className="space-y-6 pb-10">
       <CharacterHero
         title={persona.name}
-        subtitle={`${persona.age}세 · ${persona.role}`}
+        subtitle={[`${persona.age}세`, persona.role, genderLabel].filter(Boolean).join(" · ")}
         quote={persona.speechStyle || "이 세계에서 나는 어떤 선택을 하게 될까."}
         emoji="🛡️"
         genre={persona.role}
@@ -606,6 +626,7 @@ function PersonaLandingPage({ persona }: { persona: StoryPersona }) {
         <FriendlyDetail label="목소리" value={persona.speechStyle} />
         <FriendlyDetail label="모습" value={persona.appearance} />
         <FriendlyDetail label="당신과의 관계" value={persona.relationship} />
+        <FriendlyDetail label="성별" value={genderLabel} />
       </DetailSection>
     </article>
   )
@@ -815,10 +836,26 @@ function buildCharacterIntro(character: StoryCharacter) {
     .join(" ")
 }
 
+function getCharacterGenderLabel(character: StoryCharacter) {
+  if (character.gender === "custom" && character.genderCustom?.trim()) return character.genderCustom.trim()
+  if (character.gender === "male") return "남성"
+  if (character.gender === "female") return "여성"
+  if (character.gender === "nonbinary") return "논바이너리/기타"
+  return ""
+}
+
 function buildPersonaIntro(persona: StoryPersona) {
   return [persona.summary, persona.personality, persona.relationship]
     .filter(Boolean)
     .join(" ")
+}
+
+function getPersonaGenderLabel(persona: StoryPersona) {
+  if (persona.gender === "custom" && persona.genderCustom?.trim()) return persona.genderCustom.trim()
+  if (persona.gender === "male") return "남성"
+  if (persona.gender === "female") return "여성"
+  if (persona.gender === "nonbinary") return "논바이너리/기타"
+  return ""
 }
 
 function fantasyGradient(genre?: string) {

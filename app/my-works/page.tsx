@@ -23,6 +23,7 @@ import {
   getStoryChatLibrary,
   saveStoryChatLibrary,
   type StoryCharacter,
+  type StoryCharacterGender,
   type StoryChatLibrary,
   type StoryPersona,
   type StoryWork,
@@ -55,6 +56,7 @@ export default function MyWorksPage() {
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [detail, setDetail] = useState<DetailTarget | null>(null)
   const [editingWorldId, setEditingWorldId] = useState<string | null>(null)
+  const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   useEffect(() => {
@@ -100,18 +102,24 @@ export default function MyWorksPage() {
 
   const openDetail = (nextDetail: DetailTarget) => {
     setEditingWorldId(null)
+    setEditingCharacterId(null)
     setDetail(nextDetail)
   }
 
   const handleTabClick = (tab: TabId) => {
     setActiveTab(tab)
     setEditingWorldId(null)
+    setEditingCharacterId(null)
     window.history.replaceState(null, "", `/my-works?tab=${tab}`)
   }
 
   const handleEdit = (target: DetailTarget) => {
     if (target.type === "scenarios") {
       setEditingWorldId(target.id)
+      return
+    }
+    if (target.type === "characters") {
+      setEditingCharacterId(target.id)
       return
     }
     handleRename(target)
@@ -133,6 +141,7 @@ export default function MyWorksPage() {
     persistLibrary(deleteTarget(library, target))
     setDetail((current) => (current?.type === target.type && current.id === target.id ? null : current))
     if (target.type === "scenarios") setEditingWorldId(null)
+    if (target.type === "characters") setEditingCharacterId(null)
     toast("삭제했어요.")
   }
 
@@ -143,6 +152,15 @@ export default function MyWorksPage() {
     })
     setEditingWorldId(null)
     toast("세계관을 수정했어요.")
+  }
+
+  const handleSaveCharacter = (character: StoryCharacter) => {
+    persistLibrary({
+      ...library,
+      characters: library.characters.map((item) => item.id === character.id ? character : item),
+    })
+    setEditingCharacterId(null)
+    toast("캐릭터를 수정했어요.")
   }
 
   const handleCopy = (target: DetailTarget) => {
@@ -237,6 +255,12 @@ export default function MyWorksPage() {
               world={detailItem as StoryWorld}
               onSave={handleSaveWorld}
               onCancel={() => setEditingWorldId(null)}
+            />
+          ) : editingCharacterId && detail.type === "characters" ? (
+            <CharacterEditPanel
+              character={detailItem as StoryCharacter}
+              onSave={handleSaveCharacter}
+              onCancel={() => setEditingCharacterId(null)}
             />
           ) : (
             <DetailView
@@ -389,9 +413,12 @@ function CharactersTab({
               <span className="text-2xl">{character.emoji}</span>
             </div>
             <h3 className="text-sm font-semibold text-foreground mb-1">{character.name}</h3>
+            {getCharacterGenderLabel(character) && (
+              <p className="mb-1 text-[10px] text-muted-foreground">{getCharacterGenderLabel(character)}</p>
+            )}
             <p className="mb-2 line-clamp-2 text-[10px] text-muted-foreground">{character.summary}</p>
             <div className="flex flex-wrap justify-center gap-1">
-              {character.tags.slice(0, 2).map((tag) => (
+              {[...normalizeTagList(character.tags), ...normalizeTagList(character.visualTags)].slice(0, 3).map((tag) => (
                 <span key={tag} className="px-1.5 py-0.5 text-[9px] bg-muted text-foreground rounded">
                   {tag}
                 </span>
@@ -434,7 +461,7 @@ function PersonasTab({
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-semibold text-foreground mb-1">{persona.name}</h3>
                 <p className="text-xs text-muted-foreground mb-2">
-                  {persona.age}세 / {persona.role}
+                  {[`${persona.age}세`, persona.role, getPersonaGenderLabel(persona)].filter(Boolean).join(" / ")}
                 </p>
                 <p className="text-xs text-muted-foreground line-clamp-2">{persona.summary}</p>
               </div>
@@ -869,6 +896,180 @@ function WorldEditField({ label, children }: { label: string; children: React.Re
   )
 }
 
+function CharacterEditPanel({
+  character,
+  onSave,
+  onCancel,
+}: {
+  character: StoryCharacter
+  onSave: (character: StoryCharacter) => void
+  onCancel: () => void
+}) {
+  const [draft, setDraft] = useState<StoryCharacter>({
+    ...character,
+    gender: character.gender ?? "unknown",
+    genderCustom: character.genderCustom ?? "",
+    tags: normalizeTagList(character.tags),
+    visualTags: normalizeTagList(character.visualTags),
+  })
+
+  const update = <K extends keyof StoryCharacter>(key: K, value: StoryCharacter[K]) => {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const handleGenderChange = (gender: StoryCharacterGender) => {
+    setDraft((current) => ({
+      ...current,
+      gender,
+      genderCustom: gender === "custom" ? current.genderCustom ?? "" : "",
+    }))
+  }
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!draft.name.trim() || !draft.age?.trim() || !draft.role?.trim() || !draft.summary.trim() || !draft.personality.trim()) {
+      window.alert("이름, 나이, 역할/직업, 한 줄 소개, 성격 키워드를 입력해 주세요.")
+      return
+    }
+
+    onSave({
+      ...draft,
+      name: draft.name.trim(),
+      age: draft.age?.trim(),
+      role: draft.role?.trim(),
+      residence: draft.residence?.trim(),
+      appearance: draft.appearance?.trim(),
+      summary: draft.summary.trim(),
+      personality: draft.personality.trim(),
+      speechStyle: draft.speechStyle.trim(),
+      relationship: draft.relationship.trim(),
+      secret: draft.secret.trim(),
+      forbiddenDevelopments: draft.forbiddenDevelopments.trim(),
+      gender: draft.gender ?? "unknown",
+      genderCustom: draft.gender === "custom" ? draft.genderCustom?.trim() ?? "" : "",
+      tags: normalizeTagList(draft.tags),
+      visualTags: normalizeTagList(draft.visualTags),
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mx-auto max-w-3xl space-y-4 pb-10">
+      <section className="rounded-2xl border border-border bg-card p-4">
+        <div className="mb-4">
+          <h2 className="text-base font-bold text-foreground">캐릭터 수정</h2>
+          <p className="mt-1 text-xs text-muted-foreground">성별, 태그, 외형 키워드까지 채팅 캐릭터 정보를 수정합니다.</p>
+        </div>
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <WorldEditField label="이름">
+              <input value={draft.name} onChange={(event) => update("name", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+            </WorldEditField>
+            <WorldEditField label="성별">
+              <select
+                value={draft.gender ?? "unknown"}
+                onChange={(event) => handleGenderChange(event.target.value as StoryCharacterGender)}
+                className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+              >
+                <option value="male">남성</option>
+                <option value="female">여성</option>
+                <option value="nonbinary">논바이너리/기타</option>
+                <option value="unknown">설정하지 않음</option>
+                <option value="custom">직접 입력</option>
+              </select>
+            </WorldEditField>
+          </div>
+          {draft.gender === "custom" && (
+            <WorldEditField label="성별 직접 입력">
+              <input value={draft.genderCustom ?? ""} onChange={(event) => update("genderCustom", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+            </WorldEditField>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <WorldEditField label="나이">
+              <input value={draft.age ?? ""} onChange={(event) => update("age", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+            </WorldEditField>
+            <WorldEditField label="역할/직업">
+              <input value={draft.role ?? ""} onChange={(event) => update("role", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+            </WorldEditField>
+          </div>
+          <WorldEditField label="한 줄 소개">
+            <input value={draft.summary} onChange={(event) => update("summary", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+          </WorldEditField>
+          <WorldEditField label="성격 키워드">
+            <textarea value={draft.personality} onChange={(event) => update("personality", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+          </WorldEditField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <WorldEditField label="사는 곳">
+              <input value={draft.residence ?? ""} onChange={(event) => update("residence", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+            </WorldEditField>
+            <WorldEditField label="사용자와의 관계">
+              <input value={draft.relationship} onChange={(event) => update("relationship", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
+            </WorldEditField>
+          </div>
+          <WorldEditField label="외모 상세">
+            <textarea value={draft.appearance ?? ""} onChange={(event) => update("appearance", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+          </WorldEditField>
+          <WorldEditField label="말투 규칙">
+            <textarea value={draft.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+          </WorldEditField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <WorldEditField label="비밀 설정">
+              <textarea value={draft.secret} onChange={(event) => update("secret", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+            </WorldEditField>
+            <WorldEditField label="금지 전개">
+              <textarea value={draft.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+            </WorldEditField>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <EditableTagField label="태그" value={draft.tags} onChange={(tags) => update("tags", tags)} />
+            <EditableTagField label="외형 키워드" value={draft.visualTags ?? []} onChange={(visualTags) => update("visualTags", visualTags)} />
+          </div>
+        </div>
+      </section>
+
+      <div className="flex gap-2">
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent">
+          취소
+        </button>
+        <button type="submit" className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+          저장
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function EditableTagField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value?: string[]
+  onChange: (value: string[]) => void
+}) {
+  const tags = normalizeTagList(value)
+
+  return (
+    <WorldEditField label={label}>
+      <input
+        value={tags.join(", ")}
+        onChange={(event) => onChange(normalizeTagList(event.target.value))}
+        placeholder="쉼표로 구분"
+        className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+      />
+      {tags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <span key={tag} className="rounded-full bg-muted px-2 py-1 text-[10px] text-foreground">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </WorldEditField>
+  )
+}
+
 function WorldDetail({ world }: { world: StoryWorld }) {
   return (
     <DetailCard title={world.name} subtitle={`${world.genre} · ${world.era}`}>
@@ -888,8 +1089,11 @@ function WorldDetail({ world }: { world: StoryWorld }) {
 function CharacterDetail({ character }: { character: StoryCharacter }) {
   return (
     <DetailCard title={character.name} subtitle={`${character.emoji} ${character.genre}`}>
+      <DetailRow label="성별" value={getCharacterGenderLabel(character)} />
       <DetailRow label="한 줄 소개" value={character.summary} />
       <DetailRow label="성격" value={character.personality} />
+      <DetailRow label="태그" value={normalizeTagList(character.tags).join(", ")} />
+      <DetailRow label="외형 키워드" value={normalizeTagList(character.visualTags).join(", ")} />
       <DetailRow label="말투 규칙" value={character.speechStyle} />
       <DetailRow label="기본 관계" value={character.relationship} />
       <DetailRow label="비밀 설정" value={character.secret} />
@@ -902,7 +1106,8 @@ function CharacterDetail({ character }: { character: StoryCharacter }) {
 
 function PersonaDetail({ persona }: { persona: StoryPersona }) {
   return (
-    <DetailCard title={persona.name} subtitle={`${persona.age}세 · ${persona.role}`}>
+    <DetailCard title={persona.name} subtitle={[`${persona.age}세`, persona.role, getPersonaGenderLabel(persona)].filter(Boolean).join(" · ")}>
+      <DetailRow label="성별" value={getPersonaGenderLabel(persona)} />
       <DetailRow label="한 줄 소개" value={persona.summary} />
       <DetailRow label="성격" value={persona.personality} />
       <DetailRow label="말투" value={persona.speechStyle} />
@@ -995,6 +1200,31 @@ function handleCardKeyDown(event: React.KeyboardEvent, onOpen: () => void) {
   if (event.key !== "Enter" && event.key !== " ") return
   event.preventDefault()
   onOpen()
+}
+
+function normalizeTagList(value?: string[] | string | null): string[] {
+  if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean)
+  if (!value) return []
+  return value
+    .split(/[,，、\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function getCharacterGenderLabel(character: StoryCharacter) {
+  if (character.gender === "custom" && character.genderCustom?.trim()) return character.genderCustom.trim()
+  if (character.gender === "male") return "남성"
+  if (character.gender === "female") return "여성"
+  if (character.gender === "nonbinary") return "논바이너리/기타"
+  return ""
+}
+
+function getPersonaGenderLabel(persona: StoryPersona) {
+  if (persona.gender === "custom" && persona.genderCustom?.trim()) return persona.genderCustom.trim()
+  if (persona.gender === "male") return "남성"
+  if (persona.gender === "female") return "여성"
+  if (persona.gender === "nonbinary") return "논바이너리/기타"
+  return ""
 }
 
 function getDetailItem(library: StoryChatLibrary, target: DetailTarget) {

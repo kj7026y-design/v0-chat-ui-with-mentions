@@ -7,7 +7,6 @@ import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
 import { ChatSettingsDrawer } from "@/components/chat/chat-settings-drawer"
-import { FloatingStatusWidget } from "@/components/chat/floating-status-widget"
 import { WorkIntroModal } from "@/components/chat/work-intro-modal"
 import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { EmptyChatState } from "@/components/chat/empty-chat-state"
@@ -44,6 +43,13 @@ const storyStatus: StoryStatus = {
   personaEmotion: "즐거움",
   personaStatus: "상황에 호기심을 느끼며 대화에 몰입하고 있음",
   nextEventCondition: "신뢰도 상승 또는 핵심 단서 발견 시 발생",
+}
+
+function getStatusLocation(statusBarText?: string) {
+  return statusBarText
+    ?.split("\n")
+    .map((line) => line.trim())
+    .find(Boolean)
 }
 
 export default function ChatPage() {
@@ -86,6 +92,9 @@ export default function ChatPage() {
   const currentCharacter = currentWork
     ? library.characters.find((character) => character.id === currentWork.characterId)
     : library.characters.find((character) => character.name === characterName)
+  const currentPersona = currentWork
+    ? library.personas.find((persona) => persona.id === currentWork.personaId)
+    : undefined
   const workCharacters = currentWorld
     ? library.works
         .filter((work) => work.worldId === currentWorld.id)
@@ -125,6 +134,27 @@ export default function ChatPage() {
   const selectedIntroScenario =
     introScenarios.find((intro) => intro.id === selectedIntroScenarioId) ??
     (introScenarios.length === 1 ? introScenarios[0] : undefined)
+  const progressSettings = currentWork?.storyProgressSettings ?? currentWorld?.storyProgressSettings
+  const useChapters = progressSettings?.useChapters ?? storyStatus.useChapters
+  const activeChapter =
+    progressSettings?.chapters.find((chapter) => chapter.title === (currentWork?.currentChapter || currentWorld?.currentChapter)) ??
+    progressSettings?.chapters[0]
+  const chatStoryStatus: StoryStatus = {
+    ...storyStatus,
+    useChapters,
+    currentChapterId: useChapters ? activeChapter?.id ?? storyStatus.currentChapterId : undefined,
+    currentChapterTitle: useChapters
+      ? currentWork?.currentChapter || currentWorld?.currentChapter || activeChapter?.title || storyStatus.currentChapterTitle
+      : undefined,
+    chapterProgress: useChapters ? currentWorld?.progress ?? storyStatus.chapterProgress : undefined,
+    currentMission: useChapters ? activeChapter?.mission || currentWork?.currentGoal || currentWorld?.currentGoal || storyStatus.currentMission : undefined,
+    currentGoal: useChapters ? currentWork?.currentGoal || currentWorld?.currentGoal || activeChapter?.goal || storyStatus.currentGoal : undefined,
+    worldDate: currentWork?.worldDate || currentWorld?.worldDate || currentWorld?.era || storyStatus.worldDate,
+    currentLocation: getStatusLocation(currentWork?.statusBarText),
+    characterName,
+    personaName: currentPersona?.name || storyStatus.personaName,
+    nextEventCondition: useChapters ? activeChapter?.nextChapterCondition || storyStatus.nextEventCondition : undefined,
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -296,10 +326,7 @@ export default function ChatPage() {
       />
 
       <StoryStatusCard
-        status={{
-          ...storyStatus,
-          characterName,
-        }}
+        status={chatStoryStatus}
       />
 
       <ChatSettingsDrawer
@@ -366,13 +393,6 @@ export default function ChatPage() {
           </div>
         )}
       </main>
-
-      <FloatingStatusWidget
-        enabled={currentWork?.statusBarEnabled}
-        text={currentWork?.statusBarText}
-        updatedAt={currentWork?.statusBarUpdatedAt}
-        isEmptyChat={!hasMessages}
-      />
 
       {/* Input Area - normal block in flex column */}
       <div className="shrink-0">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -12,11 +12,12 @@ export interface StoryStatus {
   currentMission?: string
   currentGoal?: string
   worldDate?: string
+  currentLocation?: string
   characterName: string
-  characterEmotion: string
+  characterEmotion?: string
   characterStatus?: string
   personaName: string
-  personaEmotion: string
+  personaEmotion?: string
   personaStatus?: string
   nextEventCondition?: string
 }
@@ -28,26 +29,35 @@ interface StoryStatusCardProps {
 export function StoryStatusCard({ status }: StoryStatusCardProps) {
   const [expanded, setExpanded] = useState(false)
   const progress = Math.max(0, Math.min(100, status.chapterProgress ?? 0))
+  const sceneSummary = [status.currentChapterTitle, status.worldDate, status.currentLocation].filter(Boolean).join(" · ")
+  const progressText = status.currentMission || status.currentGoal
+  const hasScene = Boolean(sceneSummary)
+  const hasProgress = Boolean(progressText || status.chapterProgress !== undefined)
+  const hasCharacterState = Boolean(status.characterEmotion || status.characterStatus)
+  const hasPersonaState = Boolean(status.personaEmotion || status.personaStatus)
+  const hasPeopleState = hasCharacterState || hasPersonaState
+  const hasNextFlow = Boolean(status.nextEventCondition)
   const summaryParts = [
     status.useChapters && status.currentChapterTitle
-      ? `${status.currentChapterTitle} ${progress}%`
+      ? `${status.currentChapterTitle} · ${progress}%`
       : null,
-    `${status.characterName}: ${status.characterEmotion}`,
-    `${status.personaName}: ${status.personaEmotion}`,
+    status.characterEmotion ? `${status.characterName} ${status.characterEmotion}` : null,
+    status.personaEmotion ? `${status.personaName} ${status.personaEmotion}` : null,
   ].filter(Boolean)
+  const summaryText = summaryParts.length > 0 ? summaryParts.join(" · ") : "현재 상태"
 
   return (
     <div className="relative z-30 border-b border-border bg-background">
-      <div className="px-3 py-2">
-        <div className="relative rounded-lg border border-border bg-card/80">
+      <div className="px-3 py-1.5">
+        <div className="relative rounded-xl border border-border bg-card/80">
           <button
             type="button"
             onClick={() => setExpanded((current) => !current)}
             className="flex w-full items-center gap-2 px-3 py-2 text-left"
             aria-expanded={expanded}
           >
-            <p className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
-              <span className="text-foreground">{summaryParts.join(" · ")}</span>
+            <p className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+              {summaryText}
             </p>
             <ChevronDown
               className={cn(
@@ -58,32 +68,57 @@ export function StoryStatusCard({ status }: StoryStatusCardProps) {
           </button>
 
           {expanded && (
-            <div className="absolute left-0 right-0 top-full mt-1 max-h-[46dvh] space-y-3 overflow-y-auto rounded-lg border border-border bg-card/95 px-3 py-3 shadow-2xl shadow-black/40 backdrop-blur">
-              {status.useChapters && (
-                <div className="space-y-2">
-                  <CompactStatusRow label="현재 챕터" value={status.currentChapterTitle} />
-                  <div className="flex items-center gap-3">
-                    <span className="w-20 shrink-0 text-[11px] text-muted-foreground">진행도</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
-                    </div>
-                    <span className="w-8 text-right text-[11px] tabular-nums text-muted-foreground">{progress}%</span>
-                  </div>
-                  <CompactStatusRow label="현재 미션" value={status.currentMission} />
-                  <CompactStatusRow label="현재 목표" value={status.currentGoal} />
-                </div>
+            <div className="absolute left-0 right-0 top-full mt-1 max-h-[42dvh] space-y-3 overflow-y-auto rounded-2xl border border-border bg-card/95 p-3 shadow-2xl shadow-black/40 backdrop-blur">
+              {hasScene && (
+                <StatusSection title="현재 장면">
+                  <p className="line-clamp-2 text-sm font-semibold leading-relaxed text-foreground">
+                    {sceneSummary}
+                  </p>
+                </StatusSection>
               )}
 
-              <div className="grid gap-2">
-                <CompactStatusRow label="세계관 날짜" value={status.worldDate} />
-                <CompactStatusRow label={`${status.characterName} 감정`} value={status.characterEmotion} />
-                <CompactStatusRow label={`${status.characterName} 상태`} value={status.characterStatus} />
-                <CompactStatusRow label={`${status.personaName} 감정`} value={status.personaEmotion} />
-                <CompactStatusRow label={`${status.personaName} 상태`} value={status.personaStatus} />
-                {status.useChapters && (
-                  <CompactStatusRow label="다음 이벤트" value={status.nextEventCondition} />
-                )}
-              </div>
+              {hasProgress && (
+                <StatusSection title="진행">
+                  {progressText && (
+                    <p className="line-clamp-2 text-sm leading-relaxed text-foreground">{progressText}</p>
+                  )}
+                  {status.chapterProgress !== undefined && (
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+                      </div>
+                      <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{progress}%</span>
+                    </div>
+                  )}
+                </StatusSection>
+              )}
+
+              {hasPeopleState && (
+                <StatusSection title="인물 상태">
+                  <div className="grid gap-2">
+                    {hasCharacterState && (
+                      <PersonStatus
+                        name={status.characterName}
+                        emotion={status.characterEmotion}
+                        statusText={status.characterStatus}
+                      />
+                    )}
+                    {hasPersonaState && (
+                      <PersonStatus
+                        name={status.personaName}
+                        emotion={status.personaEmotion}
+                        statusText={status.personaStatus}
+                      />
+                    )}
+                  </div>
+                </StatusSection>
+              )}
+
+              {hasNextFlow && (
+                <StatusSection title="다음 흐름">
+                  <p className="text-sm leading-relaxed text-foreground">{status.nextEventCondition}</p>
+                </StatusSection>
+              )}
             </div>
           )}
         </div>
@@ -92,13 +127,37 @@ export function StoryStatusCard({ status }: StoryStatusCardProps) {
   )
 }
 
-function CompactStatusRow({ label, value }: { label: string; value?: string }) {
-  if (!value) return null
-
+function StatusSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="w-20 shrink-0 text-[11px] text-muted-foreground">{label}</span>
-      <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-foreground">{value}</span>
+    <section className="space-y-1.5">
+      <h3 className="text-[11px] font-semibold text-muted-foreground">{title}</h3>
+      <div className="space-y-2">{children}</div>
+    </section>
+  )
+}
+
+function PersonStatus({
+  name,
+  emotion,
+  statusText,
+}: {
+  name: string
+  emotion?: string
+  statusText?: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background/45 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs font-semibold text-foreground">{name}</span>
+        {emotion && (
+          <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            {emotion}
+          </span>
+        )}
+      </div>
+      {statusText && (
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{statusText}</p>
+      )}
     </div>
   )
 }
