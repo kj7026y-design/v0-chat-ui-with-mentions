@@ -99,7 +99,7 @@ export default function ExplorePage() {
   const hasContent = exploreWorks.length > 0 || exploreCharacters.length > 0
 
   return (
-    <main className="min-h-full bg-[#080808] text-foreground">
+    <main className="min-h-full bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pb-10">
         <ExploreHeader
           query={query}
@@ -131,7 +131,7 @@ export default function ExplorePage() {
               </ContentRail>
             )}
             {visibleWorks.length === 0 && visibleCharacters.length === 0 && (
-              <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-5 py-10 text-center">
+              <div className="rounded-3xl border border-border bg-card px-5 py-10 text-center">
                 <p className="text-sm text-muted-foreground">검색 결과가 없어요. 다른 키워드로 찾아보세요.</p>
               </div>
             )}
@@ -176,36 +176,36 @@ function ExploreHeader({
   return (
     <header className="space-y-4">
       <div>
-        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-amber-200/80">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-amber-700 dark:text-amber-200/80">
           <Sparkles className="h-3.5 w-3.5" />
           Discover
         </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">탐색</h1>
-        <p className="mt-1 text-sm leading-relaxed text-white/60">오늘은 어떤 세계로 들어가볼까요?</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">탐색</h1>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">오늘은 어떤 세계로 들어가볼까요?</p>
       </div>
 
       <div className="flex gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2.5 text-sm text-white shadow-sm">
-          <Search className="h-4 w-4 shrink-0 text-white/45" />
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2.5 text-sm text-foreground shadow-sm">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder="작품명, 캐릭터명, 장르 검색"
-            className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+            className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
-        <label className="flex items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.06] px-3 text-white">
-          <ArrowUpDown className="h-4 w-4 text-white/45" />
+        <label className="flex items-center gap-1.5 rounded-2xl border border-border bg-card px-3 text-foreground">
+          <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           <select
             value={sort}
             onChange={(event) => onSortChange(event.target.value as SortId)}
-            className="h-full bg-transparent text-xs text-white outline-none [color-scheme:dark]"
+            className="h-full bg-transparent text-xs text-foreground outline-none"
             aria-label="정렬"
           >
-            <option value="popular" className="bg-[#181818] text-white">인기순</option>
-            <option value="latest" className="bg-[#181818] text-white">최신순</option>
-            <option value="updated" className="bg-[#181818] text-white">업데이트순</option>
-            <option value="name" className="bg-[#181818] text-white">이름순</option>
+            <option value="popular" className="bg-popover text-popover-foreground">인기순</option>
+            <option value="latest" className="bg-popover text-popover-foreground">최신순</option>
+            <option value="updated" className="bg-popover text-popover-foreground">업데이트순</option>
+            <option value="name" className="bg-popover text-popover-foreground">이름순</option>
           </select>
         </label>
       </div>
@@ -308,8 +308,8 @@ function GenreFilterChips({
             className={cn(
               "shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition",
               selectedGenre === item
-                ? "border-amber-300/50 bg-amber-300/20 text-amber-100"
-                : "border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white",
+                ? "border-amber-500/40 bg-amber-400/15 text-amber-800 dark:border-amber-300/50 dark:bg-amber-300/20 dark:text-amber-100"
+                : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
             )}
           >
             {item}
@@ -432,8 +432,8 @@ function ContentRail({ title, subtitle, children }: { title: string; subtitle?: 
 function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div>
-      <h2 className="text-lg font-bold text-white">{title}</h2>
-      {subtitle && <p className="mt-0.5 text-xs text-white/45">{subtitle}</p>}
+      <h2 className="text-lg font-bold text-foreground">{title}</h2>
+      {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
     </div>
   )
 }
@@ -448,7 +448,7 @@ function WorkPosterCard({ item, compact }: { item: ExploreWork; compact?: boolea
       <Link
         href={`/my-works/${work.id}`}
         className={cn(
-          "block overflow-hidden rounded-3xl border border-white/10 bg-white/[0.045] transition active:scale-[0.98] group-hover:border-white/20",
+          "block overflow-hidden rounded-3xl border border-border bg-card transition active:scale-[0.98] group-hover:border-ring/50",
         )}
       >
         <div
@@ -465,8 +465,8 @@ function WorkPosterCard({ item, compact }: { item: ExploreWork; compact?: boolea
           </div>
         </div>
         <div className="space-y-2 p-3">
-          <p className="line-clamp-2 min-h-9 text-xs leading-relaxed text-white/58">{description}</p>
-          <div className="flex items-center gap-2 text-[10px] text-white/38">
+          <p className="line-clamp-2 min-h-9 text-xs leading-relaxed text-muted-foreground">{description}</p>
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
             <span>조회 {work.viewCount ?? scoreFromId(work.id)}</span>
             <span>대화 {work.chatCount ?? scoreFromId(work.characterId)}</span>
           </div>
@@ -481,7 +481,7 @@ function CharacterExploreCard({ item }: { item: ExploreCharacter }) {
   const detailHref = `/my-works?tab=characters&detailType=characters&detailId=${character.id}`
 
   return (
-    <article className="w-[168px] shrink-0 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.045] p-3">
+    <article className="w-[168px] shrink-0 overflow-hidden rounded-3xl border border-border bg-card p-3">
       <Link href={detailHref} className="block w-full text-left transition active:scale-[0.98]">
         <div
           className={cn(
@@ -502,9 +502,9 @@ function CharacterExploreCard({ item }: { item: ExploreCharacter }) {
           </div>
         </div>
         <div className="mt-3 space-y-1">
-          <p className="truncate text-[11px] text-amber-100/70">{work?.title || "독립 캐릭터"}</p>
-          <p className="line-clamp-1 text-xs font-medium text-white/80">{character.role || String(character.genre)}</p>
-          <p className="line-clamp-2 min-h-8 text-xs leading-relaxed text-white/45">{character.summary}</p>
+          <p className="truncate text-[11px] text-amber-700 dark:text-amber-100/70">{work?.title || "독립 캐릭터"}</p>
+          <p className="line-clamp-1 text-xs font-medium text-foreground">{character.role || String(character.genre)}</p>
+          <p className="line-clamp-2 min-h-8 text-xs leading-relaxed text-muted-foreground">{character.summary}</p>
         </div>
       </Link>
     </article>
@@ -534,10 +534,10 @@ function GenreRecommendation({ works }: { works: ExploreWork[] }) {
 
 function EmptyExploreState() {
   return (
-    <div className="rounded-[28px] border border-white/10 bg-white/[0.04] px-5 py-12 text-center">
-      <p className="text-base font-semibold text-white">아직 공개된 작품이 없어요.</p>
-      <p className="mt-2 text-sm text-white/50">첫 작품을 만들어보세요.</p>
-      <Link href="/create?mode=work" className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-black">
+    <div className="rounded-[28px] border border-border bg-card px-5 py-12 text-center">
+      <p className="text-base font-semibold text-foreground">아직 공개된 작품이 없어요.</p>
+      <p className="mt-2 text-sm text-muted-foreground">첫 작품을 만들어보세요.</p>
+      <Link href="/create?mode=work" className="mt-5 inline-flex rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
         작품 만들기
       </Link>
     </div>
@@ -547,10 +547,10 @@ function EmptyExploreState() {
 function ExploreSkeleton() {
   return (
     <div className="space-y-5">
-      <div className="h-80 animate-pulse rounded-[28px] bg-white/[0.06]" />
+      <div className="h-80 animate-pulse rounded-[28px] bg-muted" />
       <div className="flex gap-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-72 w-[178px] shrink-0 animate-pulse rounded-3xl bg-white/[0.06]" />
+          <div key={index} className="h-72 w-[178px] shrink-0 animate-pulse rounded-3xl bg-muted" />
         ))}
       </div>
     </div>
@@ -602,6 +602,8 @@ function filterCharacters(items: ExploreCharacter[], query: string, genre: strin
       item.work?.title,
       item.world?.name,
       ...item.character.tags,
+      ...normalizeList(item.character.visualTags),
+      ...normalizeList(item.character.relationshipTags),
     ].join(" ").toLowerCase()
     return searchText.includes(normalizedQuery)
   })

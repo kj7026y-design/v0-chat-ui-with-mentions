@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { GenreSelectWithCustomInput } from "@/components/create/genre-select-with-custom-input"
+import { ImageUploadField } from "@/components/create/image-upload-field"
 import { IntroScenariosFormSection } from "@/components/my-works/intro-scenarios-form-section"
 import { cleanIntroScenarios, createId, type IntroScenario } from "@/lib/storychat-storage"
 import { cn } from "@/lib/utils"
@@ -250,10 +251,11 @@ function AdvancedWorkFormFields({
           <FieldLabel>한 줄 소개</FieldLabel>
           <Textarea value={values.tagline} onChange={(event) => onUpdate("tagline", event.target.value)} className="min-h-[76px] bg-input" />
         </Field>
-        <Field>
-          <FieldLabel>대표 이미지 URL</FieldLabel>
-          <Input value={values.coverImageUrl} onChange={(event) => onUpdate("coverImageUrl", event.target.value)} className="bg-input" />
-        </Field>
+        <ImageUploadField
+          label="대표 이미지"
+          value={values.coverImageUrl}
+          onChange={(coverImageUrl) => onUpdate("coverImageUrl", coverImageUrl ?? "")}
+        />
       </FormSection>
 
       <CollapsibleFormSection title="세계관 설정" defaultOpen>

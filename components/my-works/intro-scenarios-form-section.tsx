@@ -135,7 +135,12 @@ function IntroScenarioCardEditor({
             options={intro.options ?? []}
             onChange={(options) => update("options", options)}
           />
-          <Button type="button" variant="outline" className="w-full text-destructive" onClick={onDelete}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-red-500/40 font-semibold text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-400/35 dark:text-red-300 dark:hover:bg-red-950/60 dark:hover:text-red-100"
+            onClick={onDelete}
+          >
             <Trash2 className="h-4 w-4" />
             이 도입부 삭제
           </Button>

@@ -29,7 +29,7 @@ export default function LandingPage() {
 
         {/* Hero Text */}
         <div className="text-center mb-12 max-w-md">
-          <h2 className="text-3xl sm:text-4xl font-bold text-white leading-tight mb-4 text-balance">
+          <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-4 text-balance">
             당신만의 세계관을
             <br />
             완성하세요
@@ -103,7 +103,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     {
       id: "google",
       name: "Google로 계속하기",
-      bgColor: "bg-white",
+      bgColor: "bg-white border border-border",
       textColor: "text-black",
       icon: (
         <svg viewBox="0 0 24 24" className="w-5 h-5">
@@ -118,7 +118,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
       id: "x",
       name: "X로 계속하기",
       bgColor: "bg-background border border-border",
-      textColor: "text-white",
+      textColor: "text-foreground",
       icon: (
         <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>

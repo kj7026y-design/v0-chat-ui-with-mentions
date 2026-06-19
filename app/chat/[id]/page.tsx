@@ -12,15 +12,18 @@ import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { EmptyChatState } from "@/components/chat/empty-chat-state"
 import { BranchConfirmModal } from "@/components/chat/branch-confirm-modal"
 import { StoryStatusCard, type StoryStatus } from "@/components/chat/story-status-card"
-import { type ChatMessage } from "@/lib/chat-types"
+import { ConfirmModal } from "@/components/ui/app-modal"
+import { SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
 import {
   buildUserMessage,
   generateAssistantReply,
+  type ImageCommandContext,
   parseChatInput,
   runCommand,
 } from "@/lib/chat-engine"
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
 import { defaultChats, getChatList, type ChatListItemData } from "@/lib/chat-list-storage"
+import { defaultChatReadingSettings, getChatReadingSettings, type ChatReadingSettings } from "@/lib/chat-settings-storage"
 import { defaultLibrary, getStoryChatLibrary, normalizeIntroScenarios, type StoryChatLibrary } from "@/lib/storychat-storage"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
@@ -52,6 +55,10 @@ function getStatusLocation(statusBarText?: string) {
     .find(Boolean)
 }
 
+function makeTurnId() {
+  return `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
 export default function ChatPage() {
   const params = useParams()
   const router = useRouter()
@@ -64,12 +71,16 @@ export default function ChatPage() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isTyping, setIsTyping] = useState(false)
+  const [typingLabel, setTypingLabel] = useState<string | undefined>(undefined)
+  const [typingVariant, setTypingVariant] = useState<"text" | "image">("text")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isQuestPopupOpen, setIsQuestPopupOpen] = useState(false)
   const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(new Set())
   const [chatTheme, setChatTheme] = useState<ChatThemeId>("system")
+  const [readingSettings, setReadingSettings] = useState<ChatReadingSettings>(defaultChatReadingSettings)
   const [branchTargetId, setBranchTargetId] = useState<string | null>(null)
   const [isIntroOpen, setIsIntroOpen] = useState(false)
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
   const [selectedIntroScenarioId, setSelectedIntroScenarioId] = useState<string>("")
   const [insertTextRequest, setInsertTextRequest] = useState<{ id: number; text: string } | null>(null)
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
@@ -84,11 +95,10 @@ export default function ChatPage() {
     library.works.find((work) => {
       const character = library.characters.find((item) => item.id === work.characterId)
       return character?.name === characterName
-    }) ??
-    library.works[0]
+    })
   const currentWorld = currentWork
     ? library.worlds.find((world) => world.id === currentWork.worldId)
-    : library.worlds[0]
+    : undefined
   const currentCharacter = currentWork
     ? library.characters.find((character) => character.id === currentWork.characterId)
     : library.characters.find((character) => character.name === characterName)
@@ -135,30 +145,43 @@ export default function ChatPage() {
     introScenarios.find((intro) => intro.id === selectedIntroScenarioId) ??
     (introScenarios.length === 1 ? introScenarios[0] : undefined)
   const progressSettings = currentWork?.storyProgressSettings ?? currentWorld?.storyProgressSettings
-  const useChapters = progressSettings?.useChapters ?? storyStatus.useChapters
+  const useChapters = progressSettings?.useChapters ?? false
   const activeChapter =
     progressSettings?.chapters.find((chapter) => chapter.title === (currentWork?.currentChapter || currentWorld?.currentChapter)) ??
     progressSettings?.chapters[0]
+  const canUseDefaultImugiStatus = characterName === storyStatus.characterName && Boolean(currentWork || currentCharacter)
   const chatStoryStatus: StoryStatus = {
-    ...storyStatus,
     useChapters,
     currentChapterId: useChapters ? activeChapter?.id ?? storyStatus.currentChapterId : undefined,
     currentChapterTitle: useChapters
-      ? currentWork?.currentChapter || currentWorld?.currentChapter || activeChapter?.title || storyStatus.currentChapterTitle
+      ? currentWork?.currentChapter || currentWorld?.currentChapter || activeChapter?.title
       : undefined,
-    chapterProgress: useChapters ? currentWorld?.progress ?? storyStatus.chapterProgress : undefined,
-    currentMission: useChapters ? activeChapter?.mission || currentWork?.currentGoal || currentWorld?.currentGoal || storyStatus.currentMission : undefined,
-    currentGoal: useChapters ? currentWork?.currentGoal || currentWorld?.currentGoal || activeChapter?.goal || storyStatus.currentGoal : undefined,
-    worldDate: currentWork?.worldDate || currentWorld?.worldDate || currentWorld?.era || storyStatus.worldDate,
+    chapterProgress: useChapters ? currentWorld?.progress : undefined,
+    currentMission: useChapters ? activeChapter?.mission || currentWork?.currentGoal || currentWorld?.currentGoal : undefined,
+    currentGoal: useChapters ? currentWork?.currentGoal || currentWorld?.currentGoal || activeChapter?.goal : undefined,
+    worldDate: currentWork?.worldDate || currentWorld?.worldDate || currentWorld?.era,
     currentLocation: getStatusLocation(currentWork?.statusBarText),
     characterName,
-    personaName: currentPersona?.name || storyStatus.personaName,
-    nextEventCondition: useChapters ? activeChapter?.nextChapterCondition || storyStatus.nextEventCondition : undefined,
+    characterEmotion: canUseDefaultImugiStatus ? storyStatus.characterEmotion : undefined,
+    characterStatus: canUseDefaultImugiStatus ? storyStatus.characterStatus : undefined,
+    personaName: currentPersona?.name || "나",
+    personaEmotion: canUseDefaultImugiStatus ? storyStatus.personaEmotion : undefined,
+    personaStatus: canUseDefaultImugiStatus ? storyStatus.personaStatus : undefined,
+    nextEventCondition: useChapters ? activeChapter?.nextChapterCondition : undefined,
   }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
+
+  const buildImageCommandContext = (recentMessages: ChatMessage[] = messages): ImageCommandContext => ({
+    work: currentWork,
+    world: currentWorld,
+    character: currentCharacter,
+    persona: currentPersona,
+    status: chatStoryStatus,
+    recentMessages,
+  })
 
   useEffect(() => {
     scrollToBottom()
@@ -167,6 +190,7 @@ export default function ChatPage() {
   useEffect(() => {
     const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
     setChatTheme(savedTheme || "system")
+    setReadingSettings(getChatReadingSettings(chatId))
   }, [chatId])
 
   useEffect(() => {
@@ -209,32 +233,176 @@ export default function ChatPage() {
       return
     }
 
-    const userMessage = buildUserMessage(content, chatInputCharacters, mentions, image)
+    const turnId = makeTurnId()
+    const userMessage = { ...buildUserMessage(content, chatInputCharacters, mentions, image), turnId }
     setMessages((prev) => [...prev, userMessage])
     setIsTyping(true)
+    setTypingLabel(undefined)
+    setTypingVariant("text")
 
     try {
-      const reply = await generateAssistantReply([...messages, userMessage], content, selectedIntroScenario)
-      setMessages((prev) => [...prev, reply])
+      const reply = {
+        ...(await generateAssistantReply(
+          [...messages, userMessage],
+          content,
+          selectedIntroScenario,
+          buildImageCommandContext([...messages, userMessage]),
+        )),
+        turnId,
+      }
+      const autoCommandMessages: ChatMessage[] = []
+      if (readingSettings.alwaysShowCommandSuggestions && readingSettings.selectedCommandIds.length > 0) {
+        const selectedCommands = SLASH_COMMANDS.filter((command) =>
+          readingSettings.selectedCommandIds.includes(command.id),
+        ).slice(0, 2)
+
+        for (const command of selectedCommands) {
+          const isImageAutoCommand = command.name === "이미지"
+          if (isImageAutoCommand) {
+            setTypingLabel("이미지 생성중...")
+            setTypingVariant("image")
+          }
+          const commandStartedAt = Date.now()
+          const result = await runCommand(command.name, characterName, buildImageCommandContext([...messages, userMessage, reply]))
+          if (isImageAutoCommand) {
+            const remainingDelay = Math.max(0, 1400 - (Date.now() - commandStartedAt))
+            if (remainingDelay > 0) {
+              await new Promise((resolve) => setTimeout(resolve, remainingDelay))
+            }
+          }
+          if (result.kind === "message") {
+            autoCommandMessages.push({ ...result.message, turnId })
+          } else {
+            toast(result.message)
+          }
+          if (isImageAutoCommand) {
+            setTypingLabel(undefined)
+            setTypingVariant("text")
+          }
+        }
+      }
+      setMessages((prev) => [...prev, reply, ...autoCommandMessages])
     } catch {
-      toast.error("응답을 가져오지 못했어요. 잠시 후 다시 시도해주세요.")
+      const errorMessage: ChatMessage = {
+        id: `reply-error-${Date.now()}`,
+        type: "status",
+        content: "답변을 생성하지 못했어요. 무료로 다시 생성할 수 있습니다.",
+        timestamp: new Date(),
+        turnId,
+        isGenerationError: true,
+        retryPayload: {
+          content,
+          mentions,
+          image,
+          turnId,
+        },
+      }
+      setMessages((prev) => [...prev, errorMessage])
+      toast.error("응답을 가져오지 못했어요.")
     } finally {
       setIsTyping(false)
+      setTypingLabel(undefined)
+      setTypingVariant("text")
+    }
+  }
+
+  const handleRetryFailedMessage = async (messageId: string) => {
+    const failedMessage = messages.find((message) => message.id === messageId)
+    const retryPayload = failedMessage?.retryPayload
+    if (!failedMessage || !retryPayload) return
+
+    const retryTurnId = retryPayload.turnId || failedMessage.turnId || makeTurnId()
+    const retryMessages = messages.filter((message) => message.id !== messageId)
+    setMessages(retryMessages)
+    setIsTyping(true)
+    setTypingLabel(undefined)
+    setTypingVariant("text")
+
+    try {
+      const reply = {
+        ...(await generateAssistantReply(
+          retryMessages,
+          retryPayload.content,
+          selectedIntroScenario,
+          buildImageCommandContext(retryMessages),
+        )),
+        turnId: retryTurnId,
+      }
+      const autoCommandMessages: ChatMessage[] = []
+      if (readingSettings.alwaysShowCommandSuggestions && readingSettings.selectedCommandIds.length > 0) {
+        const selectedCommands = SLASH_COMMANDS.filter((command) =>
+          readingSettings.selectedCommandIds.includes(command.id),
+        ).slice(0, 2)
+
+        for (const command of selectedCommands) {
+          const isImageAutoCommand = command.name === "이미지"
+          if (isImageAutoCommand) {
+            setTypingLabel("이미지 생성중...")
+            setTypingVariant("image")
+          }
+          const commandStartedAt = Date.now()
+          const result = await runCommand(command.name, characterName, buildImageCommandContext([...retryMessages, reply]))
+          if (isImageAutoCommand) {
+            const remainingDelay = Math.max(0, 1400 - (Date.now() - commandStartedAt))
+            if (remainingDelay > 0) {
+              await new Promise((resolve) => setTimeout(resolve, remainingDelay))
+            }
+          }
+          if (result.kind === "message") {
+            autoCommandMessages.push({ ...result.message, turnId: retryTurnId })
+          } else {
+            toast(result.message)
+          }
+          if (isImageAutoCommand) {
+            setTypingLabel(undefined)
+            setTypingVariant("text")
+          }
+        }
+      }
+      setMessages((prev) => [...prev, reply, ...autoCommandMessages])
+    } catch {
+      setMessages((prev) => [...prev, failedMessage])
+      toast.error("다시 생성하지 못했어요.")
+    } finally {
+      setIsTyping(false)
+      setTypingLabel(undefined)
+      setTypingVariant("text")
     }
   }
 
   const handleCommand = async (command: string) => {
-    const result = await runCommand(command, characterName)
-    if (result.kind === "toast") {
-      toast(result.message)
-      return
-    }
+    const isImageCommand = command.replace(/^\//, "").trim() === "이미지"
     setIsTyping(true)
-    // small delay so the typing indicator is visible
-    setTimeout(() => {
+    setTypingLabel(isImageCommand ? "이미지 생성중..." : undefined)
+    setTypingVariant(isImageCommand ? "image" : "text")
+
+    try {
+      const startedAt = Date.now()
+      const turnId = makeTurnId()
+      const result = await runCommand(command, characterName, buildImageCommandContext())
+      const remainingDelay = isImageCommand ? Math.max(0, 1400 - (Date.now() - startedAt)) : 0
+      if (remainingDelay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remainingDelay))
+      }
+
+      if (result.kind === "toast") {
+        toast(result.message)
+        return
+      }
+      setMessages((prev) => [...prev, { ...result.message, turnId }])
+    } catch {
+      const errorMessage: ChatMessage = {
+        id: `image-error-${Date.now()}`,
+        type: "status",
+        content: "이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.",
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsTyping(false)
-      setMessages((prev) => [...prev, result.message])
-    }, 600)
+      setTypingLabel(undefined)
+      setTypingVariant("text")
+    }
   }
 
   // Author tools handlers
@@ -253,21 +421,74 @@ export default function ChatPage() {
     }, 1500)
   }
 
-  const handleEditMessage = (messageId: string, nextContent: string) => {
+  const handleEditMessage = async (messageId: string, nextContent: string) => {
     const trimmedContent = nextContent.trim()
     if (!trimmedContent) {
       toast.error("메시지를 비워둘 수 없어요.")
       return
     }
 
-    setMessages((prev) =>
-      prev.map((msg) =>
+    const targetMessage = messages.find((message) => message.id === messageId)
+    const shouldRegenerateImages = Boolean(
+      targetMessage?.turnId &&
+        messages.some((message) => message.turnId === targetMessage.turnId && message.imageUrl),
+    )
+    const editedMessages = messages.map((msg) =>
         msg.id === messageId
           ? { ...msg, content: trimmedContent }
-          : msg
-      )
+          : msg,
     )
+
+    setMessages(editedMessages)
     setEditedMessageIds((prev) => new Set(prev).add(messageId))
+
+    if (shouldRegenerateImages && targetMessage?.turnId) {
+      setIsTyping(true)
+      setTypingLabel("이미지 재생성중...")
+      setTypingVariant("image")
+
+      try {
+        const result = await runCommand("이미지", characterName, buildImageCommandContext(editedMessages))
+        if (result.kind !== "message" || !result.message.imageUrl) {
+          throw new Error("Image regeneration failed")
+        }
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.turnId === targetMessage.turnId && message.imageUrl
+              ? {
+                  ...message,
+                  type: "ai",
+                  content: "",
+                  imageUrl: result.message.imageUrl,
+                  imageName: result.message.imageName,
+                }
+              : message,
+          ),
+        )
+        toast.success("메시지를 수정하고 이미지를 다시 생성했어요.")
+      } catch {
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.turnId === targetMessage.turnId && message.imageUrl
+              ? {
+                  ...message,
+                  type: "status",
+                  content: "이미지 재생성에 실패했어요. 잠시 후 다시 시도해주세요.",
+                  imageUrl: undefined,
+                  imageName: undefined,
+                }
+              : message,
+          ),
+        )
+        toast.error("이미지를 다시 생성하지 못했어요.")
+      } finally {
+        setIsTyping(false)
+        setTypingLabel(undefined)
+        setTypingVariant("text")
+      }
+      return
+    }
+
     toast.success("메시지를 수정했어요.")
   }
 
@@ -278,7 +499,14 @@ export default function ChatPage() {
 
   // --- Branch flow ---
   const handleBranchFromMessage = (messageId: string) => {
-    setBranchTargetId(messageId)
+    const targetMessage = messages.find((message) => message.id === messageId)
+    if (!targetMessage?.turnId) {
+      setBranchTargetId(messageId)
+      return
+    }
+
+    const lastMessageInTurn = messages.findLast((message) => message.turnId === targetMessage.turnId)
+    setBranchTargetId(lastMessageInTurn?.id ?? messageId)
   }
 
   const confirmBranch = () => {
@@ -302,12 +530,7 @@ export default function ChatPage() {
   const hasMessages = messages.length > 0
 
   const handleClearChat = () => {
-    if (!window.confirm("현재 대화를 모두 초기화할까요?")) return
-
-    setMessages([])
-    setEditedMessageIds(new Set())
-    setIsSettingsOpen(false)
-    toast.success("대화를 초기화했어요.")
+    setIsClearConfirmOpen(true)
   }
 
   const handleLeaveChat = () => {
@@ -336,6 +559,7 @@ export default function ChatPage() {
         characterEmoji={characterEmoji}
         chatId={chatId}
         onChatThemeChange={(theme) => setChatTheme(theme)}
+        onReadingSettingsChange={setReadingSettings}
         onClearChat={handleClearChat}
         onLeaveChat={handleLeaveChat}
       />
@@ -362,21 +586,42 @@ export default function ChatPage() {
         onConfirm={confirmBranch}
         onCancel={() => setBranchTargetId(null)}
       />
+      <ConfirmModal
+        open={isClearConfirmOpen}
+        title="대화 초기화"
+        message="현재 대화를 모두 초기화할까요?"
+        confirmText="초기화"
+        destructive
+        onOpenChange={setIsClearConfirmOpen}
+        onConfirm={() => {
+          setMessages([])
+          setEditedMessageIds(new Set())
+          setIsSettingsOpen(false)
+          toast.success("대화를 초기화했어요.")
+        }}
+      />
 
       {/* Chat Area - Scrollable */}
       <main className="min-h-0 flex-1 overflow-y-auto">
-        {hasMessages ? (
+        {hasMessages || isTyping ? (
           <ChatMessageList
             messages={messages}
             isTyping={isTyping}
+            typingLabel={typingLabel}
+            typingVariant={typingVariant}
             messagesEndRef={messagesEndRef}
             onRewriteMessage={handleRewriteMessage}
+            onRetryFailedMessage={handleRetryFailedMessage}
             onEditMessage={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}
             onBranchFromMessage={handleBranchFromMessage}
             editedMessageIds={editedMessageIds}
             chatId={chatId}
             chatTheme={chatTheme}
+            textSize={readingSettings.textSize}
+            lineHeight={readingSettings.lineHeight}
+            alwaysShowCommandSuggestions={readingSettings.alwaysShowCommandSuggestions}
+            selectedCommandIds={readingSettings.selectedCommandIds}
             disabled={isTyping}
           />
         ) : (
@@ -388,7 +633,9 @@ export default function ChatPage() {
                 introScenarios={introScenarios}
                 selectedIntroScenarioId={selectedIntroScenario?.id}
                 onIntroSelect={setSelectedIntroScenarioId}
-                onSuggestionClick={(suggestion) => setInsertTextRequest({ id: Date.now(), text: suggestion })}
+                onSuggestionClick={(suggestion) => handleSendMessage(suggestion)}
+                textSize={readingSettings.textSize}
+                lineHeight={readingSettings.lineHeight}
               />
           </div>
         )}

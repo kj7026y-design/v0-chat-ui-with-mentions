@@ -1,6 +1,6 @@
 export interface ChatMessage {
   id: string
-  type: "user" | "ai" | "event" | "inner-thought"
+  type: "user" | "ai" | "event" | "inner-thought" | "status"
   content: string
   timestamp: Date
   imageUrl?: string
@@ -15,6 +15,17 @@ export interface ChatMessage {
   mentionAll?: boolean
   isUserAuthoredCharacterLine?: boolean
   originalContent?: string
+  turnId?: string
+  isGenerationError?: boolean
+  retryPayload?: {
+    content: string
+    mentions?: string[]
+    image?: {
+      url: string
+      name?: string
+    }
+    turnId?: string
+  }
 }
 
 export interface Command {
@@ -30,12 +41,6 @@ export const SLASH_COMMANDS: Command[] = [
     name: "상태바",
     description: "현재 캐릭터의 감정과 관계 상태를 확인해요",
     icon: "📊",
-  },
-  {
-    id: "inner-thought",
-    name: "속마음",
-    description: "캐릭터의 내면 독백을 확인해요",
-    icon: "💭",
   },
   {
     id: "image",

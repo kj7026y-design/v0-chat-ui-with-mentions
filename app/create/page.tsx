@@ -49,7 +49,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { AlertModal } from "@/components/ui/app-modal"
+import { CharacterForm as CharacterCreateForm } from "@/components/create/character-form"
 import { GenreSelectWithCustomInput } from "@/components/create/genre-select-with-custom-input"
+import { ImageUploadField as CreateImageUploadField } from "@/components/create/image-upload-field"
+import { WorkModeSwitch as CreateModeSwitch } from "@/components/create/work-mode-switch"
 import { IntroScenariosFormSection } from "@/components/my-works/intro-scenarios-form-section"
 import {
   cleanIntroScenarios,
@@ -136,6 +140,7 @@ const emptyCharacter = (): StoryCharacter => ({
   startOptions: ["", "", ""],
   tags: [],
   visualTags: [],
+  relationshipTags: [],
   emoji: "✨",
   createdAt: "",
 })
@@ -417,7 +422,7 @@ export default function CreatePage() {
 
     setLibraryAndPersist(nextLibrary)
     window.localStorage.removeItem(WORK_DRAFT_KEY)
-    toast(goChat ? "작품을 저장하고 채팅을 시작해요." : "내 완성본에 저장했어요.")
+    toast(goChat ? "작품을 저장하고 채팅을 시작해요." : "완성작 아카이브에 저장했어요.")
     setWorkDraft(emptyWorkDraft())
     if (goChat) router.push(`/chat/${work.id}`)
     else setMode("menu")
@@ -546,7 +551,7 @@ export default function CreatePage() {
                   }}
                 />
               )}
-              <WorkModeSwitch value={workFormMode} onChange={changeWorkFormMode} />
+              <CreateModeSwitch value={workFormMode} onChange={changeWorkFormMode} />
               {workFormMode === "simple" ? (
                 <SimpleWorkCreateStep
                   library={library}
@@ -589,13 +594,13 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, character: false }))
               }}
             >
-              <WorkModeSwitch
+              <CreateModeSwitch
                 value={characterFormMode}
                 onChange={setCharacterFormMode}
                 simpleDescription="필수 정보만 입력해서 캐릭터를 빠르게 만들어요."
                 advancedDescription="말투, 비밀 설정, 이미지, 대표 대사까지 세밀하게 설정해요."
               />
-              <CharacterForm value={characterDraft} onChange={setCharacterDraft} formMode={characterFormMode} />
+              <CharacterCreateForm value={characterDraft} onChange={setCharacterDraft} formMode={characterFormMode} />
             </IndividualShell>
           )}
 
@@ -609,7 +614,7 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, world: false }))
               }}
             >
-              <WorkModeSwitch
+              <CreateModeSwitch
                 value={worldFormMode}
                 onChange={setWorldFormMode}
                 simpleDescription="세계관 이름과 핵심 분위기만 입력해서 빠르게 만들어요."
@@ -629,7 +634,7 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, persona: false }))
               }}
             >
-              <WorkModeSwitch
+              <CreateModeSwitch
                 value={personaFormMode}
                 onChange={setPersonaFormMode}
                 simpleDescription="자아의 기본 역할만 입력해서 빠르게 만들어요."
@@ -1050,7 +1055,7 @@ function CharacterWorkStep({
           )}
         </TabsContent>
         <TabsContent value="new" className="pt-4">
-          <CharacterForm
+          <CharacterCreateForm
             value={draft.character}
             onChange={(character) => setDraft((prev) => ({ ...prev, character }))}
             formMode="advanced"
@@ -1214,10 +1219,11 @@ function ReviewStep({
                   <FieldLabel>한 줄 소개</FieldLabel>
                   <Textarea value={tagline} onChange={(event) => update("tagline", event.target.value)} className="min-h-[76px] bg-input" />
                 </Field>
-                <Field>
-                  <FieldLabel>대표 이미지 URL</FieldLabel>
-                  <Input value={draft.coverImageUrl || world?.coverImageUrl || ""} onChange={(event) => update("coverImageUrl", event.target.value)} className="bg-input" />
-                </Field>
+                <CreateImageUploadField
+                  label="대표 이미지"
+                  value={draft.coverImageUrl || world?.coverImageUrl || ""}
+                  onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl ?? "")}
+                />
               </FieldGroup>
             </CardContent>
           </Card>
@@ -1605,13 +1611,14 @@ function ImageUploadField({
   onChange: (value: string | undefined) => void
 }) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [invalidImageOpen, setInvalidImageOpen] = useState(false)
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
     if (!file.type.startsWith("image/")) {
-      window.alert("이미지 파일만 업로드할 수 있어요.")
+      setInvalidImageOpen(true)
       event.target.value = ""
       return
     }
@@ -1676,6 +1683,12 @@ function ImageUploadField({
           </div>
         </div>
       )}
+      <AlertModal
+        open={invalidImageOpen}
+        title="이미지 업로드"
+        message="이미지 파일만 업로드할 수 있어요."
+        onOpenChange={setInvalidImageOpen}
+      />
     </Field>
   )
 }
@@ -1711,6 +1724,11 @@ function WorldForm({
             <FieldLabel>시대/배경</FieldLabel>
             <Input value={value.era} onChange={(event) => update("era", event.target.value)} className="bg-input" />
           </Field>
+          <CreateImageUploadField
+            label="대표 이미지"
+            value={value.coverImageUrl}
+            onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
+          />
           <Field>
             <FieldLabel>핵심 설정</FieldLabel>
             <Textarea value={value.coreSetting} onChange={(event) => update("coreSetting", event.target.value)} className="bg-input min-h-[90px]" />
@@ -2357,6 +2375,7 @@ function readDraft<T>(key: string): T | null {
 function normalizeCharacter(character: StoryCharacter): StoryCharacter {
   const tags = normalizeTagList(character.tags)
   const visualTags = normalizeTagList(character.visualTags)
+  const relationshipTags = normalizeTagList(character.relationshipTags)
 
   return {
     ...character,
@@ -2371,6 +2390,7 @@ function normalizeCharacter(character: StoryCharacter): StoryCharacter {
           .filter(Boolean)
           .slice(0, 3),
     visualTags,
+    relationshipTags,
     createdAt: character.createdAt || new Date().toLocaleDateString("ko-KR"),
   }
 }

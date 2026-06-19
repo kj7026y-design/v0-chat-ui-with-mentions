@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Copy, Edit3, MoreHorizontal, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { ConfirmModal, PromptModal } from "@/components/ui/app-modal"
 import { cn } from "@/lib/utils"
 import {
   createChatId,
@@ -17,6 +18,8 @@ export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [chats, setChats] = useState<ChatListItemData[]>(defaultChats)
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   useEffect(() => {
     const syncChats = () => setChats(getChatList())
@@ -37,12 +40,7 @@ export default function ChatsPage() {
   const handleRenameChat = (chatId: string) => {
     const chat = chats.find((item) => item.id === chatId)
     if (!chat) return
-
-    const nextName = window.prompt("채팅방 이름을 입력하세요.", chat.characterName)
-    if (!nextName?.trim()) return
-
-    persistChats(chats.map((item) => item.id === chatId ? { ...item, characterName: nextName.trim() } : item))
-    toast("이름을 바꿨어요.")
+    setRenameTargetId(chatId)
   }
 
   const handleDuplicateChat = (chatId: string) => {
@@ -63,15 +61,13 @@ export default function ChatsPage() {
   }
 
   const handleDeleteChat = (chatId: string) => {
-    if (!window.confirm("채팅방을 삭제할까요?")) return
-
-    persistChats(chats.filter((chat) => chat.id !== chatId))
-    toast("채팅방을 삭제했어요.")
+    setDeleteTargetId(chatId)
   }
 
   const filteredChats = chats.filter((chat) =>
     chat.characterName.toLowerCase().includes(searchQuery.toLowerCase())
   )
+  const renameTarget = chats.find((chat) => chat.id === renameTargetId)
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
@@ -124,6 +120,37 @@ export default function ChatsPage() {
           <p>검색 결과가 없습니다</p>
         </div>
       )}
+      <PromptModal
+        open={Boolean(renameTarget)}
+        title="채팅방 이름 변경"
+        message="채팅방 이름을 입력하세요."
+        defaultValue={renameTarget?.characterName ?? ""}
+        onOpenChange={(open) => {
+          if (!open) setRenameTargetId(null)
+        }}
+        onConfirm={(nextName) => {
+          if (!renameTargetId) return
+          persistChats(chats.map((item) => item.id === renameTargetId ? { ...item, characterName: nextName } : item))
+          setRenameTargetId(null)
+          toast("이름을 바꿨어요.")
+        }}
+      />
+      <ConfirmModal
+        open={Boolean(deleteTargetId)}
+        title="채팅방 삭제"
+        message="채팅방을 삭제할까요?"
+        confirmText="삭제"
+        destructive
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetId(null)
+        }}
+        onConfirm={() => {
+          if (!deleteTargetId) return
+          persistChats(chats.filter((chat) => chat.id !== deleteTargetId))
+          setDeleteTargetId(null)
+          toast("채팅방을 삭제했어요.")
+        }}
+      />
     </div>
   )
 }
@@ -140,6 +167,21 @@ function ChatListItem({
   onDelete: (chatId: string) => void
 }) {
   const [showMenu, setShowMenu] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 })
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+
+  const toggleMenu = () => {
+    const rect = menuButtonRef.current?.getBoundingClientRect()
+    if (rect) {
+      const menuHeight = 132
+      const top = Math.min(rect.bottom + 6, window.innerHeight - menuHeight - 8)
+      setMenuPosition({
+        top: Math.max(8, top),
+        right: Math.max(8, window.innerWidth - rect.right),
+      })
+    }
+    setShowMenu((current) => !current)
+  }
 
   return (
     <div className="relative">
@@ -182,10 +224,11 @@ function ChatListItem({
 
       {/* More Button */}
       <button
+        ref={menuButtonRef}
         onClick={(e) => {
           e.preventDefault()
           e.stopPropagation()
-          setShowMenu(!showMenu)
+          toggleMenu()
         }}
         className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
         aria-label="더보기"
@@ -200,7 +243,10 @@ function ChatListItem({
             className="fixed inset-0 z-40" 
             onClick={() => setShowMenu(false)} 
           />
-          <div className="absolute right-2 top-14 z-50 bg-popover rounded-xl shadow-xl py-1.5 min-w-[140px] border border-border">
+          <div
+            className="fixed z-50 min-w-[140px] rounded-xl border border-border bg-popover py-1.5 shadow-xl"
+            style={{ top: menuPosition.top, right: menuPosition.right }}
+          >
             <ContextMenuButton
               icon={Trash2}
               label="삭제"

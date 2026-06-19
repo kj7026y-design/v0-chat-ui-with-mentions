@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { AlertModal, ConfirmModal, PromptModal } from "@/components/ui/app-modal"
 import { cn } from "@/lib/utils"
 import {
   createId,
@@ -47,7 +48,7 @@ const tabs: Tab[] = [
   { id: "scenarios", label: "내 세계관" },
   { id: "characters", label: "내 캐릭터" },
   { id: "personas", label: "내 자아" },
-  { id: "completed", label: "내 완성본" },
+  { id: "completed", label: "완성작 아카이브" },
 ]
 
 export default function MyWorksPage() {
@@ -57,6 +58,8 @@ export default function MyWorksPage() {
   const [detail, setDetail] = useState<DetailTarget | null>(null)
   const [editingWorldId, setEditingWorldId] = useState<string | null>(null)
   const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null)
+  const [renameTarget, setRenameTarget] = useState<DetailTarget | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DetailTarget | null>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   useEffect(() => {
@@ -115,34 +118,26 @@ export default function MyWorksPage() {
 
   const handleEdit = (target: DetailTarget) => {
     if (target.type === "scenarios") {
-      setEditingWorldId(target.id)
+      window.location.href = `/my-works/worlds/${target.id}/edit`
       return
     }
     if (target.type === "characters") {
-      setEditingCharacterId(target.id)
+      window.location.href = `/my-works/characters/${target.id}/edit`
+      return
+    }
+    if (target.type === "completed") {
+      window.location.href = `/my-works/${target.id}/edit`
       return
     }
     handleRename(target)
   }
 
   const handleRename = (target: DetailTarget) => {
-    const currentName = getTargetName(library, target)
-    const label = target.type === "completed" ? "작품 제목" : "이름"
-    const nextName = window.prompt(`${label}을 입력하세요.`, currentName)
-    if (!nextName?.trim()) return
-
-    persistLibrary(renameTarget(library, target, nextName.trim()))
-    toast("수정했어요.")
+    setRenameTarget(target)
   }
 
   const handleDelete = (target: DetailTarget) => {
-    if (!window.confirm("삭제할까요?")) return
-
-    persistLibrary(deleteTarget(library, target))
-    setDetail((current) => (current?.type === target.type && current.id === target.id ? null : current))
-    if (target.type === "scenarios") setEditingWorldId(null)
-    if (target.type === "characters") setEditingCharacterId(null)
-    toast("삭제했어요.")
+    setDeleteTarget(target)
   }
 
   const handleSaveWorld = (world: StoryWorld) => {
@@ -180,6 +175,7 @@ export default function MyWorksPage() {
   }
 
   const detailItem = detail ? getDetailItem(library, detail) : null
+  const renameLabel = renameTarget?.type === "completed" ? "작품 제목" : "이름"
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden bg-background">
@@ -314,6 +310,40 @@ export default function MyWorksPage() {
           </>
         )}
       </div>
+      <PromptModal
+        open={Boolean(renameTarget)}
+        title="이름 수정"
+        message={`${renameLabel}을 입력하세요.`}
+        defaultValue={renameTarget ? getTargetName(library, renameTarget) : ""}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null)
+        }}
+        onConfirm={(nextName) => {
+          if (!renameTarget) return
+          persistLibrary(renameTargetItem(library, renameTarget, nextName))
+          setRenameTarget(null)
+          toast("수정했어요.")
+        }}
+      />
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="삭제"
+        message="삭제할까요?"
+        confirmText="삭제"
+        destructive
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        onConfirm={() => {
+          if (!deleteTarget) return
+          persistLibrary(deleteTargetItem(library, deleteTarget))
+          setDetail((current) => (current?.type === deleteTarget.type && current.id === deleteTarget.id ? null : current))
+          if (deleteTarget.type === "scenarios") setEditingWorldId(null)
+          if (deleteTarget.type === "characters") setEditingCharacterId(null)
+          setDeleteTarget(null)
+          toast("삭제했어요.")
+        }}
+      />
     </div>
   )
 }
@@ -343,31 +373,31 @@ function ScenariosTab({
             onClick={() => onOpen(scenario.id)}
             onKeyDown={(event) => handleCardKeyDown(event, () => onOpen(scenario.id))}
             className={cn(
-              "relative cursor-pointer overflow-visible rounded-xl bg-gradient-to-br border border-border text-left",
+              "relative cursor-pointer overflow-visible rounded-xl bg-gradient-to-br border border-white/10 text-left text-white",
               scenario.coverColor,
             )}
           >
             <div className="p-4">
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="text-base font-semibold text-foreground">{scenario.name}</h3>
+                  <h3 className="text-base font-semibold text-white">{scenario.name}</h3>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <Calendar className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{scenario.era}</span>
+                    <Calendar className="w-3 h-3 text-white/60" />
+                    <span className="text-xs text-white/60">{scenario.era}</span>
                   </div>
                 </div>
-                <ItemMenu target={target} onRename={onRename} onDelete={onDelete} onCopy={onCopy} />
+                <ItemMenu target={target} onRename={onRename} onDelete={onDelete} onCopy={onCopy} tone="inverse" />
               </div>
-              <p className="text-sm text-muted-foreground mb-3">{scenario.coreSetting}</p>
+              <p className="text-sm text-white/72 mb-3">{scenario.coreSetting}</p>
               <div className="space-y-1.5">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                <span className="text-[10px] text-white/48 uppercase tracking-wider">
                   주요 사건
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {scenario.events.split(",").filter(Boolean).map((event, index) => (
                     <div key={index} className="flex items-center gap-1.5">
-                      <MapPin className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">{event.trim()}</span>
+                      <MapPin className="w-3 h-3 text-white/60" />
+                      <span className="text-xs text-white/70">{event.trim()}</span>
                     </div>
                   ))}
                 </div>
@@ -418,7 +448,7 @@ function CharactersTab({
             )}
             <p className="mb-2 line-clamp-2 text-[10px] text-muted-foreground">{character.summary}</p>
             <div className="flex flex-wrap justify-center gap-1">
-              {[...normalizeTagList(character.tags), ...normalizeTagList(character.visualTags)].slice(0, 3).map((tag) => (
+              {[...normalizeTagList(character.tags), ...normalizeTagList(character.visualTags), ...normalizeTagList(character.relationshipTags)].slice(0, 3).map((tag) => (
                 <span key={tag} className="px-1.5 py-0.5 text-[9px] bg-muted text-foreground rounded">
                   {tag}
                 </span>
@@ -554,7 +584,7 @@ function CompletedWorkCard({
         </div>
         <div className="flex items-center justify-between pt-3 border-t border-border">
           <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">완성본</span>
+            <span className="text-xs text-muted-foreground">완성작</span>
             <span className="text-xs text-muted-foreground">{work.updatedAt}</span>
           </div>
           <Link
@@ -576,11 +606,13 @@ function ItemMenu({
   onRename,
   onDelete,
   onCopy,
+  tone = "default",
 }: {
   target: DetailTarget
   onRename: (target: DetailTarget) => void
   onDelete: (target: DetailTarget) => void
   onCopy: (target: DetailTarget) => void
+  tone?: "default" | "inverse"
 }) {
   const [open, setOpen] = useState(false)
 
@@ -593,10 +625,13 @@ function ItemMenu({
           event.stopPropagation()
           setOpen((current) => !current)
         }}
-        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
+        className={cn(
+          "w-8 h-8 flex items-center justify-center rounded-full transition-colors",
+          tone === "inverse" ? "hover:bg-white/10" : "hover:bg-accent",
+        )}
         aria-label="더보기"
       >
-        <MoreVertical className="w-4 h-4 text-muted-foreground" />
+        <MoreVertical className={cn("w-4 h-4", tone === "inverse" ? "text-white/70" : "text-muted-foreground")} />
       </button>
 
       {open && (
@@ -766,6 +801,7 @@ function WorldEditPanel({
     ...world,
     storyProgressSettings: world.storyProgressSettings ?? defaultStoryProgressSettings(),
   })
+  const [alertOpen, setAlertOpen] = useState(false)
 
   const update = <K extends keyof StoryWorld>(key: K, value: StoryWorld[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -774,7 +810,7 @@ function WorldEditPanel({
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!draft.name.trim() || !String(draft.genre).trim() || !draft.coreSetting.trim()) {
-      window.alert("세계관 이름, 장르, 핵심 설정을 입력해 주세요.")
+      setAlertOpen(true)
       return
     }
     onSave({
@@ -823,7 +859,7 @@ function WorldEditPanel({
             <textarea
               value={draft.coreSetting}
               onChange={(event) => update("coreSetting", event.target.value)}
-              className="min-h-[92px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
+              className="field-sizing-content max-h-[220px] min-h-[92px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
             />
           </WorldEditField>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -831,14 +867,14 @@ function WorldEditPanel({
               <textarea
                 value={draft.places}
                 onChange={(event) => update("places", event.target.value)}
-                className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
+                className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
               />
             </WorldEditField>
             <WorldEditField label="주요 사건">
               <textarea
                 value={draft.events}
                 onChange={(event) => update("events", event.target.value)}
-                className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
+                className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
               />
             </WorldEditField>
           </div>
@@ -862,7 +898,7 @@ function WorldEditPanel({
             <textarea
               value={draft.forbiddenSettings}
               onChange={(event) => update("forbiddenSettings", event.target.value)}
-              className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
+              className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
             />
           </WorldEditField>
         </div>
@@ -883,6 +919,11 @@ function WorldEditPanel({
           저장
         </button>
       </div>
+      <AlertModal
+        open={alertOpen}
+        message="세계관 이름, 장르, 핵심 설정을 입력해 주세요."
+        onOpenChange={setAlertOpen}
+      />
     </form>
   )
 }
@@ -911,7 +952,9 @@ function CharacterEditPanel({
     genderCustom: character.genderCustom ?? "",
     tags: normalizeTagList(character.tags),
     visualTags: normalizeTagList(character.visualTags),
+    relationshipTags: normalizeTagList(character.relationshipTags),
   })
+  const [alertOpen, setAlertOpen] = useState(false)
 
   const update = <K extends keyof StoryCharacter>(key: K, value: StoryCharacter[K]) => {
     setDraft((current) => ({ ...current, [key]: value }))
@@ -928,7 +971,7 @@ function CharacterEditPanel({
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!draft.name.trim() || !draft.age?.trim() || !draft.role?.trim() || !draft.summary.trim() || !draft.personality.trim()) {
-      window.alert("이름, 나이, 역할/직업, 한 줄 소개, 성격 키워드를 입력해 주세요.")
+      setAlertOpen(true)
       return
     }
 
@@ -949,6 +992,7 @@ function CharacterEditPanel({
       genderCustom: draft.gender === "custom" ? draft.genderCustom?.trim() ?? "" : "",
       tags: normalizeTagList(draft.tags),
       visualTags: normalizeTagList(draft.visualTags),
+      relationshipTags: normalizeTagList(draft.relationshipTags),
     })
   }
 
@@ -995,7 +1039,7 @@ function CharacterEditPanel({
             <input value={draft.summary} onChange={(event) => update("summary", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
           </WorldEditField>
           <WorldEditField label="성격 키워드">
-            <textarea value={draft.personality} onChange={(event) => update("personality", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+            <textarea value={draft.personality} onChange={(event) => update("personality", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
           </WorldEditField>
           <div className="grid gap-3 sm:grid-cols-2">
             <WorldEditField label="사는 곳">
@@ -1006,23 +1050,24 @@ function CharacterEditPanel({
             </WorldEditField>
           </div>
           <WorldEditField label="외모 상세">
-            <textarea value={draft.appearance ?? ""} onChange={(event) => update("appearance", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+            <textarea value={draft.appearance ?? ""} onChange={(event) => update("appearance", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
           </WorldEditField>
           <WorldEditField label="말투 규칙">
-            <textarea value={draft.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+            <textarea value={draft.speechStyle} onChange={(event) => update("speechStyle", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
           </WorldEditField>
           <div className="grid gap-3 sm:grid-cols-2">
             <WorldEditField label="비밀 설정">
-              <textarea value={draft.secret} onChange={(event) => update("secret", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+              <textarea value={draft.secret} onChange={(event) => update("secret", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
             </WorldEditField>
             <WorldEditField label="금지 전개">
-              <textarea value={draft.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="min-h-[82px] w-full rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
+              <textarea value={draft.forbiddenDevelopments} onChange={(event) => update("forbiddenDevelopments", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
             </WorldEditField>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <EditableTagField label="태그" value={draft.tags} onChange={(tags) => update("tags", tags)} />
             <EditableTagField label="외형 키워드" value={draft.visualTags ?? []} onChange={(visualTags) => update("visualTags", visualTags)} />
           </div>
+          <EditableTagField label="관계 키워드" value={draft.relationshipTags ?? []} onChange={(relationshipTags) => update("relationshipTags", relationshipTags)} />
         </div>
       </section>
 
@@ -1034,6 +1079,11 @@ function CharacterEditPanel({
           저장
         </button>
       </div>
+      <AlertModal
+        open={alertOpen}
+        message="이름, 나이, 역할/직업, 한 줄 소개, 성격 키워드를 입력해 주세요."
+        onOpenChange={setAlertOpen}
+      />
     </form>
   )
 }
@@ -1094,6 +1144,7 @@ function CharacterDetail({ character }: { character: StoryCharacter }) {
       <DetailRow label="성격" value={character.personality} />
       <DetailRow label="태그" value={normalizeTagList(character.tags).join(", ")} />
       <DetailRow label="외형 키워드" value={normalizeTagList(character.visualTags).join(", ")} />
+      <DetailRow label="관계 키워드" value={normalizeTagList(character.relationshipTags).join(", ")} />
       <DetailRow label="말투 규칙" value={character.speechStyle} />
       <DetailRow label="기본 관계" value={character.relationship} />
       <DetailRow label="비밀 설정" value={character.secret} />
@@ -1126,7 +1177,7 @@ function WorkDetail({ work, library }: { work: StoryWork; library: StoryChatLibr
   const persona = library.personas.find((item) => item.id === work.personaId)
 
   return (
-    <DetailCard title={work.title} subtitle="완성본">
+    <DetailCard title={work.title} subtitle="완성작">
       <DetailRow label="캐릭터" value={character?.name ?? "없음"} />
       <DetailRow label="세계관" value={world?.name ?? "없음"} />
       <DetailRow label="자아" value={persona?.name ?? "없음"} />
@@ -1179,7 +1230,7 @@ function EmptyState() {
       <div className="w-16 h-16 rounded-full bg-card flex items-center justify-center mb-4">
         <BookOpen className="w-8 h-8 text-muted-foreground" />
       </div>
-      <p className="text-muted-foreground text-sm">아직 완성본이 없습니다</p>
+      <p className="text-muted-foreground text-sm">아직 완성작이 없습니다</p>
       <p className="text-muted-foreground text-xs mt-1">캐릭터와 세계관을 조합해 시작하세요</p>
     </div>
   )
@@ -1189,7 +1240,7 @@ function getCreateLabel(tab: TabId) {
   if (tab === "scenarios") return "새 세계관"
   if (tab === "characters") return "새 캐릭터"
   if (tab === "personas") return "새 자아"
-  return "새 완성본"
+  return "새 완성작"
 }
 
 function isTabId(tab: string | null): tab is TabId {
@@ -1241,7 +1292,7 @@ function getTargetName(library: StoryChatLibrary, target: DetailTarget) {
   return (item as StoryCharacter | StoryWorld | StoryPersona).name
 }
 
-function renameTarget(library: StoryChatLibrary, target: DetailTarget, name: string): StoryChatLibrary {
+function renameTargetItem(library: StoryChatLibrary, target: DetailTarget, name: string): StoryChatLibrary {
   if (target.type === "scenarios") {
     return {
       ...library,
@@ -1266,7 +1317,7 @@ function renameTarget(library: StoryChatLibrary, target: DetailTarget, name: str
   }
 }
 
-function deleteTarget(library: StoryChatLibrary, target: DetailTarget): StoryChatLibrary {
+function deleteTargetItem(library: StoryChatLibrary, target: DetailTarget): StoryChatLibrary {
   if (target.type === "scenarios") {
     return {
       ...library,

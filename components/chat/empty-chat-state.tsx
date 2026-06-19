@@ -12,6 +12,8 @@ interface EmptyChatStateProps {
   introScenarios?: IntroScenario[]
   selectedIntroScenarioId?: string
   onIntroSelect?: (introId: string) => void
+  textSize?: number
+  lineHeight?: number
 }
 
 const SUGGESTIONS = ["당신은 누구죠?", "여긴 어디예요?", "내가 왜 여기 있는 거죠?"]
@@ -24,6 +26,8 @@ export function EmptyChatState({
   introScenarios = [],
   selectedIntroScenarioId,
   onIntroSelect,
+  textSize = 16,
+  lineHeight = 1.5,
 }: EmptyChatStateProps) {
   const hasIntros = introScenarios.length > 0
   const selectedIntro =
@@ -43,7 +47,9 @@ export function EmptyChatState({
         <div className="mt-5 w-full max-w-sm space-y-4">
           {introScenarios.length > 1 && (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-foreground">시작 장면을 선택하세요</p>
+              <p className="font-semibold text-foreground" style={{ fontSize: textSize, lineHeight }}>
+                시작 장면을 선택하세요
+              </p>
               <div className="grid gap-2">
                 {introScenarios.map((intro) => (
                   <button
@@ -57,8 +63,8 @@ export function EmptyChatState({
                         : "border-border bg-card hover:bg-accent",
                     )}
                   >
-                    <span className="block text-sm font-semibold text-foreground">{intro.title}</span>
-                    <span className="mt-1 line-clamp-2 block text-xs leading-relaxed text-muted-foreground">
+                    <span className="block font-semibold text-foreground" style={{ fontSize: textSize, lineHeight }}>{intro.title}</span>
+                    <span className="mt-1 line-clamp-2 block text-muted-foreground" style={{ fontSize: Math.max(12, textSize - 2), lineHeight }}>
                       {getIntroPreviewText(intro)}
                     </span>
                   </button>
@@ -68,22 +74,22 @@ export function EmptyChatState({
           )}
 
           {selectedIntro && (
-            <ChatIntroPreview intro={selectedIntro} onOptionClick={onSuggestionClick} />
+            <ChatIntroPreview intro={selectedIntro} onOptionClick={onSuggestionClick} textSize={textSize} lineHeight={lineHeight} />
           )}
         </div>
       ) : (
         <>
           {startScenario && (
             <div className="mt-4 w-full max-w-xs rounded-2xl bg-card border border-border px-4 py-3">
-              <p className="text-[11px] font-medium text-muted-foreground">{startScenario.title}</p>
-              <p className="mt-1 text-sm text-foreground leading-relaxed text-pretty">
+              <p className="font-medium text-muted-foreground" style={{ fontSize: Math.max(11, textSize - 4), lineHeight }}>{startScenario.title}</p>
+              <p className="mt-1 text-foreground text-pretty" style={{ fontSize: textSize, lineHeight }}>
                 {startScenario.content}
               </p>
             </div>
           )}
           <div className="mt-5 w-full max-w-xs rounded-2xl border border-dashed border-border bg-card/70 px-4 py-4">
-            <p className="text-sm font-semibold text-foreground">자유 도입</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            <p className="font-semibold text-foreground" style={{ fontSize: textSize, lineHeight }}>자유 도입</p>
+            <p className="mt-2 text-muted-foreground" style={{ fontSize: textSize, lineHeight }}>
               아직 정해진 시작 장면이 없어요. 원하는 방식으로 첫 문장을 입력해 이야기를 시작해보세요.
             </p>
           </div>
@@ -92,7 +98,8 @@ export function EmptyChatState({
               <button
                 key={suggestion}
                 onClick={() => onSuggestionClick(suggestion)}
-                className="px-4 py-3 rounded-2xl bg-card border border-border text-sm text-foreground hover:bg-accent transition-colors"
+                className="px-4 py-3 rounded-2xl bg-card border border-border text-foreground hover:bg-accent transition-colors"
+                style={{ fontSize: textSize, lineHeight }}
               >
                 {suggestion}
               </button>
@@ -107,9 +114,13 @@ export function EmptyChatState({
 function ChatIntroPreview({
   intro,
   onOptionClick,
+  textSize,
+  lineHeight,
 }: {
   intro: IntroScenario
   onOptionClick: (suggestion: string) => void
+  textSize: number
+  lineHeight: number
 }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-border bg-card text-left">
@@ -118,14 +129,18 @@ function ChatIntroPreview({
       )}
       <div className="space-y-3 px-4 py-4">
         <div>
-          <p className="text-sm font-bold text-foreground">{intro.title}</p>
-          {intro.scene && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{intro.scene}</p>}
+          <p className="font-bold text-foreground" style={{ fontSize: textSize, lineHeight }}>{intro.title}</p>
+          {intro.scene && <p className="mt-2 text-muted-foreground" style={{ fontSize: textSize, lineHeight }}>{intro.scene}</p>}
         </div>
         {intro.firstMessage && (
-          <div className="rounded-2xl border border-border bg-background px-3 py-3">
-            <p className="text-[11px] font-medium text-muted-foreground">첫 메시지</p>
-            <p className="mt-1 text-sm leading-relaxed text-foreground">{intro.firstMessage}</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => onOptionClick(intro.firstMessage ?? "")}
+            className="w-full rounded-2xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-accent"
+          >
+            <p className="font-medium text-muted-foreground" style={{ fontSize: Math.max(11, textSize - 4), lineHeight }}>첫 메시지</p>
+            <p className="mt-1 text-foreground" style={{ fontSize: textSize, lineHeight }}>{intro.firstMessage}</p>
+          </button>
         )}
         {(intro.options?.length ?? 0) > 0 && (
           <div className="space-y-2">
@@ -134,7 +149,8 @@ function ChatIntroPreview({
                 key={option}
                 type="button"
                 onClick={() => onOptionClick(option)}
-                className="w-full rounded-2xl border border-border bg-background px-3 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-accent"
+                className="w-full rounded-2xl border border-border bg-background px-3 py-2.5 text-left text-foreground transition-colors hover:bg-accent"
+                style={{ fontSize: textSize, lineHeight }}
               >
                 {option}
               </button>

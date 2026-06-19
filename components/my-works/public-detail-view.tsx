@@ -26,6 +26,8 @@ import type {
   StoryWorld,
 } from "@/lib/storychat-storage"
 import { getIntroPreviewText, normalizeIntroScenarios } from "@/lib/storychat-storage"
+import { WorkComments } from "@/components/work/work-comments"
+import { WorkLikeButton } from "@/components/work/work-like-button"
 import { cn } from "@/lib/utils"
 
 type DetailTarget =
@@ -80,7 +82,7 @@ export function PublicDetailView({
         <div className="flex justify-end">
           <Link
             href={`/my-works/${work.id}/edit`}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-foreground hover:bg-white/[0.08]"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent"
           >
             <Edit3 className="h-3.5 w-3.5" />
             수정하기
@@ -108,11 +110,15 @@ export function WorkLandingPage({
   world,
   characters,
   personas,
+  showSocial = true,
+  onLikeCountChange,
 }: {
   work: StoryWork
   world: StoryWorld
   characters: StoryCharacter[]
   personas: StoryPersona[]
+  showSocial?: boolean
+  onLikeCountChange?: (count: number) => void
 }) {
   const highlights = normalizeList(work.majorEvents ?? world.events)
   const places = normalizeLocations(work.majorLocations ?? world.places, world.locationImages)
@@ -122,7 +128,12 @@ export function WorkLandingPage({
     <article className="max-w-full space-y-6 overflow-x-hidden pb-10">
       <WorkLandingHero work={work} world={world} />
 
-      <WorkPreviewSection preview={preview} />
+      <WorkPreviewSection
+        preview={preview}
+        work={work}
+        showLike={showSocial}
+        onLikeCountChange={onLikeCountChange}
+      />
 
       {(characters.length > 0 || personas.length > 0) && (
         <CharacterPreviewSection characters={characters} personas={personas} />
@@ -134,8 +145,14 @@ export function WorkLandingPage({
 
       {highlights.length > 0 && <WorkHighlightSection highlights={highlights} />}
 
-      <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(245,158,11,0.12),rgba(255,255,255,0.03))] p-4 text-center">
-        <p className="mb-3 text-sm leading-relaxed text-white/70">이야기의 문턱에 섰습니다. 첫 장면에서 바로 대화를 시작해 보세요.</p>
+      {showSocial && (
+        <div className="space-y-4">
+          <WorkComments workId={work.id} />
+        </div>
+      )}
+
+      <div className="rounded-[24px] border border-border bg-card p-4 text-center">
+        <p className="mb-3 text-sm leading-relaxed text-muted-foreground">이야기의 문턱에 섰습니다. 첫 장면에서 바로 대화를 시작해 보세요.</p>
         <Link
           href={`/chat/${work.id}`}
           className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-bold text-black hover:bg-amber-100"
@@ -152,9 +169,9 @@ function WorkIntroScenariosPreview({ work }: { work: StoryWork }) {
   const intros = normalizeIntroScenarios(work)
   if (intros.length === 0) {
     return (
-      <section className="rounded-[22px] border border-white/10 bg-card/80 p-4">
+      <section className="rounded-[22px] border border-border bg-card/80 p-4">
         <SectionTitle icon={ScrollText} title="시작 장면" />
-        <p className="mt-3 text-sm leading-relaxed text-white/60">자유롭게 첫 문장을 입력해 이야기를 시작할 수 있어요.</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">자유롭게 첫 문장을 입력해 이야기를 시작할 수 있어요.</p>
       </section>
     )
   }
@@ -162,7 +179,7 @@ function WorkIntroScenariosPreview({ work }: { work: StoryWork }) {
   return (
     <section className="space-y-3">
       <SectionTitle icon={ScrollText} title="시작 장면" />
-      <p className="text-xs text-white/45">원하는 장면에서 이야기를 시작할 수 있어요.</p>
+      <p className="text-xs text-muted-foreground">원하는 장면에서 이야기를 시작할 수 있어요.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {intros.map((intro) => (
           <IntroPreviewCard key={intro.id} intro={intro} />
@@ -174,11 +191,11 @@ function WorkIntroScenariosPreview({ work }: { work: StoryWork }) {
 
 function IntroPreviewCard({ intro }: { intro: IntroScenario }) {
   return (
-    <div className="overflow-hidden rounded-[20px] border border-white/10 bg-card/80">
+    <div className="overflow-hidden rounded-[20px] border border-border bg-card/80">
       {intro.imageUrl && <img src={intro.imageUrl} alt={intro.title} className="h-28 w-full object-cover" />}
       <div className="p-3">
-        <h3 className="line-clamp-1 text-sm font-bold text-white">{intro.title}</h3>
-        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-white/56">{getIntroPreviewText(intro)}</p>
+        <h3 className="line-clamp-1 text-sm font-bold text-foreground">{intro.title}</h3>
+        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{getIntroPreviewText(intro)}</p>
       </div>
     </div>
   )
@@ -241,11 +258,30 @@ function WorkLandingHero({ work, world }: { work: StoryWork; world: StoryWorld }
   )
 }
 
-function WorkPreviewSection({ preview }: { preview: string }) {
+function WorkPreviewSection({
+  preview,
+  work,
+  showLike,
+  onLikeCountChange,
+}: {
+  preview: string
+  work: StoryWork
+  showLike: boolean
+  onLikeCountChange?: (count: number) => void
+}) {
   return (
-    <section className="rounded-[22px] border border-white/10 bg-card/80 p-4">
-      <SectionTitle icon={Sparkles} title="작품 미리보기" />
-      <p className="mt-3 text-sm leading-[1.75] text-white/76">{preview}</p>
+    <section className="rounded-[22px] border border-border bg-card/80 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <SectionTitle icon={Sparkles} title="작품 미리보기" />
+        {showLike && (
+          <WorkLikeButton
+            workId={work.id}
+            initialCount={work.likeCount ?? 0}
+            onCountChange={onLikeCountChange}
+          />
+        )}
+      </div>
+      <p className="mt-3 text-sm leading-[1.75] text-foreground/85">{preview}</p>
     </section>
   )
 }
@@ -269,7 +305,7 @@ function WorkStartSceneSection({ work, world }: { work: StoryWork; world: StoryW
       <p className="mt-2 text-sm leading-relaxed text-white/74">{work.startScenario || goal}</p>
       {goal && (
         <div className="mt-3 flex items-start gap-3 rounded-2xl border border-white/8 bg-black/24 p-3">
-          <Target className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+          <Target className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-200" />
           <p className="text-sm leading-relaxed text-white/82">{goal}</p>
         </div>
       )}
@@ -283,7 +319,7 @@ function WorkHighlightSection({ highlights }: { highlights: string[] }) {
       <SectionTitle icon={ScrollText} title="주요 매력" />
       <div className="flex flex-wrap gap-2">
         {highlights.map((highlight) => (
-          <span key={highlight} className="rounded-full border border-amber-200/15 bg-amber-200/10 px-3 py-2 text-xs font-medium text-amber-50/85">
+          <span key={highlight} className="rounded-full border border-amber-500/25 bg-amber-400/10 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-50/85">
             {highlight}
           </span>
         ))}
@@ -366,7 +402,7 @@ function WorldLocationList({ locations }: { locations: LocationItem[] }) {
     <DetailSection title="주요 장소" icon={MapPin}>
       <div className="space-y-2">
         {locations.map((location, index) => (
-          <div key={`${location.name}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-3">
+          <div key={`${location.name}-${index}`} className="rounded-2xl border border-border bg-background/50 p-3">
             <p className="font-semibold text-foreground">{location.name}</p>
             {location.description && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{location.description}</p>}
           </div>
@@ -382,8 +418,8 @@ function WorldTimelineSection({ events }: { events: string[] }) {
       <ol className="space-y-3">
         {events.map((event, index) => (
           <li key={event} className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-200/15 text-xs font-bold text-amber-100">{index + 1}</span>
-            <p className="pt-0.5 text-sm leading-relaxed text-white/76">{event}</p>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-xs font-bold text-amber-800 dark:text-amber-100">{index + 1}</span>
+            <p className="pt-0.5 text-sm leading-relaxed text-foreground/85">{event}</p>
           </li>
         ))}
       </ol>
@@ -433,7 +469,7 @@ function StorySceneCard({ world }: { world: StoryWorld }) {
       {world.currentChapter && <h3 className="text-lg font-bold leading-snug text-white">{world.currentChapter}</h3>}
       {world.currentGoal && (
         <div className="mt-3 flex items-start gap-3 rounded-2xl border border-white/8 bg-black/24 p-3">
-          <Target className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+          <Target className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-200" />
           <div>
             <p className="text-[11px] font-medium text-white/48">진행 중인 목표</p>
             <p className="mt-1 text-sm leading-relaxed text-white/82">{world.currentGoal}</p>
@@ -459,7 +495,7 @@ function CharacterPreviewSection({
           <Link
             key={character.id}
             href={`/my-works?tab=characters&detailType=characters&detailId=${character.id}`}
-            className="w-[210px] shrink-0 overflow-hidden rounded-[20px] border border-white/10 bg-card text-left transition-transform active:scale-[0.99]"
+            className="w-[210px] shrink-0 overflow-hidden rounded-[20px] border border-border bg-card text-left transition-transform active:scale-[0.99]"
           >
             <PortraitBlock
               name={character.name}
@@ -470,7 +506,7 @@ function CharacterPreviewSection({
             <div className="space-y-2 p-3">
               <h3 className="font-bold text-foreground">{character.name}</h3>
               <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{character.summary}</p>
-              <p className="line-clamp-1 text-[11px] text-amber-100/70">{character.personality || character.relationship}</p>
+              <p className="line-clamp-1 text-[11px] text-amber-700 dark:text-amber-100/70">{character.personality || character.relationship}</p>
             </div>
           </Link>
         ))}
@@ -478,7 +514,7 @@ function CharacterPreviewSection({
           <Link
             key={persona.id}
             href={`/my-works?tab=personas&detailType=personas&detailId=${persona.id}`}
-            className="w-[210px] shrink-0 overflow-hidden rounded-[20px] border border-white/10 bg-card text-left transition-transform active:scale-[0.99]"
+            className="w-[210px] shrink-0 overflow-hidden rounded-[20px] border border-border bg-card text-left transition-transform active:scale-[0.99]"
           >
             <PortraitBlock name={persona.name} emoji="🛡️" genre={persona.role} />
             <div className="space-y-2 p-3">
@@ -527,7 +563,7 @@ function ClueSection({ clues }: { clues: string[] }) {
       <SectionTitle icon={ScrollText} title="세계의 단서" />
       <div className="flex flex-wrap gap-2">
         {clues.map((clue) => (
-          <span key={clue} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-relaxed text-white/75">
+          <span key={clue} className="rounded-full border border-border bg-card px-3 py-2 text-xs leading-relaxed text-foreground/85">
             {clue}
           </span>
         ))}
@@ -546,7 +582,7 @@ function DetailSection({
   children: React.ReactNode
 }) {
   return (
-    <section id="world-detail" className="space-y-3 rounded-[22px] border border-white/10 bg-card/80 p-4">
+    <section id="world-detail" className="space-y-3 rounded-[22px] border border-border bg-card/80 p-4">
       <SectionTitle icon={Icon} title={title} />
       <div className="space-y-4">{children}</div>
     </section>
@@ -560,6 +596,7 @@ function CharacterLandingPage({ character }: { character: StoryCharacter }) {
     genderLabel,
     ...normalizeList(character.tags),
     ...normalizeList(character.visualTags),
+    ...normalizeList(character.relationshipTags),
   ].filter(Boolean)
 
   return (
@@ -575,7 +612,7 @@ function CharacterLandingPage({ character }: { character: StoryCharacter }) {
       {profileTags.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {profileTags.slice(0, 8).map((tag) => (
-            <span key={tag} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/72">
+            <span key={tag} className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground/85">
               {tag}
             </span>
           ))}
@@ -596,6 +633,7 @@ function CharacterLandingPage({ character }: { character: StoryCharacter }) {
         <FriendlyDetail label="성별" value={genderLabel} />
         <FriendlyDetail label="태그" value={normalizeList(character.tags).join(", ")} />
         <FriendlyDetail label="외형 키워드" value={normalizeList(character.visualTags).join(", ")} />
+        <FriendlyDetail label="관계 키워드" value={normalizeList(character.relationshipTags).join(", ")} />
       </DetailSection>
     </article>
   )
@@ -684,9 +722,9 @@ function CharacterProfileSection({
   appearance?: string
 }) {
   return (
-    <section className="space-y-3 rounded-[22px] border border-white/10 bg-card/80 p-4">
+    <section className="space-y-3 rounded-[22px] border border-border bg-card/80 p-4">
       <SectionTitle icon={Sparkles} title="소개" />
-      <p className="text-sm leading-[1.7] text-white/74">{summary}</p>
+      <p className="text-sm leading-[1.7] text-foreground/85">{summary}</p>
       <div className="grid gap-3">
         <FriendlyDetail label="목소리" value={voice} />
         <FriendlyDetail label="당신과의 관계" value={relationship} />
@@ -701,17 +739,17 @@ function CollapsibleSecretSection({ title, value }: { title: string; value?: str
   if (!value) return null
 
   return (
-    <section className="rounded-[22px] border border-white/10 bg-card/80">
+    <section className="rounded-[22px] border border-border bg-card/80">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
         className="flex w-full items-center gap-3 p-4 text-left"
       >
-        <Shield className="h-4 w-4 text-amber-200" />
+        <Shield className="h-4 w-4 text-amber-700 dark:text-amber-200" />
         <span className="flex-1 text-sm font-bold text-foreground">{title}</span>
         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
-      {open && <p className="border-t border-white/10 px-4 pb-4 pt-3 text-sm leading-[1.7] text-white/70">{value}</p>}
+      {open && <p className="border-t border-border px-4 pb-4 pt-3 text-sm leading-[1.7] text-muted-foreground">{value}</p>}
     </section>
   )
 }
@@ -745,8 +783,8 @@ function FriendlyDetail({ label, value }: { label: string; value?: string }) {
 
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">{label}</p>
-      <p className="mt-1 whitespace-pre-wrap text-sm leading-[1.65] text-white/76">{value}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+      <p className="mt-1 whitespace-pre-wrap text-sm leading-[1.65] text-foreground/85">{value}</p>
     </div>
   )
 }
@@ -754,8 +792,8 @@ function FriendlyDetail({ label, value }: { label: string; value?: string }) {
 function SectionTitle({ icon: Icon, title }: { icon: typeof BookOpen; title: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
-        <Icon className="h-4 w-4 text-amber-200" />
+      <span className="flex h-8 w-8 items-center justify-center rounded-full border border-amber-500/25 bg-amber-400/10 dark:border-border dark:bg-muted">
+        <Icon className="h-4 w-4 text-amber-700 dark:text-amber-200" />
       </span>
       <h2 className="text-base font-bold text-foreground">{title}</h2>
     </div>
@@ -764,7 +802,7 @@ function SectionTitle({ icon: Icon, title }: { icon: typeof BookOpen; title: str
 
 function EmptyPublicPanel({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[24px] border border-white/10 bg-card p-5">
+    <div className="rounded-[24px] border border-border bg-card p-5">
       <h2 className="text-xl font-bold text-foreground">{title}</h2>
       <p className="mt-2 text-sm text-muted-foreground">{description}</p>
     </div>

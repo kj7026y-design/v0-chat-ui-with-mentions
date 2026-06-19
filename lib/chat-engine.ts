@@ -1,4 +1,5 @@
 import { type ChatMessage } from "@/lib/chat-types"
+import type { StoryCharacter, StoryPersona, StoryWork, StoryWorld } from "@/lib/storychat-storage"
 
 /**
  * 채팅 엔진 - 더미 동작 레이어
@@ -26,14 +27,166 @@ const DUMMY_INNER_THOUGHTS = [
 const DUMMY_SUMMARY =
   "지금까지: 당신은 이무기와 호수 공원에서 벚꽃을 보며 가까워졌고, 그는 조금씩 마음을 열기 시작했다."
 
+export interface ImageCommandStatusContext {
+  currentChapterTitle?: string
+  chapterProgress?: number
+  currentMission?: string
+  currentGoal?: string
+  worldDate?: string
+  currentLocation?: string
+  characterName?: string
+  characterEmotion?: string
+  characterStatus?: string
+  personaName?: string
+  personaEmotion?: string
+  personaStatus?: string
+  nextEventCondition?: string
+}
+
+export interface ImageCommandContext {
+  work?: StoryWork
+  world?: StoryWorld
+  character?: StoryCharacter
+  persona?: StoryPersona
+  status?: ImageCommandStatusContext
+  recentMessages?: ChatMessage[]
+}
+
+export type AssistantReplyContext = ImageCommandContext
+
+function normalizeList(value?: string | string[] | null): string[] {
+  if (Array.isArray(value)) return value.map((item) => item.trim()).filter(Boolean)
+  if (!value) return []
+  return value
+    .split(/[,，、\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function compact(value?: string | number | null) {
+  if (value === undefined || value === null) return ""
+  return String(value).trim()
+}
+
+function clip(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength).trim()}...` : value
+}
+
+function formatRecentMessages(messages: ChatMessage[] = []) {
+  return messages
+    .slice(-6)
+    .map((message) => {
+      const role =
+        message.type === "user"
+          ? message.speakerName || "user"
+          : message.type === "status"
+            ? "scene status"
+            : "character"
+      return `${role}: ${clip(message.content || message.imageName || "image scene", 120)}`
+    })
+    .join(" / ")
+}
+
+function getLatestUserSceneAction(messages: ChatMessage[] = []) {
+  const latestUserMessage = [...messages].reverse().find((message) => message.type === "user" && message.content.trim())
+  if (!latestUserMessage) return ""
+  return clip(latestUserMessage.content.trim(), 180)
+}
+
+export function buildImagePrompt(characterName: string, context: ImageCommandContext = {}) {
+  const work = context.work
+  const world = context.world
+  const character = context.character
+  const persona = context.persona
+  const status = context.status
+  const locations = normalizeList(work?.majorLocations).length
+    ? normalizeList(work?.majorLocations)
+    : normalizeList(world?.places)
+  const events = normalizeList(work?.majorEvents).length
+    ? normalizeList(work?.majorEvents)
+    : normalizeList(world?.events)
+  const visualTags = normalizeList(character?.visualTags)
+  const moodKeywords = normalizeList(world?.moodKeywords)
+  const scene = [
+    compact(status?.currentLocation),
+    compact(status?.currentChapterTitle || work?.currentChapter || world?.currentChapter),
+    compact(status?.worldDate || work?.worldDate || world?.worldDate || world?.era),
+  ].filter(Boolean).join(", ")
+  const currentGoal = compact(status?.currentMission || status?.currentGoal || work?.currentGoal || world?.currentGoal)
+  const recentFlow = formatRecentMessages(context.recentMessages)
+  const latestUserAction = getLatestUserSceneAction(context.recentMessages)
+  const personaName = persona?.name || status?.personaName || "user persona"
+
+  const promptParts = [
+    "cinematic story illustration",
+    `show two visible subjects in the same scene: ${character?.name || characterName} and ${personaName}`,
+    latestUserAction
+      ? `main visual action: ${personaName} ${latestUserAction}, reacting toward ${character?.name || characterName}`
+      : "",
+    "compose the image so both the character and the user persona are clearly visible, with facial expression and body language",
+    compact(work?.title || world?.name),
+    compact(work?.genre || world?.genre || character?.genre),
+    compact(work?.tagline || world?.tagline),
+    compact(work?.coreSetting || world?.coreSetting),
+    locations.length ? `main locations: ${locations.slice(0, 4).join(", ")}` : "",
+    events.length ? `story clues: ${events.slice(0, 4).join(", ")}` : "",
+    compact(work?.mood || world?.mood),
+    moodKeywords.length ? `mood keywords: ${moodKeywords.slice(0, 5).join(", ")}` : "",
+    scene ? `current scene: ${scene}` : "",
+    currentGoal ? `current goal: ${currentGoal}` : "",
+    [
+      `${character?.name || characterName}`,
+      compact(character?.role),
+      compact(character?.appearance),
+      visualTags.length ? visualTags.slice(0, 5).join(", ") : "",
+      compact(character?.summary),
+    ].filter(Boolean).join(", "),
+    persona
+      ? [
+          `user persona: ${personaName}`,
+          compact(persona.role),
+          compact(persona.appearance),
+          compact(persona.relationship),
+        ].filter(Boolean).join(", ")
+      : "",
+    status?.characterEmotion ? `${character?.name || characterName} emotion: ${status.characterEmotion}` : "",
+    status?.personaEmotion ? `${persona?.name || status.personaName || "user"} emotion: ${status.personaEmotion}` : "",
+    recentFlow ? `recent conversation: ${recentFlow}` : "",
+    [
+      "high quality fantasy concept art",
+      "cinematic composition",
+      "dramatic moody lighting",
+      "detailed background",
+      "sharp focus",
+      "rich atmosphere",
+      "high detail digital illustration",
+      "no text",
+      "no watermark",
+    ].join(", "),
+  ].filter(Boolean)
+
+  return clip(promptParts.join(". "), 1400)
+}
+
+function buildFreeSampleImageUrl(characterName: string, context: ImageCommandContext = {}) {
+  const prompt = encodeURIComponent(buildImagePrompt(characterName, context))
+  const params = new URLSearchParams({
+    width: "1024",
+    height: "1024",
+    model: "flux",
+    enhance: "true",
+    nologo: "true",
+    seed: String(Date.now()),
+  })
+  return `https://image.pollinations.ai/prompt/${prompt}?${params.toString()}`
+}
+
 function buildStatusBar(characterName: string): string {
   return [
-    `[${characterName} 상태]`,
-    "감정: 흔들림",
-    "호감도: 62",
-    "경계심: 35",
-    "현재 생각: 당신이 떠날까 봐 신경 쓰고 있다.",
-    "숨기는 것: 과거의 계약",
+    "📍장소: 무너진 왕성 | 📅일시: 26.06.19 21:30 | 🌡️날씨 : 20˚/31˚ 맑음",
+    "💓호감도: 62000/100000",
+    "💬속마음",
+    `- ${characterName}은 당신이 자신을 두려워하지 않는 이유를 계속 생각하고 있다.`,
   ].join("\n")
 }
 
@@ -173,6 +326,128 @@ export function formatIntroForAIContext(intro?: ChatIntroContext | null) {
   ].filter(Boolean).join("\n")
 }
 
+function buildAssistantSystemPrompt(context?: AssistantReplyContext) {
+  const work = context?.work
+  const world = context?.world
+  const character = context?.character
+  const persona = context?.persona
+  const status = context?.status
+  const characterName = character?.name || status?.characterName || "캐릭터"
+  const personaName = persona?.name || status?.personaName || "사용자"
+  const worldInfo = [
+    world?.name || work?.title,
+    world?.genre || work?.genre || character?.genre,
+    world?.era || world?.worldDate || work?.worldDate,
+    work?.coreSetting || world?.coreSetting,
+    work?.mood || world?.mood,
+  ].filter(Boolean).join(" / ")
+  const characterInfo = [
+    character?.summary,
+    character?.role,
+    character?.personality,
+    character?.speechStyle,
+    character?.relationship,
+  ].filter(Boolean).join(" / ")
+  const personaInfo = [
+    persona?.summary,
+    persona?.role,
+    persona?.personality,
+    persona?.speechStyle,
+    persona?.relationship,
+  ].filter(Boolean).join(" / ")
+  const sceneInfo = [
+    status?.currentLocation,
+    status?.currentChapterTitle,
+    status?.currentMission || status?.currentGoal,
+    status?.worldDate,
+    status?.characterEmotion ? `${characterName} 감정: ${status.characterEmotion}` : "",
+    status?.personaEmotion ? `${personaName} 감정: ${status.personaEmotion}` : "",
+  ].filter(Boolean).join(" / ")
+  const sceneDialoguePairCount = 2 + Math.floor(Math.random() * 3)
+
+  return [
+    "너는 StoryChat의 역할극 채팅 AI다.",
+    `주 캐릭터는 ${characterName}이고, 사용자의 자아는 ${personaName}이다.`,
+    "사용자의 마지막 행동과 대사에 이어서 캐릭터의 자연스러운 반응을 한국어로 작성한다.",
+    "설정표처럼 설명하지 말고, 채팅 말풍선에 들어갈 본문만 작성한다.",
+    `답변은 반드시 '현재 상황에 대한 소설식 설명 한 문장' 다음 줄에 '캐릭터의 대사 한 줄'을 쓰는 패턴을 정확히 ${sceneDialoguePairCount}번 반복한다.`,
+    "대사는 반드시 큰따옴표로 감싼다.",
+    "상황 설명에는 따옴표를 쓰지 않는다.",
+    "사용자의 대사나 행동을 새로 대신 작성하지 말고, 사용자가 이미 한 행동에 대한 캐릭터의 반응만 이어서 쓴다.",
+    "번호, 제목, 화자명, 괄호 설명, 마크다운 목록은 쓰지 않는다.",
+    "캐릭터의 말투와 관계성을 유지하고, 세계관을 깨는 메타 발언을 하지 않는다.",
+    worldInfo ? `[작품/세계관]\n${worldInfo}` : "",
+    characterInfo ? `[캐릭터 설정]\n${characterInfo}` : "",
+    personaInfo ? `[사용자 자아]\n${personaInfo}` : "",
+    sceneInfo ? `[현재 장면]\n${sceneInfo}` : "",
+  ].filter(Boolean).join("\n\n")
+}
+
+function buildAssistantMessages(
+  history: ChatMessage[],
+  userContent: string,
+  introContext?: ChatIntroContext | null,
+  context?: AssistantReplyContext,
+) {
+  const recentHistory = history.slice(-12)
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: buildAssistantSystemPrompt(context) },
+  ]
+
+  const introText = formatIntroForAIContext(introContext)
+  if (introText) {
+    messages.push({ role: "system", content: introText })
+  }
+
+  if (recentHistory.length > 0) {
+    recentHistory.forEach((message) => {
+      if (!message.content.trim() && message.imageUrl) return
+      messages.push({
+        role: message.type === "user" ? "user" as const : "assistant" as const,
+        content: formatMessageForAIContext(message),
+      })
+    })
+  } else {
+    messages.push({ role: "user", content: userContent })
+  }
+
+  return messages
+}
+
+async function generatePollinationsReply(
+  history: ChatMessage[],
+  userContent: string,
+  introContext?: ChatIntroContext | null,
+  context?: AssistantReplyContext,
+) {
+  const messages = buildAssistantMessages(history, userContent, introContext, context)
+  const systemPrompt = messages.find((message) => message.role === "system")?.content ?? buildAssistantSystemPrompt(context)
+  const fallbackPrompt = messages
+    .filter((message) => message.role !== "system")
+    .map((message) => `${message.role}: ${message.content}`)
+    .join("\n\n")
+  const response = await fetch("/api/free-chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messages,
+      systemPrompt,
+      fallbackPrompt,
+    }),
+  })
+
+  if (response.ok) {
+    const data = await response.json() as { content?: string }
+    const content = data.content?.trim()
+    if (!content) throw new Error("Pollinations text API returned empty content")
+    return content
+  }
+
+  throw new Error(`Free chat API failed: ${response.status}`)
+}
+
 /** 유저 메시지 객체 생성 */
 export function buildUserMessage(
   content: string,
@@ -219,14 +494,13 @@ export async function generateAssistantReply(
   history: ChatMessage[],
   _userContent: string,
   introContext?: ChatIntroContext | null,
+  context?: AssistantReplyContext,
 ): Promise<ChatMessage> {
-  void formatIntroForAIContext(introContext)
-  void history.map(formatMessageForAIContext)
-  await new Promise((resolve) => setTimeout(resolve, 1200))
+  const content = await generatePollinationsReply(history, _userContent, introContext, context)
   return {
     id: makeId(),
     type: "ai",
-    content: pick(DUMMY_AI_REPLIES),
+    content,
     timestamp: new Date(),
   }
 }
@@ -241,6 +515,7 @@ export type CommandResult =
 export async function runCommand(
   command: string,
   characterName: string,
+  context?: ImageCommandContext,
 ): Promise<CommandResult> {
   const normalized = command.replace(/^\//, "").trim()
 
@@ -249,7 +524,7 @@ export async function runCommand(
       kind: "message",
       message: {
         id: makeId(),
-        type: "ai",
+        type: "status",
         content: buildStatusBar(characterName),
         timestamp: new Date(),
       },
@@ -274,7 +549,7 @@ export async function runCommand(
       kind: "message",
       message: {
         id: makeId(),
-        type: "ai",
+        type: "status",
         content: DUMMY_SUMMARY,
         timestamp: new Date(),
       },
@@ -282,7 +557,18 @@ export async function runCommand(
   }
 
   if (normalized === "이미지") {
-    return { kind: "toast", message: "이미지 생성 기능은 준비 중이에요." }
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    return {
+      kind: "message",
+      message: {
+        id: makeId(),
+        type: "ai",
+        content: "",
+        imageUrl: buildFreeSampleImageUrl(characterName, context),
+        imageName: "무료 샘플 이미지",
+        timestamp: new Date(),
+      },
+    }
   }
 
   return { kind: "toast", message: "곧 연결될 기능이에요." }

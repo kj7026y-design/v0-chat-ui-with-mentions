@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, type ReactNode, type RefObject, type UIEvent } from "react"
 import { Send, Image as ImageIcon, MessageCircle, X, Zap } from "lucide-react"
+import { AlertModal } from "@/components/ui/app-modal"
 import { SLASH_COMMANDS } from "@/lib/chat-types"
 import { cn } from "@/lib/utils"
 
@@ -132,6 +133,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const [mentionQuery, setMentionQuery] = useState("")
   const [activeMentionRange, setActiveMentionRange] = useState<{ start: number; end: number } | null>(null)
   const [attachedImage, setAttachedImage] = useState<{ url: string; name?: string } | null>(null)
+  const [alertMessage, setAlertMessage] = useState("")
   const [isMobile, setIsMobile] = useState(false)
   const [isQuickBarDragging, setIsQuickBarDragging] = useState(false)
   const [inputScrollTop, setInputScrollTop] = useState(0)
@@ -263,7 +265,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
 
     if (file) {
       if (!file.type.startsWith("image/")) {
-        alert("이미지 파일만 첨부할 수 있어요.")
+        setAlertMessage("이미지 파일만 첨부할 수 있어요.")
         e.target.value = ""
         return
       }
@@ -434,7 +436,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       ? new RegExp(`^ⓣ(${speechNames}):\\s*$`, "u")
       : null
     if (speechTemplatePattern?.test(input.trim())) {
-      alert("대사 내용을 입력하세요.")
+      setAlertMessage("대사 내용을 입력하세요.")
       return
     }
 
@@ -712,6 +714,13 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           <Send className="w-5 h-5" />
         </button>
       </form>
+      <AlertModal
+        open={Boolean(alertMessage)}
+        message={alertMessage}
+        onOpenChange={(open) => {
+          if (!open) setAlertMessage("")
+        }}
+      />
     </div>
   )
 }

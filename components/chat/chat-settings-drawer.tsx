@@ -2,10 +2,20 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, ChevronRight, Check, Sun, Moon, MessageSquare, Send, RotateCcw } from "lucide-react"
+import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, Check, Sun, Moon, MessageSquare, Send, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage"
+import { SLASH_COMMANDS } from "@/lib/chat-types"
+import {
+  CHAT_LINE_HEIGHT_MAX,
+  CHAT_LINE_HEIGHT_MIN,
+  CHAT_TEXT_SIZE_MAX,
+  CHAT_TEXT_SIZE_MIN,
+  getChatReadingSettings,
+  saveChatReadingSettings,
+  type ChatReadingSettings,
+} from "@/lib/chat-settings-storage"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
@@ -92,6 +102,7 @@ interface ChatSettingsDrawerProps {
   characterEmoji: string
   chatId: string
   onChatThemeChange?: (theme: ChatThemeId) => void
+  onReadingSettingsChange?: (settings: ChatReadingSettings) => void
   onClearChat?: () => void
   onLeaveChat?: () => void
 }
@@ -109,15 +120,23 @@ export function ChatSettingsDrawer({
   characterEmoji,
   chatId,
   onChatThemeChange,
+  onReadingSettingsChange,
   onClearChat,
   onLeaveChat,
 }: ChatSettingsDrawerProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("system")
-  const [spicyLevel, setSpicyLevel] = useState(50)
-  const [uniqueLevel, setUniqueLevel] = useState(70)
+  const [readingSettings, setReadingSettings] = useState<ChatReadingSettings>({
+    textSize: 16,
+    lineHeight: 1.5,
+    alwaysShowCommandSuggestions: false,
+    selectedCommandIds: [],
+  })
   const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([])
+  const validSelectedCommandIds = readingSettings.selectedCommandIds.filter((id) =>
+    SLASH_COMMANDS.some((command) => command.id === id),
+  )
 
   // Load chat-specific theme on mount
   useEffect(() => {
@@ -126,6 +145,9 @@ export function ChatSettingsDrawer({
     if (savedTheme) {
       setSelectedChatTheme(savedTheme)
     }
+    const savedReadingSettings = getChatReadingSettings(chatId)
+    setReadingSettings(savedReadingSettings)
+    onReadingSettingsChange?.(savedReadingSettings)
     const syncMedia = () => setSharedMedia(getChatMedia(chatId, characterName))
     syncMedia()
     window.addEventListener("storychat-chat-media-updated", syncMedia)
@@ -144,6 +166,37 @@ export function ChatSettingsDrawer({
       localStorage.setItem(`chat-theme-${chatId}`, theme)
     }
     onChatThemeChange?.(theme)
+  }
+
+  const updateReadingSettings = (nextSettings: ChatReadingSettings) => {
+    setReadingSettings(nextSettings)
+    saveChatReadingSettings(nextSettings, chatId)
+    onReadingSettingsChange?.(nextSettings)
+  }
+
+  const toggleAlwaysShowCommands = () => {
+    const nextEnabled = !readingSettings.alwaysShowCommandSuggestions
+    updateReadingSettings({
+      ...readingSettings,
+      alwaysShowCommandSuggestions: nextEnabled,
+      selectedCommandIds: nextEnabled && validSelectedCommandIds.length === 0
+        ? SLASH_COMMANDS.slice(0, 2).map((command) => command.id)
+        : validSelectedCommandIds,
+    })
+  }
+
+  const toggleCommandSelection = (commandId: string) => {
+    const selected = validSelectedCommandIds
+    const nextSelected = selected.includes(commandId)
+      ? selected.filter((id) => id !== commandId)
+      : selected.length < 2
+        ? [...selected, commandId]
+        : selected
+
+    updateReadingSettings({
+      ...readingSettings,
+      selectedCommandIds: nextSelected,
+    })
   }
 
   // Get the actual preview theme based on system setting
@@ -290,44 +343,105 @@ export function ChatSettingsDrawer({
             </Link>
           </section>
 
-          {/* Personality Tuning Section */}
+          {/* Reading Settings Section */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-foreground">성격 튜닝</h3>
+              <h3 className="text-sm font-medium text-foreground">채팅 읽기 설정</h3>
             </div>
             <div className="space-y-4">
-              {/* Spicy Level */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">매운맛</span>
-                  <span className="text-xs text-muted-foreground">{spicyLevel}%</span>
+                  <span className="text-xs text-muted-foreground">글자 크기</span>
+                  <span className="text-xs text-muted-foreground">{readingSettings.textSize}px</span>
                 </div>
                 <input
                   type="range"
-                  min="0"
-                  max="100"
-                  value={spicyLevel}
-                  onChange={(e) => setSpicyLevel(Number(e.target.value))}
+                  min={CHAT_TEXT_SIZE_MIN}
+                  max={CHAT_TEXT_SIZE_MAX}
+                  value={readingSettings.textSize}
+                  onChange={(e) => updateReadingSettings({ ...readingSettings, textSize: Number(e.target.value) })}
                   className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
                 />
               </div>
 
-              {/* Unique Level */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">독특함</span>
-                  <span className="text-xs text-muted-foreground">{uniqueLevel}%</span>
+                  <span className="text-xs text-muted-foreground">줄간격</span>
+                  <span className="text-xs text-muted-foreground">{readingSettings.lineHeight.toFixed(1)}</span>
                 </div>
                 <input
                   type="range"
-                  min="0"
-                  max="100"
-                  value={uniqueLevel}
-                  onChange={(e) => setUniqueLevel(Number(e.target.value))}
+                  min={CHAT_LINE_HEIGHT_MIN}
+                  max={CHAT_LINE_HEIGHT_MAX}
+                  step="0.1"
+                  value={readingSettings.lineHeight}
+                  onChange={(e) => updateReadingSettings({ ...readingSettings, lineHeight: Number(e.target.value) })}
                   className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
                 />
               </div>
+
+              <div className="flex items-start justify-between gap-3 rounded-lg bg-muted px-3 py-3">
+                <div>
+                  <p className="text-sm font-medium text-foreground">원하는 명령어 자동 실행</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    켜두면 선택한 명령어를 새 대화 응답 뒤에 자동으로 실행합니다.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAlwaysShowCommands}
+                  className={cn(
+                    "mt-0.5 h-6 w-11 rounded-full p-0.5 transition-colors",
+                    readingSettings.alwaysShowCommandSuggestions ? "bg-primary" : "bg-border",
+                  )}
+                  aria-pressed={readingSettings.alwaysShowCommandSuggestions}
+                >
+                  <span
+                    className={cn(
+                      "block h-5 w-5 rounded-full bg-white transition-transform",
+                      readingSettings.alwaysShowCommandSuggestions && "translate-x-5",
+                    )}
+                  />
+                </button>
+              </div>
+              {readingSettings.alwaysShowCommandSuggestions && (
+                <div className="rounded-lg border border-border bg-muted px-3 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-foreground">자동 실행할 명령어 선택</p>
+                    <span className="text-[11px] text-muted-foreground">
+                      {validSelectedCommandIds.length}/2
+                    </span>
+                  </div>
+                  <div className="grid gap-1.5">
+                    {SLASH_COMMANDS.map((command) => {
+                      const checked = validSelectedCommandIds.includes(command.id)
+                      const disabled = !checked && validSelectedCommandIds.length >= 2
+                      return (
+                        <label
+                          key={command.id}
+                          className={cn(
+                            "flex items-center gap-2 rounded-md px-2 py-2 text-sm",
+                            disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer hover:bg-accent",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleCommandSelection(command.id)}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          <span className="text-base leading-none">{command.icon}</span>
+                          <span className="font-medium text-foreground">/{command.name}</span>
+                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{command.description}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">최대 2개까지 선택할 수 있습니다.</p>
+                </div>
+              )}
             </div>
           </section>
 

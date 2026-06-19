@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, ImagePlus, Trash2, X } from "lucide-react"
+import { ConfirmModal } from "@/components/ui/app-modal"
 import {
   addChatMedia,
   deleteChatMedia,
@@ -18,6 +19,7 @@ export default function ChatMediaPage() {
   const chatId = params.id as string
   const [items, setItems] = useState<ChatMediaItem[]>([])
   const [selectedItem, setSelectedItem] = useState<ChatMediaItem | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [imageUrl, setImageUrl] = useState("")
   const [title, setTitle] = useState("")
   const chat = useMemo(
@@ -45,8 +47,7 @@ export default function ChatMediaPage() {
   }
 
   const handleDelete = (mediaId: string) => {
-    if (!window.confirm("이 미디어를 삭제할까요?")) return
-    deleteChatMedia(chatId, mediaId)
+    setDeleteTargetId(mediaId)
   }
 
   return (
@@ -164,6 +165,21 @@ export default function ChatMediaPage() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        open={Boolean(deleteTargetId)}
+        title="미디어 삭제"
+        message="이 미디어를 삭제할까요?"
+        confirmText="삭제"
+        destructive
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetId(null)
+        }}
+        onConfirm={() => {
+          if (!deleteTargetId) return
+          deleteChatMedia(chatId, deleteTargetId)
+          setDeleteTargetId(null)
+        }}
+      />
     </main>
   )
 }

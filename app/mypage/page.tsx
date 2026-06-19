@@ -22,6 +22,7 @@ import { useTheme } from "@/components/theme-provider"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { ConfirmModal } from "@/components/ui/app-modal"
 import {
   Dialog,
   DialogContent,
@@ -57,6 +58,7 @@ export default function MyPage() {
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
+  const [isAccountDeleteConfirmOpen, setIsAccountDeleteConfirmOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileState>(DEFAULT_PROFILE)
   const [profileForm, setProfileForm] = useState<ProfileState>(profile)
   const credits = useAppStore((s) => s.credits)
@@ -103,7 +105,7 @@ export default function MyPage() {
     },
     {
       icon: FolderOpen,
-      label: "세계관 아카이브",
+      label: "내 세계관",
       description: "내가 저장하거나 만든 세계관",
       href: "/my-works?tab=scenarios",
     },
@@ -121,7 +123,7 @@ export default function MyPage() {
     },
     {
       icon: FolderOpen,
-      label: "내 완성본",
+      label: "완성작 아카이브",
       description: "캐릭터, 세계관, 자아를 연결한 작품",
       href: "/my-works?tab=completed",
     },
@@ -182,9 +184,7 @@ export default function MyPage() {
   }
 
   const handleAccountDelete = () => {
-    if (!window.confirm("계정 탈퇴 안내 화면으로 이동할까요?")) return
-
-    router.push("/landing")
+    setIsAccountDeleteConfirmOpen(true)
   }
 
   return (
@@ -410,6 +410,14 @@ export default function MyPage() {
         onOpenChange={setIsProfileDialogOpen}
         onChange={setProfileForm}
         onSave={handleProfileSave}
+      />
+      <ConfirmModal
+        open={isAccountDeleteConfirmOpen}
+        title="계정 탈퇴"
+        message="계정 탈퇴 안내 화면으로 이동할까요?"
+        confirmText="이동"
+        onOpenChange={setIsAccountDeleteConfirmOpen}
+        onConfirm={() => router.push("/landing")}
       />
     </div>
   )

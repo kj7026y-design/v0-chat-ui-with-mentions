@@ -30,6 +30,7 @@ export interface StoryCharacter {
   quote?: string
   role?: string
   visualTags?: string[]
+  relationshipTags?: string[]
   workId?: string
   isPublic?: boolean
   chatCount?: number
@@ -200,6 +201,8 @@ export const defaultLibrary: StoryChatLibrary = {
       allowCustomStart: true,
       startOptions: ["처음 만난 사이", "오래된 인연", "숨겨진 조력자"],
       tags: ["신비로운", "고독한", "지혜로운"],
+      visualTags: ["오래된 비늘", "깊은 눈빛"],
+      relationshipTags: ["오래된 인연", "운명"],
       emoji: "🐉",
       createdAt: "2024.03.15",
     },
@@ -224,6 +227,8 @@ export const defaultLibrary: StoryChatLibrary = {
       allowCustomStart: true,
       startOptions: ["방과 후", "비 오는 등굣길"],
       tags: ["활발한", "따뜻한", "순수한"],
+      visualTags: ["밝은 표정", "단정한 교복"],
+      relationshipTags: ["오랜 친구", "이웃"],
       emoji: "🌸",
       createdAt: "2024.03.10",
     },
@@ -248,8 +253,62 @@ export const defaultLibrary: StoryChatLibrary = {
       allowCustomStart: true,
       startOptions: ["자정의 정원", "달빛 무대"],
       tags: ["신비로운", "차분한", "예술적"],
+      visualTags: ["은빛 머리", "달빛 눈동자"],
+      relationshipTags: ["꿈속 안내자", "비밀스러운 관계"],
       emoji: "🌙",
       createdAt: "2024.03.05",
+    },
+    {
+      id: "c4",
+      name: "별이",
+      genre: "학교",
+      gender: "unknown",
+      genderCustom: "",
+      age: "19",
+      role: "밤하늘을 좋아하는 친구",
+      residence: "작은 항구 도시",
+      appearance: "별 모양 머리핀과 푸른 후드를 자주 착용한다.",
+      summary: "조용하지만 마음속에는 반짝이는 이야기가 많은 친구",
+      personality: "다정하고 상상력이 풍부하며 조금 수줍음이 많다",
+      speechStyle: "부드러운 반말을 쓰고, 감정을 조심스럽게 표현한다.",
+      relationship: "오래 알고 지낸 편안한 친구",
+      secret: "곧 도시를 떠나야 한다는 사실을 숨기고 있다.",
+      forbiddenDevelopments: "갑작스러운 공포 전개",
+      defaultStartScenario: "별이 잘 보이는 옥상에서 함께 밤하늘을 바라본다.",
+      allowStartChange: true,
+      allowCustomStart: true,
+      startOptions: ["옥상에서 만남", "영화 약속", "늦은 밤 전화"],
+      tags: ["다정한", "수줍은", "몽상가"],
+      visualTags: ["별 머리핀", "푸른 후드", "잔잔한 미소"],
+      relationshipTags: ["오랜 친구", "비밀스러운 약속"],
+      emoji: "⭐",
+      createdAt: "2024.03.12",
+    },
+    {
+      id: "c5",
+      name: "제이",
+      genre: "일상",
+      gender: "male",
+      genderCustom: "",
+      age: "25",
+      role: "인디 밴드 기타리스트",
+      residence: "홍대 근처 작은 작업실",
+      appearance: "검은 재킷과 낡은 기타를 늘 지니고 다닌다.",
+      summary: "말보다 음악으로 마음을 먼저 전하는 기타리스트",
+      personality: "자유롭고 섬세하지만 속마음을 쉽게 드러내지 않는다",
+      speechStyle: "짧고 담백하게 말하며 가끔 농담을 섞는다.",
+      relationship: "음악을 통해 가까워진 사이",
+      secret: "무대 공포증이 다시 찾아오고 있다는 걸 숨기고 있다.",
+      forbiddenDevelopments: "갑작스러운 스타덤 성공 전개",
+      defaultStartScenario: "비어 있는 연습실에서 제이가 새로 만든 곡을 들려준다.",
+      allowStartChange: true,
+      allowCustomStart: true,
+      startOptions: ["연습실", "작은 라이브바", "새벽 작업실"],
+      tags: ["섬세한", "자유로운", "뮤지션"],
+      visualTags: ["검은 재킷", "낡은 기타", "차분한 눈빛"],
+      relationshipTags: ["음악 친구", "서서히 가까워지는 관계"],
+      emoji: "🎸",
+      createdAt: "2024.03.20",
     },
   ],
   worlds: [
@@ -327,6 +386,48 @@ export const defaultLibrary: StoryChatLibrary = {
         chapters: [],
       },
       createdAt: "2024.03.18",
+    },
+    {
+      id: "s5",
+      name: "별빛 항구",
+      genre: "학교",
+      era: "2024년 초여름 밤",
+      coreSetting: "작은 항구 도시의 밤하늘 아래, 오래된 친구 사이에 숨겨둔 말들이 천천히 드러난다.",
+      places: "학교 옥상, 항구 방파제, 오래된 영화관",
+      events: "유성우가 내리는 밤, 떠나기 전 마지막 약속, 오래된 영화 티켓 발견",
+      mood: "잔잔하고 아련함",
+      currentChapter: "",
+      currentGoal: "",
+      worldDate: "2024년 초여름 밤",
+      progress: 0,
+      forbiddenSettings: "과도한 비극 강요 금지",
+      coverColor: "from-sky-950/40 to-neutral-950",
+      storyProgressSettings: {
+        useChapters: false,
+        chapters: [],
+      },
+      createdAt: "2024.03.12",
+    },
+    {
+      id: "s6",
+      name: "새벽의 연습실",
+      genre: "일상",
+      era: "2024년 늦봄 새벽",
+      coreSetting: "작은 연습실과 라이브바를 오가며, 음악과 대화 사이에서 서로의 진심을 확인한다.",
+      places: "지하 연습실, 작은 라이브바, 새벽 골목",
+      events: "미완성 곡 공개, 갑작스러운 공연 제안, 무대 공포의 고백",
+      mood: "도시적이고 사적인 분위기",
+      currentChapter: "",
+      currentGoal: "",
+      worldDate: "2024년 늦봄 새벽",
+      progress: 0,
+      forbiddenSettings: "현실감 없는 즉시 성공 전개 금지",
+      coverColor: "from-zinc-900/40 to-neutral-950",
+      storyProgressSettings: {
+        useChapters: false,
+        chapters: [],
+      },
+      createdAt: "2024.03.20",
     },
   ],
   personas: [
@@ -460,6 +561,74 @@ export const defaultLibrary: StoryChatLibrary = {
       createdAt: "2024.03.18",
       updatedAt: "오늘",
     },
+    {
+      id: "w4",
+      title: "별이와 유성우의 밤",
+      characterId: "c4",
+      worldId: "s5",
+      personaId: "p2",
+      startScenario: "별이 잘 보이는 옥상에서 함께 밤하늘을 바라본다.",
+      introScenarios: [
+        {
+          id: "intro-w4-1",
+          title: "옥상 위 유성우",
+          scene: "학교 옥상 난간 너머로 항구의 불빛이 흔들리고, 별이는 오래된 영화 티켓을 손에 쥐고 있다.",
+          firstMessage: "오늘은 꼭 보여주고 싶었어. 저 별들 말이야.",
+          options: ["왜 오늘이어야 했는지 묻는다", "별이가 쥔 티켓을 본다", "조용히 하늘을 바라본다"],
+        },
+      ],
+      storyProgressSettings: {
+        useChapters: false,
+        chapters: [],
+      },
+      genre: "학교",
+      tagline: "떠나기 전 밤, 별빛 아래서 늦게 도착한 마음을 듣는다.",
+      coreSetting: "작은 항구 도시의 밤하늘 아래, 오래된 친구 사이에 숨겨둔 말들이 천천히 드러난다.",
+      majorLocations: "학교 옥상, 항구 방파제, 오래된 영화관",
+      majorEvents: "유성우가 내리는 밤, 떠나기 전 마지막 약속, 오래된 영화 티켓 발견",
+      mood: "잔잔하고 아련함",
+      currentChapter: "",
+      currentGoal: "",
+      worldDate: "2024년 초여름 밤",
+      statusBarEnabled: false,
+      statusBarText: "",
+      createdAt: "2024.03.12",
+      updatedAt: "오늘",
+    },
+    {
+      id: "w5",
+      title: "제이의 새벽 연습실",
+      characterId: "c5",
+      worldId: "s6",
+      personaId: "p2",
+      startScenario: "비어 있는 연습실에서 제이가 새로 만든 곡을 들려준다.",
+      introScenarios: [
+        {
+          id: "intro-w5-1",
+          title: "새벽의 미완성 곡",
+          scene: "낡은 앰프가 낮게 웅웅거리는 지하 연습실, 제이는 기타 줄을 조율하다가 당신을 돌아본다.",
+          firstMessage: "아직 완성은 아닌데... 네가 먼저 들어줬으면 했어.",
+          options: ["조용히 들어보겠다고 한다", "왜 나에게 먼저 들려주는지 묻는다", "긴장한 제이를 바라본다"],
+        },
+      ],
+      storyProgressSettings: {
+        useChapters: false,
+        chapters: [],
+      },
+      genre: "일상",
+      tagline: "말보다 먼저 울리는 기타 소리, 새벽 연습실에서 시작되는 고백.",
+      coreSetting: "작은 연습실과 라이브바를 오가며, 음악과 대화 사이에서 서로의 진심을 확인한다.",
+      majorLocations: "지하 연습실, 작은 라이브바, 새벽 골목",
+      majorEvents: "미완성 곡 공개, 갑작스러운 공연 제안, 무대 공포의 고백",
+      mood: "도시적이고 사적인 분위기",
+      currentChapter: "",
+      currentGoal: "",
+      worldDate: "2024년 늦봄 새벽",
+      statusBarEnabled: false,
+      statusBarText: "",
+      createdAt: "2024.03.20",
+      updatedAt: "오늘",
+    },
   ],
 }
 
@@ -472,13 +641,15 @@ export function getStoryChatLibrary(): StoryChatLibrary {
   try {
     const parsed = JSON.parse(raw) as Partial<StoryChatLibrary>
     return {
-      characters: Array.isArray(parsed.characters) ? parsed.characters.map(normalizeStoredCharacter) : defaultLibrary.characters,
+      characters: Array.isArray(parsed.characters)
+        ? ensureDefaultItems(parsed.characters.map(normalizeStoredCharacter), defaultLibrary.characters, ["c4", "c5"])
+        : defaultLibrary.characters,
       worlds: Array.isArray(parsed.worlds)
-        ? ensureDefaultItems(parsed.worlds.map(normalizeStoredWorld), defaultLibrary.worlds, ["s4"])
+        ? ensureDefaultItems(parsed.worlds.map(normalizeStoredWorld), defaultLibrary.worlds, ["s4", "s5", "s6"])
         : defaultLibrary.worlds,
       personas: Array.isArray(parsed.personas) ? parsed.personas.map(normalizeStoredPersona) : defaultLibrary.personas,
       works: Array.isArray(parsed.works)
-        ? ensureDefaultItems(parsed.works.map(normalizeStoredWork), defaultLibrary.works, ["w3"])
+        ? ensureDefaultItems(parsed.works.map(normalizeStoredWork), defaultLibrary.works, ["w3", "w4", "w5"])
         : defaultLibrary.works,
     }
   } catch {
@@ -509,6 +680,7 @@ function normalizeStoredCharacter(character: StoryCharacter): StoryCharacter {
     genderCustom: character.genderCustom ?? "",
     tags: Array.isArray(character.tags) ? character.tags.filter(Boolean) : [],
     visualTags: Array.isArray(character.visualTags) ? character.visualTags.filter(Boolean) : [],
+    relationshipTags: Array.isArray(character.relationshipTags) ? character.relationshipTags.filter(Boolean) : [],
     startOptions: Array.isArray(character.startOptions) ? character.startOptions : [],
   }
 }

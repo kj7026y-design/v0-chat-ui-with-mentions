@@ -8,6 +8,7 @@ import { WorkLandingPage } from "@/components/my-works/public-detail-view"
 import {
   defaultLibrary,
   getStoryChatLibrary,
+  saveStoryChatLibrary,
   type StoryChatLibrary,
 } from "@/lib/storychat-storage"
 
@@ -47,6 +48,14 @@ export default function WorkPublicPage() {
             world={world}
             characters={character ? [character] : []}
             personas={persona ? [persona] : []}
+            onLikeCountChange={(likeCount) => {
+              const nextLibrary = {
+                ...library,
+                works: library.works.map((item) => item.id === work.id ? { ...item, likeCount } : item),
+              }
+              setLibrary(nextLibrary)
+              saveStoryChatLibrary(nextLibrary)
+            }}
           />
         ) : (
           <div className="rounded-2xl border border-border bg-card p-5">
