@@ -14,7 +14,8 @@ import {
   UserX,
   Edit3,
   Camera,
-  Upload
+  Upload,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -35,6 +36,11 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore, type SavedEvent } from "@/lib/store"
 import { defaultLibrary, getStoryChatLibrary, type StoryChatLibrary } from "@/lib/storychat-storage"
+import {
+  getCurrentUserId,
+  getGeneratedMediaByUser,
+  type GeneratedMedia,
+} from "@/lib/generated-media-storage"
 import { EventCard } from "@/components/chat/event-card"
 import { EventDetailModal } from "@/components/chat/event-detail-modal"
 
@@ -56,6 +62,8 @@ export default function MyPage() {
   const [mounted, setMounted] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
+  const [selectedGeneratedMedia, setSelectedGeneratedMedia] = useState<GeneratedMedia | null>(null)
+  const [generatedMedia, setGeneratedMedia] = useState<GeneratedMedia[]>([])
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
   const [isAccountDeleteConfirmOpen, setIsAccountDeleteConfirmOpen] = useState(false)
@@ -68,6 +76,7 @@ export default function MyPage() {
   useEffect(() => {
     setMounted(true)
     setLibrary(getStoryChatLibrary())
+    setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
 
     const savedProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY)
     if (savedProfile) {
@@ -85,9 +94,18 @@ export default function MyPage() {
         window.localStorage.removeItem(PROFILE_STORAGE_KEY)
       }
     }
+
+    const syncGeneratedMedia = () => setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
+    window.addEventListener("storychat-generated-media-updated", syncGeneratedMedia)
+    window.addEventListener("storage", syncGeneratedMedia)
+    return () => {
+      window.removeEventListener("storychat-generated-media-updated", syncGeneratedMedia)
+      window.removeEventListener("storage", syncGeneratedMedia)
+    }
   }, [])
 
   const previewEvents = events.slice(0, 6)
+  const previewGeneratedMedia = generatedMedia.slice(0, 6)
 
   const stats = [
     { label: "내 유니버스", value: library.works.length.toLocaleString(), href: "/my-works?tab=completed" },
@@ -290,6 +308,51 @@ export default function MyPage() {
         </div>
       </section>
 
+      {/* Generated Media */}
+      <section className="px-5 pb-6">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <ImageIcon className="w-3.5 h-3.5" />
+            생성한 이미지
+          </h2>
+          <span className="text-xs text-muted-foreground">{generatedMedia.length.toLocaleString()}개</span>
+        </div>
+
+        {previewGeneratedMedia.length > 0 ? (
+          <div className="grid grid-cols-3 gap-2">
+            {previewGeneratedMedia.map((media) => (
+              <button
+                key={media.id}
+                type="button"
+                onClick={() => setSelectedGeneratedMedia(media)}
+                className="overflow-hidden rounded-xl border border-border bg-card text-left"
+              >
+                <div className="aspect-square bg-muted">
+                  <img src={media.imageUrl} alt={media.title || "생성 이미지"} className="h-full w-full object-cover" />
+                </div>
+                <div className="space-y-0.5 px-2 py-2">
+                  <p className="line-clamp-1 text-[11px] font-semibold text-foreground">{media.title || "AI 생성 이미지"}</p>
+                  <p className="line-clamp-1 text-[10px] text-muted-foreground">
+                    {media.workId || media.chatId || "내 미디어"}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-xl px-4 py-8 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+              <ImageIcon className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
+              아직 생성한 이미지가 없어요.
+              <br />
+              채팅에서 /이미지 명령어로 장면을 만들어보세요.
+            </p>
+          </div>
+        )}
+      </section>
+
       {/* Event Gallery */}
       <section className="px-5 pb-6">
         <div className="flex items-center justify-between mb-3 px-1">
@@ -329,6 +392,40 @@ export default function MyPage() {
       </section>
 
       <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      {selectedGeneratedMedia && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedGeneratedMedia(null)}
+        >
+          <div
+            className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-card shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedGeneratedMedia(null)}
+              className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/85"
+              aria-label="이미지 닫기"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="max-h-[78dvh] bg-black">
+              <img
+                src={selectedGeneratedMedia.imageUrl}
+                alt={selectedGeneratedMedia.title || "생성 이미지"}
+                className="mx-auto max-h-[78dvh] w-full object-contain"
+              />
+            </div>
+            <div className="space-y-1 px-4 py-3">
+              <p className="text-sm font-semibold text-foreground">{selectedGeneratedMedia.title || "AI 생성 이미지"}</p>
+              <p className="text-xs text-muted-foreground">
+                {new Date(selectedGeneratedMedia.createdAt).toLocaleString("ko-KR")}
+              </p>
+              <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">{selectedGeneratedMedia.prompt}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* App Settings */}
       <section className="px-5 pb-6">

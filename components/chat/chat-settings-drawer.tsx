@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, Check, Sun, Moon, MessageSquare, Send, RotateCcw } from "lucide-react"
+import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, Check, Sun, Moon, MessageSquare, Send, Gem } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
+import { ConfirmModal } from "@/components/ui/app-modal"
 import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage"
-import { SLASH_COMMANDS } from "@/lib/chat-types"
+import { AUTO_COMMAND_IDS, DEFAULT_COMMAND_SUGGESTION_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS } from "@/lib/chat-types"
 import {
   CHAT_LINE_HEIGHT_MAX,
   CHAT_LINE_HEIGHT_MIN,
@@ -17,7 +18,7 @@ import {
   type ChatReadingSettings,
 } from "@/lib/chat-settings-storage"
 
-type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
+type ChatThemeId = "light" | "dark" | "message" | "messenger"
 
 interface ChatThemeConfig {
   id: ChatThemeId
@@ -33,18 +34,6 @@ interface ChatThemeConfig {
 }
 
 const chatThemes: ChatThemeConfig[] = [
-  {
-    id: "system",
-    label: "앱 설정",
-    icon: <RotateCcw className="w-4 h-4" />,
-    preview: {
-      bg: "#1a1a1a",
-      userBubble: "#333333",
-      userText: "#FFFFFF",
-      aiBubble: "#1E1E1E",
-      aiText: "#E5E5E5",
-    },
-  },
   {
     id: "light",
     label: "라이트",
@@ -101,17 +90,12 @@ interface ChatSettingsDrawerProps {
   characterName: string
   characterEmoji: string
   chatId: string
+  creditBalance?: number
   onChatThemeChange?: (theme: ChatThemeId) => void
   onReadingSettingsChange?: (settings: ChatReadingSettings) => void
   onClearChat?: () => void
   onLeaveChat?: () => void
 }
-
-const timelineEvents = [
-  { id: "1", title: "첫 만남", date: "2024년 3월 1일" },
-  { id: "2", title: "이무기의 생일", date: "2024년 4월 15일" },
-  { id: "3", title: "우리의 100일", date: "2024년 6월 9일" },
-]
 
 export function ChatSettingsDrawer({ 
   isOpen, 
@@ -119,6 +103,7 @@ export function ChatSettingsDrawer({
   characterName, 
   characterEmoji,
   chatId,
+  creditBalance,
   onChatThemeChange,
   onReadingSettingsChange,
   onClearChat,
@@ -126,24 +111,30 @@ export function ChatSettingsDrawer({
 }: ChatSettingsDrawerProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
-  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("system")
+  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("light")
   const [readingSettings, setReadingSettings] = useState<ChatReadingSettings>({
     textSize: 16,
     lineHeight: 1.5,
+    showStoryStatus: true,
     alwaysShowCommandSuggestions: false,
     selectedCommandIds: [],
   })
   const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([])
+  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
+  const autoCommandOptions = SLASH_COMMANDS.filter((command) => AUTO_COMMAND_IDS.includes(command.id))
   const validSelectedCommandIds = readingSettings.selectedCommandIds.filter((id) =>
-    SLASH_COMMANDS.some((command) => command.id === id),
+    autoCommandOptions.some((command) => command.id === id),
   )
 
   // Load chat-specific theme on mount
   useEffect(() => {
     setMounted(true)
-    const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
-    if (savedTheme) {
-      setSelectedChatTheme(savedTheme)
+    const savedTheme = localStorage.getItem(`chat-theme-${chatId}`)
+    if (savedTheme && chatThemes.some((theme) => theme.id === savedTheme)) {
+      setSelectedChatTheme(savedTheme as ChatThemeId)
+    } else {
+      localStorage.setItem(`chat-theme-${chatId}`, "light")
+      setSelectedChatTheme("light")
     }
     const savedReadingSettings = getChatReadingSettings(chatId)
     setReadingSettings(savedReadingSettings)
@@ -160,11 +151,7 @@ export function ChatSettingsDrawer({
 
   const handleChatThemeChange = (theme: ChatThemeId) => {
     setSelectedChatTheme(theme)
-    if (theme === "system") {
-      localStorage.removeItem(`chat-theme-${chatId}`)
-    } else {
-      localStorage.setItem(`chat-theme-${chatId}`, theme)
-    }
+    localStorage.setItem(`chat-theme-${chatId}`, theme)
     onChatThemeChange?.(theme)
   }
 
@@ -180,7 +167,7 @@ export function ChatSettingsDrawer({
       ...readingSettings,
       alwaysShowCommandSuggestions: nextEnabled,
       selectedCommandIds: nextEnabled && validSelectedCommandIds.length === 0
-        ? SLASH_COMMANDS.slice(0, 2).map((command) => command.id)
+        ? DEFAULT_COMMAND_SUGGESTION_IDS
         : validSelectedCommandIds,
     })
   }
@@ -189,7 +176,7 @@ export function ChatSettingsDrawer({
     const selected = validSelectedCommandIds
     const nextSelected = selected.includes(commandId)
       ? selected.filter((id) => id !== commandId)
-      : selected.length < 2
+      : selected.length < MAX_COMMAND_SUGGESTIONS
         ? [...selected, commandId]
         : selected
 
@@ -201,12 +188,8 @@ export function ChatSettingsDrawer({
 
   // Get the actual preview theme based on system setting
   const getPreviewTheme = (themeConfig: ChatThemeConfig) => {
-    if (themeConfig.id === "system") {
-      // Before mount, default to light preview to match SSR output
-      if (!mounted) return chatThemes[1].preview
-      // Return preview based on current app theme
-      return resolvedTheme === "dark" ? chatThemes[2].preview : chatThemes[1].preview
-    }
+    void mounted
+    void resolvedTheme
     return themeConfig.preview
   }
 
@@ -248,180 +231,113 @@ export function ChatSettingsDrawer({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="px-4 py-4 space-y-6">
-          {/* Chat Theme Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Palette className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-foreground">채팅 테마</h3>
+        <div className="px-4 py-3 space-y-4">
+          <Link
+            href="/credits"
+            onClick={onClose}
+            className="flex items-center justify-between rounded-full border border-border bg-muted px-3 py-2 transition-colors hover:bg-accent"
+          >
+            <div className="flex items-center gap-2">
+              <Gem className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-foreground">크레딧</span>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {chatThemes.map((theme) => {
-                const isSelected = selectedChatTheme === theme.id
-                const previewColors = getPreviewTheme(theme)
-                return (
-                  <button
-                    key={theme.id}
-                    onClick={() => handleChatThemeChange(theme.id)}
-                    className={cn(
-                      "relative p-2 rounded-lg transition-all duration-200",
-                      "bg-muted hover:bg-muted",
-                      isSelected && "ring-2 ring-primary"
-                    )}
-                  >
-                    {/* Mini Preview */}
-                    <div 
-                      className="rounded-md p-2 mb-1.5 aspect-[4/3]"
-                      style={{ backgroundColor: previewColors.bg }}
-                    >
-                      {/* AI Bubble */}
-                      <div 
-                        className="w-3/4 h-2 rounded-full mb-1"
-                        style={{ backgroundColor: previewColors.aiBubble }}
-                      />
-                      {/* User Bubble */}
-                      <div 
-                        className="w-1/2 h-2 rounded-full ml-auto"
-                        style={{ backgroundColor: previewColors.userBubble }}
-                      />
-                    </div>
-                    
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="text-muted-foreground">{theme.icon}</span>
-                      <p className={cn(
-                        "text-xs font-medium",
-                        isSelected ? "text-foreground" : "text-muted-foreground"
-                      )}>
-                        {theme.label}
-                      </p>
-                    </div>
+            <span className="text-sm font-bold tabular-nums text-foreground">
+              {(creditBalance ?? 0).toLocaleString()}
+            </span>
+          </Link>
 
-                    {/* Selected Check */}
-                    {isSelected && (
-                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                        <Check className="w-2.5 h-2.5 text-primary-foreground" />
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
+          <section className="space-y-3">
+            <SectionTitle icon={<Palette className="h-4 w-4" />} title="채팅 표시" />
+            <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-medium text-foreground">채팅 테마</p>
+                  <p className="text-[11px] text-muted-foreground">채팅방에만 적용되는 테마입니다.</p>
+                </div>
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide">
+                  {chatThemes.map((theme) => {
+                    const isSelected = selectedChatTheme === theme.id
+                    const previewColors = getPreviewTheme(theme)
+                    return (
+                      <button
+                        key={theme.id}
+                        type="button"
+                        onClick={() => handleChatThemeChange(theme.id)}
+                        className={cn(
+                          "relative flex min-w-[72px] flex-col items-center gap-1 rounded-lg border px-2 py-2 text-xs transition-colors",
+                          isSelected
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-background/60 text-muted-foreground hover:bg-accent",
+                        )}
+                      >
+                        <div className="h-7 w-10 rounded-md p-1" style={{ backgroundColor: previewColors.bg }}>
+                          <div className="mb-1 h-1.5 w-7 rounded-full" style={{ backgroundColor: previewColors.aiBubble }} />
+                          <div className="ml-auto h-1.5 w-5 rounded-full" style={{ backgroundColor: previewColors.userBubble }} />
+                        </div>
+                        <span className="truncate font-medium">{theme.label}</span>
+                        {isSelected && (
+                          <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary">
+                            <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <SliderSetting
+                label="글자 크기"
+                valueText={`${readingSettings.textSize}px`}
+                min={CHAT_TEXT_SIZE_MIN}
+                max={CHAT_TEXT_SIZE_MAX}
+                value={readingSettings.textSize}
+                onChange={(value) => updateReadingSettings({ ...readingSettings, textSize: value })}
+              />
+              <SliderSetting
+                label="줄간격"
+                valueText={readingSettings.lineHeight.toFixed(1)}
+                min={CHAT_LINE_HEIGHT_MIN}
+                max={CHAT_LINE_HEIGHT_MAX}
+                step={0.1}
+                value={readingSettings.lineHeight}
+                onChange={(value) => updateReadingSettings({ ...readingSettings, lineHeight: value })}
+              />
+              <ToggleRow
+                title="상태창 표시"
+                description="현재 장면과 진행 상태를 상단에 표시합니다."
+                checked={readingSettings.showStoryStatus}
+                onClick={() => updateReadingSettings({ ...readingSettings, showStoryStatus: !readingSettings.showStoryStatus })}
+              />
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              {selectedChatTheme === "system" 
-                ? "앱의 라이트/다크 모드 설정을 따릅니다" 
-                : "이 채팅방에서만 적용됩니다"}
-            </p>
           </section>
 
-          {/* Timeline Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Clock className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-foreground">타임라인</h3>
-            </div>
-            <div className="bg-muted rounded-lg overflow-hidden">
-              {timelineEvents.map((event, index) => (
-                <div
-                  key={event.id}
-                  className={cn(
-                    "flex items-center justify-between px-3 py-2.5",
-                    index !== timelineEvents.length - 1 && "border-b border-border"
-                  )}
-                >
-                  <span className="text-sm text-foreground">{event.title}</span>
-                  <span className="text-xs text-muted-foreground">{event.date}</span>
-                </div>
-              ))}
-            </div>
-            <Link
-              href="/timeline"
-              onClick={onClose}
-              className="block w-full mt-2 py-2 text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              전체 보기 →
-            </Link>
-          </section>
-
-          {/* Reading Settings Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-foreground">채팅 읽기 설정</h3>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">글자 크기</span>
-                  <span className="text-xs text-muted-foreground">{readingSettings.textSize}px</span>
-                </div>
-                <input
-                  type="range"
-                  min={CHAT_TEXT_SIZE_MIN}
-                  max={CHAT_TEXT_SIZE_MAX}
-                  value={readingSettings.textSize}
-                  onChange={(e) => updateReadingSettings({ ...readingSettings, textSize: Number(e.target.value) })}
-                  className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-muted-foreground">줄간격</span>
-                  <span className="text-xs text-muted-foreground">{readingSettings.lineHeight.toFixed(1)}</span>
-                </div>
-                <input
-                  type="range"
-                  min={CHAT_LINE_HEIGHT_MIN}
-                  max={CHAT_LINE_HEIGHT_MAX}
-                  step="0.1"
-                  value={readingSettings.lineHeight}
-                  onChange={(e) => updateReadingSettings({ ...readingSettings, lineHeight: Number(e.target.value) })}
-                  className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
-                />
-              </div>
-
-              <div className="flex items-start justify-between gap-3 rounded-lg bg-muted px-3 py-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">원하는 명령어 자동 실행</p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    켜두면 선택한 명령어를 새 대화 응답 뒤에 자동으로 실행합니다.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={toggleAlwaysShowCommands}
-                  className={cn(
-                    "mt-0.5 h-6 w-11 rounded-full p-0.5 transition-colors",
-                    readingSettings.alwaysShowCommandSuggestions ? "bg-primary" : "bg-border",
-                  )}
-                  aria-pressed={readingSettings.alwaysShowCommandSuggestions}
-                >
-                  <span
-                    className={cn(
-                      "block h-5 w-5 rounded-full bg-white transition-transform",
-                      readingSettings.alwaysShowCommandSuggestions && "translate-x-5",
-                    )}
-                  />
-                </button>
-              </div>
+          <section className="space-y-3">
+            <SectionTitle icon={<SlidersHorizontal className="h-4 w-4" />} title="대화 보조" />
+            <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
+              <ToggleRow
+                title="명령어 자동 실행"
+                description="선택한 명령어를 답변 뒤에 실행합니다."
+                checked={readingSettings.alwaysShowCommandSuggestions}
+                onClick={toggleAlwaysShowCommands}
+              />
               {readingSettings.alwaysShowCommandSuggestions && (
-                <div className="rounded-lg border border-border bg-muted px-3 py-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-foreground">자동 실행할 명령어 선택</p>
+                <div className="rounded-lg border border-border bg-background/50 px-2.5 py-2">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-foreground">표시할 명령어 선택</p>
                     <span className="text-[11px] text-muted-foreground">
-                      {validSelectedCommandIds.length}/2
+                      {validSelectedCommandIds.length}/{MAX_COMMAND_SUGGESTIONS}
                     </span>
                   </div>
-                  <div className="grid gap-1.5">
-                    {SLASH_COMMANDS.map((command) => {
+                  <div className="grid gap-1">
+                    {autoCommandOptions.map((command) => {
                       const checked = validSelectedCommandIds.includes(command.id)
-                      const disabled = !checked && validSelectedCommandIds.length >= 2
+                      const disabled = !checked && validSelectedCommandIds.length >= MAX_COMMAND_SUGGESTIONS
                       return (
                         <label
                           key={command.id}
                           className={cn(
-                            "flex items-center gap-2 rounded-md px-2 py-2 text-sm",
+                            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                             disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer hover:bg-accent",
                           )}
                         >
@@ -434,87 +350,262 @@ export function ChatSettingsDrawer({
                           />
                           <span className="text-base leading-none">{command.icon}</span>
                           <span className="font-medium text-foreground">/{command.name}</span>
-                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{command.description}</span>
                         </label>
                       )
                     })}
                   </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground">최대 2개까지 선택할 수 있습니다.</p>
                 </div>
               )}
+              <CompactInfoRow
+                icon={<User className="h-4 w-4" />}
+                title="현재 자아"
+                description="지은 · 22세 · 대학생"
+                action={
+                  <Link
+                    href="/my-works?tab=personas"
+                    onClick={onClose}
+                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                  >
+                    변경
+                  </Link>
+                }
+              />
             </div>
           </section>
 
-          {/* Shared Media Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <ImageIcon className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-foreground">공유 미디어</h3>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {sharedMedia.slice(0, 3).map((media) => (
-                <div
-                  key={media.id}
-                  className="aspect-square overflow-hidden rounded-md bg-muted"
-                >
-                  <img src={media.imageUrl} alt={media.title} className="h-full w-full object-cover" />
+          <section className="space-y-3 pb-5">
+            <SectionTitle icon={<ImageIcon className="h-4 w-4" />} title="관리" />
+            <div className="space-y-2 rounded-xl border border-border bg-muted/70 p-3">
+              <CompactInfoRow
+                icon={<ImageIcon className="h-4 w-4" />}
+                title="공유 미디어"
+                description={
+                  sharedMedia.length > 0
+                    ? `생성/업로드 이미지 ${sharedMedia.length}개`
+                    : "아직 공유된 미디어가 없어요."
+                }
+                action={
+                  <Link
+                    href={`/chat/${chatId}/media`}
+                    onClick={onClose}
+                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                  >
+                    전체 보기
+                  </Link>
+                }
+              />
+              {sharedMedia.length > 0 && (
+                <div className="flex gap-1.5 pl-8">
+                  {sharedMedia.slice(0, 3).map((media) => (
+                    <MediaThumb key={media.id} media={media} />
+                  ))}
                 </div>
-              ))}
-            </div>
-            <Link
-              href={`/chat/${chatId}/media`}
-              onClick={onClose}
-              className="block w-full mt-2 py-2 text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              전체 보기 →
-            </Link>
-          </section>
+              )}
 
-          {/* My Persona Section */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <User className="w-4 h-4 text-muted-foreground" />
-              <h3 className="text-sm font-medium text-foreground">내 자아</h3>
-            </div>
-            <div className="bg-muted rounded-lg p-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                  <User className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">지은</p>
-                  <p className="text-xs text-muted-foreground">22세 / 대학생</p>
-                </div>
-                <Link
-                  href="/my-works?tab=personas"
-                  onClick={onClose}
-                  className="px-3 py-1.5 text-xs text-foreground bg-muted hover:bg-accent rounded-md transition-colors"
-                >
-                  수정
-                </Link>
+              <CompactInfoRow
+                icon={<Clock className="h-4 w-4" />}
+                title="타임라인"
+                description="중요한 대화 흐름을 확인합니다."
+                action={
+                  <Link
+                    href="/timeline"
+                    onClick={onClose}
+                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
+                  >
+                    보기
+                  </Link>
+                }
+              />
+
+              <div className="border-t border-border pt-2">
+                <DangerRow
+                  icon={<Trash2 className="h-4 w-4" />}
+                  title="대화 초기화"
+                  description="현재 채팅 메시지를 모두 삭제합니다."
+                  buttonText="초기화"
+                  onClick={onClearChat}
+                />
+                <DangerRow
+                  icon={<LogOut className="h-4 w-4" />}
+                  title="채팅방 나가기"
+                  description="이 채팅방에서 나갑니다."
+                  buttonText="나가기"
+                  onClick={() => setIsLeaveConfirmOpen(true)}
+                />
               </div>
             </div>
           </section>
         </div>
-
-        {/* Danger Zone */}
-        <div className="px-4 py-6 mt-4 border-t border-border dark:border-white/20 space-y-2">
-          <button
-            onClick={onClearChat}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-700 bg-red-50 py-3 text-sm font-semibold text-red-950 transition-colors hover:bg-red-100 dark:border-red-500 dark:bg-red-950 dark:text-red-50 dark:hover:bg-red-900"
-          >
-            <Trash2 className="w-4 h-4" />
-            대화 초기화
-          </button>
-          <button
-            onClick={onLeaveChat}
-            className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-700 bg-red-50 py-3 text-sm font-semibold text-red-950 transition-colors hover:bg-red-100 dark:border-red-500 dark:bg-red-950 dark:text-red-50 dark:hover:bg-red-900"
-          >
-            <LogOut className="w-4 h-4" />
-            채팅방 나가기
-          </button>
-        </div>
       </div>
+      <ConfirmModal
+        open={isLeaveConfirmOpen}
+        title="채팅방 나가기"
+        message="이 채팅방에서 나갈까요?"
+        confirmText="나가기"
+        destructive
+        onOpenChange={setIsLeaveConfirmOpen}
+        onConfirm={() => {
+          setIsLeaveConfirmOpen(false)
+          onLeaveChat?.()
+        }}
+      />
     </>
+  )
+}
+
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-muted-foreground">{icon}</span>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    </div>
+  )
+}
+
+function SliderSetting({
+  label,
+  valueText,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string
+  valueText: string
+  min: number
+  max: number
+  step?: number
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-xs font-medium text-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground">{valueText}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-background accent-primary [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md"
+      />
+    </div>
+  )
+}
+
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onClick,
+}: {
+  title: string
+  description: string
+  checked: boolean
+  onClick: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-background/50 px-2.5 py-2">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors",
+          checked ? "bg-primary" : "bg-border",
+        )}
+        aria-pressed={checked}
+      >
+        <span
+          className={cn(
+            "block h-5 w-5 rounded-full bg-white transition-transform",
+            checked && "translate-x-5",
+          )}
+        />
+      </button>
+    </div>
+  )
+}
+
+function CompactInfoRow({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-background/50 px-2.5 py-2">
+      <span className="shrink-0 text-muted-foreground">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+function DangerRow({
+  icon,
+  title,
+  description,
+  buttonText,
+  onClick,
+}: {
+  icon: React.ReactNode
+  title: string
+  description: string
+  buttonText: string
+  onClick?: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-2.5 py-2">
+      <span className="shrink-0 text-red-600 dark:text-red-300">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-md border border-red-700 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-950 transition-colors hover:bg-red-100 dark:border-red-500 dark:bg-red-950 dark:text-red-50 dark:hover:bg-red-900"
+      >
+        {buttonText}
+      </button>
+    </div>
+  )
+}
+
+function MediaThumb({ media }: { media: ChatMediaItem }) {
+  const [failed, setFailed] = useState(false)
+
+  return (
+    <div className="h-12 w-12 overflow-hidden rounded-md border border-border bg-background">
+      {!failed ? (
+        <img
+          src={media.imageUrl}
+          alt={media.title}
+          onError={() => setFailed(true)}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+          <ImageIcon className="h-4 w-4" />
+        </div>
+      )}
+    </div>
   )
 }

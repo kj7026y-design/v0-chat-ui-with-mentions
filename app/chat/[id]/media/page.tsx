@@ -111,7 +111,12 @@ export default function ChatMediaPage() {
                   <img src={item.imageUrl} alt={item.title} className="h-full w-full object-cover" />
                 </button>
                 <div className="border-t border-border px-1.5 py-1.5">
-                  <p className="line-clamp-1 text-[10px] font-medium text-muted-foreground">{item.title}</p>
+                  <div className="flex items-center gap-1">
+                    <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[9px] font-semibold text-secondary-foreground">
+                      {item.source === "generated" ? "AI" : "업로드"}
+                    </span>
+                    <p className="line-clamp-1 min-w-0 text-[10px] font-medium text-muted-foreground">{item.title}</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleDelete(item.id)}
@@ -160,7 +165,15 @@ export default function ChatMediaPage() {
               />
             </div>
             <div className="px-4 py-3">
-              <p className="text-sm font-semibold text-foreground">{selectedItem.title}</p>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-secondary-foreground">
+                  {selectedItem.source === "generated" ? "AI 생성" : "업로드"}
+                </span>
+                <p className="text-sm font-semibold text-foreground">{selectedItem.title}</p>
+              </div>
+              {selectedItem.prompt && (
+                <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">{selectedItem.prompt}</p>
+              )}
             </div>
           </div>
         </div>

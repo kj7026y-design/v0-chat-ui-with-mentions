@@ -13,6 +13,7 @@ export interface StoryStatus {
   currentGoal?: string
   worldDate?: string
   currentLocation?: string
+  weather?: string
   characterName: string
   characterEmotion?: string
   characterStatus?: string
@@ -29,7 +30,7 @@ interface StoryStatusCardProps {
 export function StoryStatusCard({ status }: StoryStatusCardProps) {
   const [expanded, setExpanded] = useState(false)
   const progress = Math.max(0, Math.min(100, status.chapterProgress ?? 0))
-  const sceneSummary = [status.currentChapterTitle, status.worldDate, status.currentLocation].filter(Boolean).join(" · ")
+  const sceneSummary = [status.currentChapterTitle, status.worldDate, status.currentLocation, status.weather].filter(Boolean).join(" · ")
   const progressText = status.currentMission || status.currentGoal
   const hasScene = Boolean(sceneSummary)
   const hasProgress = Boolean(progressText || status.chapterProgress !== undefined)
@@ -41,6 +42,7 @@ export function StoryStatusCard({ status }: StoryStatusCardProps) {
     status.useChapters && status.currentChapterTitle
       ? `${status.currentChapterTitle} · ${progress}%`
       : null,
+    !status.useChapters && progressText ? progressText : null,
     status.characterEmotion ? `${status.characterName} ${status.characterEmotion}` : null,
     status.personaEmotion ? `${status.personaName} ${status.personaEmotion}` : null,
   ].filter(Boolean)

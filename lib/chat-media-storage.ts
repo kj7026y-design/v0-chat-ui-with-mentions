@@ -1,5 +1,7 @@
 "use client"
 
+import { deleteGeneratedMedia, getCurrentUserId, getGeneratedMediaByChat, type GeneratedMedia } from "@/lib/generated-media-storage"
+
 export const STORYCHAT_CHAT_MEDIA_KEY = "storychat_chat_media"
 
 export interface ChatMediaItem {
@@ -8,14 +10,19 @@ export interface ChatMediaItem {
   title: string
   imageUrl: string
   createdAt: string
+  source?: "uploaded" | "generated"
+  prompt?: string
+  provider?: GeneratedMedia["provider"]
+  messageId?: string
+  userId?: string
 }
 
 const sampleImages = [
   "/events/event-silence.png",
-  "/placeholder-media-1.jpg",
-  "/placeholder-media-2.jpg",
-  "/placeholder-media-3.jpg",
-  "/placeholder-media-4.jpg",
+  "/placeholder.jpg",
+  "/placeholder-user.jpg",
+  "/placeholder-logo.png",
+  "/events/event-silence.png",
 ]
 
 function createMediaId() {
@@ -55,7 +62,22 @@ export function saveAllChatMedia(items: ChatMediaItem[]) {
 
 export function getChatMedia(chatId: string, characterName?: string): ChatMediaItem[] {
   const allItems = getAllChatMedia()
-  const chatItems = allItems.filter((item) => item.chatId === chatId)
+  const generatedItems: ChatMediaItem[] = getGeneratedMediaByChat(chatId).map((item) => ({
+    id: item.id,
+    chatId: item.chatId || chatId,
+    title: item.title || "AI 생성 이미지",
+    imageUrl: item.imageUrl,
+    createdAt: item.createdAt,
+    source: "generated",
+    prompt: item.prompt,
+    provider: item.provider,
+    messageId: item.messageId,
+    userId: item.userId,
+  }))
+  const chatItems = [
+    ...generatedItems,
+    ...allItems.filter((item) => item.chatId === chatId),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   if (chatItems.length > 0) return chatItems
 
   const sample = getSampleMedia(chatId, characterName)
@@ -70,11 +92,14 @@ export function addChatMedia(chatId: string, imageUrl: string, title?: string) {
     title: title?.trim() || "공유 이미지",
     imageUrl: imageUrl.trim(),
     createdAt: new Date().toISOString(),
+    source: "uploaded",
+    userId: getCurrentUserId(),
   }
   saveAllChatMedia([item, ...getAllChatMedia()])
   return item
 }
 
 export function deleteChatMedia(chatId: string, mediaId: string) {
+  deleteGeneratedMedia(mediaId)
   saveAllChatMedia(getAllChatMedia().filter((item) => !(item.chatId === chatId && item.id === mediaId)))
 }

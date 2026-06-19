@@ -12,8 +12,8 @@ import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { EmptyChatState } from "@/components/chat/empty-chat-state"
 import { BranchConfirmModal } from "@/components/chat/branch-confirm-modal"
 import { StoryStatusCard, type StoryStatus } from "@/components/chat/story-status-card"
-import { ConfirmModal } from "@/components/ui/app-modal"
-import { SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
+import { AlertModal, ConfirmModal } from "@/components/ui/app-modal"
+import { AUTO_COMMAND_IDS, DEFAULT_COMMAND_SUGGESTION_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
 import {
   buildUserMessage,
   generateAssistantReply,
@@ -24,12 +24,24 @@ import {
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
 import { defaultChats, getChatList, type ChatListItemData } from "@/lib/chat-list-storage"
 import { defaultChatReadingSettings, getChatReadingSettings, type ChatReadingSettings } from "@/lib/chat-settings-storage"
+import {
+  FREE_IMAGE_GENERATION_LIMIT,
+  IMAGE_GENERATION_CREDIT_COST,
+  attachMediaToMessage,
+  chargeImageGenerationCredit,
+  getCurrentUserId,
+  getImageGenerationUsage,
+  incrementFreeImageGenerationUsage,
+  saveGeneratedMedia,
+} from "@/lib/generated-media-storage"
 import { defaultLibrary, getStoryChatLibrary, normalizeIntroScenarios, type StoryChatLibrary } from "@/lib/storychat-storage"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
 const CHARACTER_NAME = "이무기"
 const CHARACTER_EMOJI = "🐉"
+const AUTO_IMAGE_GENERATION_CHANCE = 0.02
+const AUTO_IMAGE_GENERATION_LIMIT = 3
 
 const storyStatus: StoryStatus = {
   useChapters: true,
@@ -59,6 +71,100 @@ function makeTurnId() {
   return `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+function inferEmotion(text: string, fallback = "차분함") {
+  const content = text.toLowerCase()
+  if (/놀|당황|흔들|멈칫|충격|두려/.test(content)) return "긴장"
+  if (/웃|미소|따뜻|기뻐|좋/.test(content)) return "온화함"
+  if (/분노|화|차갑|날카|노려/.test(content)) return "경계"
+  if (/비밀|침묵|망설|숨/.test(content)) return "망설임"
+  if (/고개를 끄덕|믿|신뢰|괜찮/.test(content)) return "신뢰"
+  return fallback
+}
+
+function inferPersonaEmotion(text: string, fallback = "몰입") {
+  if (/놀|당황|무섭|두려|긴장/.test(text)) return "놀람"
+  if (/웃|기쁘|좋|반가/.test(text)) return "즐거움"
+  if (/왜|뭐|어디|누구|궁금|묻/.test(text)) return "호기심"
+  if (/다가|바라|살펴|따라/.test(text)) return "집중"
+  return fallback
+}
+
+function inferLocation(text: string, fallback?: string) {
+  const candidates = [
+    "연습실",
+    "라이브바",
+    "옥상",
+    "항구",
+    "방파제",
+    "서점",
+    "창가 자리",
+    "왕성",
+    "안개 숲",
+    "예언자의 탑",
+    "카페",
+    "골목",
+    "성문",
+  ]
+  return candidates.find((location) => text.includes(location)) || fallback
+}
+
+function getAutoImageCount(chatId: string) {
+  if (typeof window === "undefined") return 0
+  return Number(window.localStorage.getItem(`chat-auto-image-count-${chatId}`)) || 0
+}
+
+function incrementAutoImageCount(chatId: string) {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(`chat-auto-image-count-${chatId}`, String(getAutoImageCount(chatId) + 1))
+}
+
+function isMajorSceneCandidate(userContent: string, replyContent: string, status: Partial<StoryStatus>) {
+  const combined = `${userContent}\n${replyContent}`
+  if (status.nextEventCondition && /발생|드러|열립|이어집/.test(status.nextEventCondition)) return true
+  return /처음|비밀|발견|고백|전투|위기|눈물|손을|다가|키스|문이|깨어|돌아|결심|사라|죽|구하|마주|놀|긴장|신뢰|단서|운명/.test(combined)
+}
+
+function shouldAutoGenerateImage(chatId: string, userContent: string, replyContent: string, status: Partial<StoryStatus>) {
+  if (getAutoImageCount(chatId) >= AUTO_IMAGE_GENERATION_LIMIT) return false
+  if (!isMajorSceneCandidate(userContent, replyContent, status)) return false
+  return Math.random() < AUTO_IMAGE_GENERATION_CHANCE
+}
+
+function buildNextRuntimeStatus({
+  baseStatus,
+  previousStatus,
+  userContent,
+  replyContent,
+}: {
+  baseStatus: StoryStatus
+  previousStatus: Partial<StoryStatus>
+  userContent: string
+  replyContent: string
+}): Partial<StoryStatus> {
+  const combined = `${userContent}\n${replyContent}`
+  const currentProgress = previousStatus.chapterProgress ?? baseStatus.chapterProgress ?? 0
+  const nextProgress = baseStatus.useChapters ? Math.min(100, currentProgress + 3 + Math.floor(Math.random() * 4)) : undefined
+  const characterEmotion = inferEmotion(replyContent, previousStatus.characterEmotion || baseStatus.characterEmotion || "차분함")
+  const personaEmotion = inferPersonaEmotion(userContent, previousStatus.personaEmotion || baseStatus.personaEmotion || "몰입")
+
+  return {
+    characterEmotion,
+    characterStatus: `${characterEmotion} 상태로 대화의 흐름을 받아들이고 있다.`,
+    personaEmotion,
+    personaStatus: `${personaEmotion}을 느끼며 현재 장면에 반응하고 있다.`,
+    currentLocation: inferLocation(combined, previousStatus.currentLocation || baseStatus.currentLocation),
+    chapterProgress: nextProgress,
+    currentMission: baseStatus.currentMission,
+    currentGoal: baseStatus.currentGoal || (userContent ? `${userContent.slice(0, 28)}${userContent.length > 28 ? "..." : ""}` : undefined),
+    nextEventCondition: characterEmotion === "신뢰"
+      ? "신뢰가 더 쌓이면 숨겨진 이야기가 드러납니다."
+      : characterEmotion === "경계"
+        ? "긴장이 풀리거나 설득에 성공하면 다음 흐름이 열립니다."
+        : "다음 선택과 대화 반응에 따라 장면이 이어집니다.",
+    weather: previousStatus.weather || baseStatus.weather || "20˚/31˚ 맑음",
+  }
+}
+
 export default function ChatPage() {
   const params = useParams()
   const router = useRouter()
@@ -81,6 +187,8 @@ export default function ChatPage() {
   const [branchTargetId, setBranchTargetId] = useState<string | null>(null)
   const [isIntroOpen, setIsIntroOpen] = useState(false)
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
+  const [isImageLimitModalOpen, setIsImageLimitModalOpen] = useState(false)
+  const [runtimeStoryStatus, setRuntimeStoryStatus] = useState<Partial<StoryStatus>>({})
   const [selectedIntroScenarioId, setSelectedIntroScenarioId] = useState<string>("")
   const [insertTextRequest, setInsertTextRequest] = useState<{ id: number; text: string } | null>(null)
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
@@ -150,7 +258,7 @@ export default function ChatPage() {
     progressSettings?.chapters.find((chapter) => chapter.title === (currentWork?.currentChapter || currentWorld?.currentChapter)) ??
     progressSettings?.chapters[0]
   const canUseDefaultImugiStatus = characterName === storyStatus.characterName && Boolean(currentWork || currentCharacter)
-  const chatStoryStatus: StoryStatus = {
+  const baseChatStoryStatus: StoryStatus = {
     useChapters,
     currentChapterId: useChapters ? activeChapter?.id ?? storyStatus.currentChapterId : undefined,
     currentChapterTitle: useChapters
@@ -168,20 +276,102 @@ export default function ChatPage() {
     personaEmotion: canUseDefaultImugiStatus ? storyStatus.personaEmotion : undefined,
     personaStatus: canUseDefaultImugiStatus ? storyStatus.personaStatus : undefined,
     nextEventCondition: useChapters ? activeChapter?.nextChapterCondition : undefined,
+    weather: "20˚/31˚ 맑음",
+  }
+  const chatStoryStatus: StoryStatus = {
+    ...baseChatStoryStatus,
+    ...runtimeStoryStatus,
+    useChapters,
+    characterName,
+    personaName: currentPersona?.name || "나",
   }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  const buildImageCommandContext = (recentMessages: ChatMessage[] = messages): ImageCommandContext => ({
+  const buildImageCommandContext = (
+    recentMessages: ChatMessage[] = messages,
+    statusOverride?: StoryStatus,
+  ): ImageCommandContext => ({
     work: currentWork,
     world: currentWorld,
     character: currentCharacter,
     persona: currentPersona,
-    status: chatStoryStatus,
+    status: statusOverride ?? chatStoryStatus,
     recentMessages,
   })
+
+  const buildGeneratedImageMessage = async ({
+    turnId,
+    contextMessages,
+    statusOverride,
+    titleSuffix = "생성 이미지",
+  }: {
+    turnId: string
+    contextMessages: ChatMessage[]
+    statusOverride?: StoryStatus
+    titleSuffix?: string
+  }): Promise<ChatMessage | null> => {
+    const userId = getCurrentUserId()
+    const usage = getImageGenerationUsage(userId)
+    const shouldUseFreeImage = usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
+    if (!shouldUseFreeImage && credits < IMAGE_GENERATION_CREDIT_COST) return null
+
+    const result = await runCommand("이미지", characterName, buildImageCommandContext(contextMessages, statusOverride))
+    if (result.kind !== "message" || !result.message.imageUrl) return null
+
+    const media = saveGeneratedMedia({
+      imageUrl: result.message.imageUrl,
+      prompt: result.message.originalContent || "",
+      provider: "pollinations",
+      workId: currentWork?.id,
+      chatId,
+      characterId: currentCharacter?.id,
+      userId,
+      messageId: result.message.id,
+      title: `${characterName} ${titleSuffix}`,
+    })
+
+    const imageMessage = {
+      ...result.message,
+      turnId,
+      mediaId: media.id,
+    }
+    attachMediaToMessage(imageMessage.id, media.id)
+    if (shouldUseFreeImage) {
+      incrementFreeImageGenerationUsage(userId)
+    } else {
+      if (!spendCredit(IMAGE_GENERATION_CREDIT_COST)) return null
+      chargeImageGenerationCredit(userId)
+    }
+    return imageMessage
+  }
+
+  const buildAutoCommandMessages = async ({
+    turnId,
+    contextMessages,
+    statusOverride,
+    commandIds,
+  }: {
+    turnId: string
+    contextMessages: ChatMessage[]
+    statusOverride: StoryStatus
+    commandIds: string[]
+  }) => {
+    const autoMessages: ChatMessage[] = []
+    const selectedCommands = SLASH_COMMANDS.filter((command) =>
+      commandIds.includes(command.id) && AUTO_COMMAND_IDS.includes(command.id),
+    ).slice(0, MAX_COMMAND_SUGGESTIONS)
+
+    for (const command of selectedCommands) {
+      const result = await runCommand(command.name, characterName, buildImageCommandContext(contextMessages, statusOverride))
+      if (result.kind === "message") {
+        autoMessages.push({ ...result.message, turnId })
+      }
+    }
+    return autoMessages
+  }
 
   useEffect(() => {
     scrollToBottom()
@@ -191,6 +381,7 @@ export default function ChatPage() {
     const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
     setChatTheme(savedTheme || "system")
     setReadingSettings(getChatReadingSettings(chatId))
+    setRuntimeStoryStatus({})
   }, [chatId])
 
   useEffect(() => {
@@ -250,38 +441,49 @@ export default function ChatPage() {
         )),
         turnId,
       }
-      const autoCommandMessages: ChatMessage[] = []
-      if (readingSettings.alwaysShowCommandSuggestions && readingSettings.selectedCommandIds.length > 0) {
-        const selectedCommands = SLASH_COMMANDS.filter((command) =>
-          readingSettings.selectedCommandIds.includes(command.id),
-        ).slice(0, 2)
-
-        for (const command of selectedCommands) {
-          const isImageAutoCommand = command.name === "이미지"
-          if (isImageAutoCommand) {
-            setTypingLabel("이미지 생성중...")
-            setTypingVariant("image")
-          }
-          const commandStartedAt = Date.now()
-          const result = await runCommand(command.name, characterName, buildImageCommandContext([...messages, userMessage, reply]))
-          if (isImageAutoCommand) {
-            const remainingDelay = Math.max(0, 1400 - (Date.now() - commandStartedAt))
-            if (remainingDelay > 0) {
-              await new Promise((resolve) => setTimeout(resolve, remainingDelay))
-            }
-          }
-          if (result.kind === "message") {
-            autoCommandMessages.push({ ...result.message, turnId })
-          } else {
-            toast(result.message)
-          }
-          if (isImageAutoCommand) {
-            setTypingLabel(undefined)
-            setTypingVariant("text")
-          }
-        }
+      const nextRuntimeStatus = buildNextRuntimeStatus({
+        baseStatus: baseChatStoryStatus,
+        previousStatus: runtimeStoryStatus,
+        userContent: content,
+        replyContent: reply.content,
+      })
+      const nextChatStoryStatus = {
+        ...chatStoryStatus,
+        ...nextRuntimeStatus,
       }
-      setMessages((prev) => [...prev, reply, ...autoCommandMessages])
+      setRuntimeStoryStatus(nextRuntimeStatus)
+
+      const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
+      const effectiveAutoCommandIds = autoCommandIds.length > 0 ? autoCommandIds : DEFAULT_COMMAND_SUGGESTION_IDS
+      const autoCommandMessages = readingSettings.alwaysShowCommandSuggestions
+        ? await buildAutoCommandMessages({
+            turnId,
+            contextMessages: [...messages, userMessage, reply],
+            statusOverride: nextChatStoryStatus,
+            commandIds: effectiveAutoCommandIds,
+          })
+        : []
+      const contextMessages = [...messages, userMessage, reply, ...autoCommandMessages]
+      const shouldGenerateAutoImage = shouldAutoGenerateImage(chatId, content, reply.content, nextChatStoryStatus)
+      let autoImageMessage: ChatMessage | null = null
+      if (shouldGenerateAutoImage) {
+        setTypingLabel("주요 장면 이미지 생성중...")
+        setTypingVariant("image")
+        autoImageMessage = await buildGeneratedImageMessage({
+          turnId,
+          contextMessages,
+          statusOverride: nextChatStoryStatus,
+          titleSuffix: "주요 장면",
+        })
+        if (autoImageMessage) incrementAutoImageCount(chatId)
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        reply,
+        ...autoCommandMessages,
+        ...(autoImageMessage ? [autoImageMessage] : []),
+      ])
     } catch {
       const errorMessage: ChatMessage = {
         id: `reply-error-${Date.now()}`,
@@ -328,38 +530,54 @@ export default function ChatPage() {
         )),
         turnId: retryTurnId,
       }
-      const autoCommandMessages: ChatMessage[] = []
-      if (readingSettings.alwaysShowCommandSuggestions && readingSettings.selectedCommandIds.length > 0) {
-        const selectedCommands = SLASH_COMMANDS.filter((command) =>
-          readingSettings.selectedCommandIds.includes(command.id),
-        ).slice(0, 2)
-
-        for (const command of selectedCommands) {
-          const isImageAutoCommand = command.name === "이미지"
-          if (isImageAutoCommand) {
-            setTypingLabel("이미지 생성중...")
-            setTypingVariant("image")
-          }
-          const commandStartedAt = Date.now()
-          const result = await runCommand(command.name, characterName, buildImageCommandContext([...retryMessages, reply]))
-          if (isImageAutoCommand) {
-            const remainingDelay = Math.max(0, 1400 - (Date.now() - commandStartedAt))
-            if (remainingDelay > 0) {
-              await new Promise((resolve) => setTimeout(resolve, remainingDelay))
-            }
-          }
-          if (result.kind === "message") {
-            autoCommandMessages.push({ ...result.message, turnId: retryTurnId })
-          } else {
-            toast(result.message)
-          }
-          if (isImageAutoCommand) {
-            setTypingLabel(undefined)
-            setTypingVariant("text")
-          }
-        }
+      const nextRuntimeStatus = buildNextRuntimeStatus({
+        baseStatus: baseChatStoryStatus,
+        previousStatus: runtimeStoryStatus,
+        userContent: retryPayload.content,
+        replyContent: reply.content,
+      })
+      const nextChatStoryStatus = {
+        ...chatStoryStatus,
+        ...nextRuntimeStatus,
       }
-      setMessages((prev) => [...prev, reply, ...autoCommandMessages])
+      setRuntimeStoryStatus(nextRuntimeStatus)
+
+      const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
+      const effectiveAutoCommandIds = autoCommandIds.length > 0 ? autoCommandIds : DEFAULT_COMMAND_SUGGESTION_IDS
+      const autoCommandMessages = readingSettings.alwaysShowCommandSuggestions
+        ? await buildAutoCommandMessages({
+            turnId: retryTurnId,
+            contextMessages: [...retryMessages, reply],
+            statusOverride: nextChatStoryStatus,
+            commandIds: effectiveAutoCommandIds,
+          })
+        : []
+      const contextMessages = [...retryMessages, reply, ...autoCommandMessages]
+      const shouldGenerateAutoImage = shouldAutoGenerateImage(
+        chatId,
+        retryPayload.content,
+        reply.content,
+        nextChatStoryStatus,
+      )
+      let autoImageMessage: ChatMessage | null = null
+      if (shouldGenerateAutoImage) {
+        setTypingLabel("주요 장면 이미지 생성중...")
+        setTypingVariant("image")
+        autoImageMessage = await buildGeneratedImageMessage({
+          turnId: retryTurnId,
+          contextMessages,
+          statusOverride: nextChatStoryStatus,
+          titleSuffix: "주요 장면",
+        })
+        if (autoImageMessage) incrementAutoImageCount(chatId)
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        reply,
+        ...autoCommandMessages,
+        ...(autoImageMessage ? [autoImageMessage] : []),
+      ])
     } catch {
       setMessages((prev) => [...prev, failedMessage])
       toast.error("다시 생성하지 못했어요.")
@@ -372,6 +590,15 @@ export default function ChatPage() {
 
   const handleCommand = async (command: string) => {
     const isImageCommand = command.replace(/^\//, "").trim() === "이미지"
+    const userId = getCurrentUserId()
+    const usage = getImageGenerationUsage(userId)
+    const shouldUseFreeImage = isImageCommand && usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
+    const shouldUsePaidImage = isImageCommand && !shouldUseFreeImage
+    if (shouldUsePaidImage && credits < IMAGE_GENERATION_CREDIT_COST) {
+      setIsImageLimitModalOpen(true)
+      return
+    }
+
     setIsTyping(true)
     setTypingLabel(isImageCommand ? "이미지 생성중..." : undefined)
     setTypingVariant(isImageCommand ? "image" : "text")
@@ -389,7 +616,32 @@ export default function ChatPage() {
         toast(result.message)
         return
       }
-      setMessages((prev) => [...prev, { ...result.message, turnId }])
+      let nextMessage = { ...result.message, turnId }
+      if (isImageCommand && nextMessage.imageUrl) {
+        const media = saveGeneratedMedia({
+          imageUrl: nextMessage.imageUrl,
+          prompt: nextMessage.originalContent || "",
+          provider: "pollinations",
+          workId: currentWork?.id,
+          chatId,
+          characterId: currentCharacter?.id,
+          userId,
+          messageId: nextMessage.id,
+          title: `${characterName} 생성 이미지`,
+        })
+        nextMessage = { ...nextMessage, mediaId: media.id }
+        attachMediaToMessage(nextMessage.id, media.id)
+        if (shouldUseFreeImage) {
+          incrementFreeImageGenerationUsage(userId)
+        } else {
+          if (!spendCredit(IMAGE_GENERATION_CREDIT_COST)) {
+            throw new Error("Insufficient credits")
+          }
+          chargeImageGenerationCredit(userId)
+        }
+        toast.success(shouldUseFreeImage ? "무료 이미지 생성 1회를 사용했어요." : "크레딧으로 이미지를 생성했어요.")
+      }
+      setMessages((prev) => [...prev, nextMessage])
     } catch {
       const errorMessage: ChatMessage = {
         id: `image-error-${Date.now()}`,
@@ -443,6 +695,14 @@ export default function ChatPage() {
     setEditedMessageIds((prev) => new Set(prev).add(messageId))
 
     if (shouldRegenerateImages && targetMessage?.turnId) {
+      const userId = getCurrentUserId()
+      const usage = getImageGenerationUsage(userId)
+      const shouldUseFreeImage = usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
+      if (!shouldUseFreeImage && credits < IMAGE_GENERATION_CREDIT_COST) {
+        setIsImageLimitModalOpen(true)
+        return
+      }
+
       setIsTyping(true)
       setTypingLabel("이미지 재생성중...")
       setTypingVariant("image")
@@ -452,6 +712,17 @@ export default function ChatPage() {
         if (result.kind !== "message" || !result.message.imageUrl) {
           throw new Error("Image regeneration failed")
         }
+        const media = saveGeneratedMedia({
+          imageUrl: result.message.imageUrl,
+          prompt: result.message.originalContent || "",
+          provider: "pollinations",
+          workId: currentWork?.id,
+          chatId,
+          characterId: currentCharacter?.id,
+          userId,
+          messageId: result.message.id,
+          title: `${characterName} 재생성 이미지`,
+        })
         setMessages((prev) =>
           prev.map((message) =>
             message.turnId === targetMessage.turnId && message.imageUrl
@@ -461,10 +732,19 @@ export default function ChatPage() {
                   content: "",
                   imageUrl: result.message.imageUrl,
                   imageName: result.message.imageName,
+                  mediaId: media.id,
                 }
               : message,
           ),
         )
+        if (shouldUseFreeImage) {
+          incrementFreeImageGenerationUsage(userId)
+        } else {
+          if (!spendCredit(IMAGE_GENERATION_CREDIT_COST)) {
+            throw new Error("Insufficient credits")
+          }
+          chargeImageGenerationCredit(userId)
+        }
         toast.success("메시지를 수정하고 이미지를 다시 생성했어요.")
       } catch {
         setMessages((prev) =>
@@ -548,9 +828,11 @@ export default function ChatPage() {
         onMenuClick={() => setIsSettingsOpen(true)}
       />
 
-      <StoryStatusCard
-        status={chatStoryStatus}
-      />
+      {readingSettings.showStoryStatus && (
+        <StoryStatusCard
+          status={chatStoryStatus}
+        />
+      )}
 
       <ChatSettingsDrawer
         isOpen={isSettingsOpen}
@@ -558,6 +840,7 @@ export default function ChatPage() {
         characterName={characterName}
         characterEmoji={characterEmoji}
         chatId={chatId}
+        creditBalance={credits}
         onChatThemeChange={(theme) => setChatTheme(theme)}
         onReadingSettingsChange={setReadingSettings}
         onClearChat={handleClearChat}
@@ -600,6 +883,12 @@ export default function ChatPage() {
           toast.success("대화를 초기화했어요.")
         }}
       />
+      <AlertModal
+        open={isImageLimitModalOpen}
+        title="이미지 생성 안내"
+        message={`무료 이미지 생성 5회를 모두 사용했어요. 추가 생성은 크레딧이 필요합니다. 현재는 크레딧 ${IMAGE_GENERATION_CREDIT_COST}개가 필요해요.`}
+        onOpenChange={setIsImageLimitModalOpen}
+      />
 
       {/* Chat Area - Scrollable */}
       <main className="min-h-0 flex-1 overflow-y-auto">
@@ -620,8 +909,6 @@ export default function ChatPage() {
             chatTheme={chatTheme}
             textSize={readingSettings.textSize}
             lineHeight={readingSettings.lineHeight}
-            alwaysShowCommandSuggestions={readingSettings.alwaysShowCommandSuggestions}
-            selectedCommandIds={readingSettings.selectedCommandIds}
             disabled={isTyping}
           />
         ) : (

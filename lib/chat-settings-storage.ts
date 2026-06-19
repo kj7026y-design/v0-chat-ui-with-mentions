@@ -9,6 +9,7 @@ export const CHAT_LINE_HEIGHT_MAX = 1.8
 export interface ChatReadingSettings {
   textSize: number
   lineHeight: number
+  showStoryStatus: boolean
   alwaysShowCommandSuggestions: boolean
   selectedCommandIds: string[]
 }
@@ -16,6 +17,7 @@ export interface ChatReadingSettings {
 export const defaultChatReadingSettings: ChatReadingSettings = {
   textSize: 16,
   lineHeight: 1.5,
+  showStoryStatus: true,
   alwaysShowCommandSuggestions: false,
   selectedCommandIds: [],
 }
@@ -38,8 +40,9 @@ export function getChatReadingSettings(chatId?: string): ChatReadingSettings {
       CHAT_LINE_HEIGHT_MAX,
       defaultChatReadingSettings.lineHeight,
     ),
+    showStoryStatus: true,
     alwaysShowCommandSuggestions: window.localStorage.getItem(ALWAYS_SHOW_COMMAND_SUGGESTIONS_KEY) === "true",
-    selectedCommandIds: readStringArray(window.localStorage.getItem("selectedCommandIds")),
+    selectedCommandIds: readStringArray(window.localStorage.getItem("selectedCommandIds"), 2),
   }
 }
 
@@ -73,6 +76,7 @@ function normalizeSettings(settings: Partial<ChatReadingSettings>): ChatReadingS
   return {
     textSize: clampNumber(Number(settings.textSize), CHAT_TEXT_SIZE_MIN, CHAT_TEXT_SIZE_MAX, defaultChatReadingSettings.textSize),
     lineHeight: clampNumber(Number(settings.lineHeight), CHAT_LINE_HEIGHT_MIN, CHAT_LINE_HEIGHT_MAX, defaultChatReadingSettings.lineHeight),
+    showStoryStatus: settings.showStoryStatus === undefined ? true : Boolean(settings.showStoryStatus),
     alwaysShowCommandSuggestions: Boolean(settings.alwaysShowCommandSuggestions),
     selectedCommandIds: Array.isArray(settings.selectedCommandIds)
       ? settings.selectedCommandIds.filter((item): item is string => typeof item === "string").slice(0, 2)
@@ -80,11 +84,11 @@ function normalizeSettings(settings: Partial<ChatReadingSettings>): ChatReadingS
   }
 }
 
-function readStringArray(raw: string | null): string[] {
+function readStringArray(raw: string | null, limit: number): string[] {
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, 2) : []
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").slice(0, limit) : []
   } catch {
     return []
   }

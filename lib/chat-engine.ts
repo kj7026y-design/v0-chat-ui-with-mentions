@@ -34,6 +34,7 @@ export interface ImageCommandStatusContext {
   currentGoal?: string
   worldDate?: string
   currentLocation?: string
+  weather?: string
   characterName?: string
   characterEmotion?: string
   characterStatus?: string
@@ -181,13 +182,55 @@ function buildFreeSampleImageUrl(characterName: string, context: ImageCommandCon
   return `https://image.pollinations.ai/prompt/${prompt}?${params.toString()}`
 }
 
-function buildStatusBar(characterName: string): string {
+function buildStatusBar(characterName: string, context?: ImageCommandContext): string {
+  const status = context?.status
+  const location = status?.currentLocation || "장소명"
+  const worldDate = status?.worldDate || "yy.mm.dd hh:mm"
+  const weather = status?.weather || "20˚/31˚ 맑음"
+  const characterEmotion = status?.characterEmotion || "알 수 없음"
+  const personaEmotion = status?.personaEmotion || "알 수 없음"
+  const characterStatus = status?.characterStatus || `${characterName}은 현재 상황을 살피고 있다.`
+  const nextFlow = status?.nextEventCondition || status?.currentGoal || status?.currentMission || "대화 흐름에 따라 다음 장면이 이어집니다."
+
   return [
-    "📍장소: 무너진 왕성 | 📅일시: 26.06.19 21:30 | 🌡️날씨 : 20˚/31˚ 맑음",
+    `📍장소: ${location} | 📅일시: ${worldDate} | 🌡️날씨 : ${weather}`,
     "💓호감도: 62000/100000",
+    `🎭감정: ${characterName} ${characterEmotion} · ${status?.personaName || "나"} ${personaEmotion}`,
     "💬속마음",
-    `- ${characterName}은 당신이 자신을 두려워하지 않는 이유를 계속 생각하고 있다.`,
+    `- ${characterStatus}`,
+    `➡️다음 흐름: ${nextFlow}`,
   ].join("\n")
+}
+
+function buildPhoneCommandContent(characterName: string, context?: ImageCommandContext): string {
+  const status = context?.status
+  return [
+    "📱 휴대폰",
+    `알림: ${characterName}의 새 메시지를 기다리는 중`,
+    status?.currentLocation ? `현재 위치: ${status.currentLocation}` : "",
+    status?.worldDate ? `시간: ${status.worldDate}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+function buildSnsCommandContent(characterName: string, context?: ImageCommandContext): string {
+  const status = context?.status
+  const mood = status?.characterEmotion || "묘한 분위기"
+  return [
+    "💬 SNS",
+    `${characterName} 관련 게시글이 조용히 올라오고 있다.`,
+    `실시간 분위기: ${mood}`,
+    status?.nextEventCondition ? `화제: ${status.nextEventCondition}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+function buildAudienceReactionContent(context?: ImageCommandContext): string {
+  const status = context?.status
+  return [
+    "👀 시청자 반응",
+    `- 지금 장면 분위기 좋다.`,
+    status?.characterEmotion ? `- 캐릭터 감정이 ${status.characterEmotion} 쪽으로 움직이는 중.` : "",
+    status?.currentGoal || status?.currentMission ? `- 목표가 분명해서 다음 대화가 궁금해진다.` : "",
+  ].filter(Boolean).join("\n")
 }
 
 function pick<T>(arr: T[]): T {
@@ -519,13 +562,49 @@ export async function runCommand(
 ): Promise<CommandResult> {
   const normalized = command.replace(/^\//, "").trim()
 
+  if (normalized === "휴대폰") {
+    return {
+      kind: "message",
+      message: {
+        id: makeId(),
+        type: "status",
+        content: buildPhoneCommandContent(characterName, context),
+        timestamp: new Date(),
+      },
+    }
+  }
+
+  if (normalized === "SNS") {
+    return {
+      kind: "message",
+      message: {
+        id: makeId(),
+        type: "status",
+        content: buildSnsCommandContent(characterName, context),
+        timestamp: new Date(),
+      },
+    }
+  }
+
+  if (normalized === "시청자반응") {
+    return {
+      kind: "message",
+      message: {
+        id: makeId(),
+        type: "status",
+        content: buildAudienceReactionContent(context),
+        timestamp: new Date(),
+      },
+    }
+  }
+
   if (normalized === "상태바") {
     return {
       kind: "message",
       message: {
         id: makeId(),
         type: "status",
-        content: buildStatusBar(characterName),
+        content: buildStatusBar(characterName, context),
         timestamp: new Date(),
       },
     }
@@ -558,6 +637,7 @@ export async function runCommand(
 
   if (normalized === "이미지") {
     await new Promise((resolve) => setTimeout(resolve, 300))
+    const prompt = buildImagePrompt(characterName, context)
     return {
       kind: "message",
       message: {
@@ -566,6 +646,7 @@ export async function runCommand(
         content: "",
         imageUrl: buildFreeSampleImageUrl(characterName, context),
         imageName: "무료 샘플 이미지",
+        originalContent: prompt,
         timestamp: new Date(),
       },
     }

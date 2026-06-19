@@ -96,7 +96,7 @@ export interface Branch {
 export const CREDIT_COSTS = {
   message: 1,
   branch: 3,
-  image: 10,
+  image: 1,
 } as const
 
 export interface Message {

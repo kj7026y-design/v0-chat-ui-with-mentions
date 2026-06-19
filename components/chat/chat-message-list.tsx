@@ -145,8 +145,6 @@ interface ChatMessageListProps {
   disabled?: boolean
   textSize?: number
   lineHeight?: number
-  alwaysShowCommandSuggestions?: boolean
-  selectedCommandIds?: string[]
 }
 
 export function ChatMessageList({ 
@@ -166,11 +164,7 @@ export function ChatMessageList({
   disabled = false,
   textSize = 16,
   lineHeight = 1.5,
-  alwaysShowCommandSuggestions = false,
-  selectedCommandIds = [],
 }: ChatMessageListProps) {
-  void alwaysShowCommandSuggestions
-  void selectedCommandIds
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [internalChatTheme, setInternalChatTheme] = useState<ChatThemeId>("system")
@@ -216,7 +210,6 @@ export function ChatMessageList({
   }
 
   const themeConfig = getActualThemeConfig()
-
   // Bubble style rendering
   return (
     <div className="flex flex-col gap-3 px-4 py-4 pb-44">
@@ -265,7 +258,6 @@ export function ChatMessageList({
           <BubbleTypingIndicator label={typingLabel} />
         )
       )}
-
       {/* Scroll anchor */}
       <div ref={messagesEndRef} />
     </div>

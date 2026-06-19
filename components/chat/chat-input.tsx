@@ -27,6 +27,7 @@ interface ChatInputProps {
   characters?: ChatInputCharacter[]
   disabled?: boolean
   insertTextRequest?: { id: number; text: string } | null
+  imageGenerationNotice?: string
 }
 
 // Character targets for mentions
@@ -124,7 +125,7 @@ function renderHighlightedInput(value: string, characters: ChatInputCharacter[])
   return parts
 }
 
-export function ChatInput({ onSendMessage, onCommand, characters, disabled = false, insertTextRequest }: ChatInputProps) {
+export function ChatInput({ onSendMessage, onCommand, characters, disabled = false, insertTextRequest, imageGenerationNotice }: ChatInputProps) {
   const mentionCharacters = characters?.length ? characters : MENTION_TARGETS
   const [input, setInput] = useState("")
   const [showCommands, setShowCommands] = useState(false)
@@ -609,6 +610,11 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         >
           <ImageIcon className="w-4 h-4" />
         </button>
+        {imageGenerationNotice && (
+          <span className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
+            {imageGenerationNotice}
+          </span>
+        )}
         <button
           ref={commandButtonRef}
           type="button"
