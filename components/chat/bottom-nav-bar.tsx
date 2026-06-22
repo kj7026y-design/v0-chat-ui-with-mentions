@@ -15,6 +15,9 @@ const navItems = [
 
 export function BottomNavBar() {
   const pathname = usePathname()
+  const isChatRoom = /^\/chat\/[^/]+$/.test(pathname ?? "")
+
+  if (isChatRoom) return null
 
   return (
     <nav className="bg-background backdrop-blur-md border-t border-border">

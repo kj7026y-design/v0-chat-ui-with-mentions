@@ -3,10 +3,18 @@
 import { useState, useEffect, type CSSProperties, type ReactNode, type RefObject } from "react"
 import { useTheme } from "@/components/theme-provider"
 import { type ChatMessage } from "@/lib/chat-types"
+import { parseMessageSegments, shouldRenderMessageSegments, type MessageSegment } from "@/lib/message-segments"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
+
+type ChatMessageCharacterProfile = {
+  id: string
+  name: string
+  emoji?: string
+  avatarUrl?: string
+}
 
 interface ChatThemeConfig {
   id: ChatThemeId
@@ -128,6 +136,68 @@ function getEditTargetMessage(message: ChatMessage, messages: ChatMessage[]) {
     ) ?? message
 }
 
+function isAssistantExtraMessage(message: ChatMessage) {
+  if (message.type !== "status" || message.isGenerationError || !message.turnId) return false
+  return /^(📱 휴대폰|💬 SNS|👀 시청자 반응)/.test(message.content.trim())
+}
+
+function getAssistantExtraMessages(message: ChatMessage, messages: ChatMessage[], index: number) {
+  if (message.type !== "ai" || !message.turnId) return []
+
+  const extras: ChatMessage[] = []
+  for (let nextIndex = index + 1; nextIndex < messages.length; nextIndex += 1) {
+    const nextMessage = messages[nextIndex]
+    if (nextMessage.turnId !== message.turnId) break
+    if (isAssistantExtraMessage(nextMessage)) {
+      extras.push(nextMessage)
+    }
+  }
+  return extras
+}
+
+function isGroupedAssistantExtra(message: ChatMessage, messages: ChatMessage[], index: number) {
+  if (!isAssistantExtraMessage(message)) return false
+  return messages
+    .slice(0, index)
+    .some((item) => item.type === "ai" && item.turnId === message.turnId)
+}
+
+function getSpeakerProfile(message: ChatMessage, characters: ChatMessageCharacterProfile[]) {
+  return characters.find((character) => {
+    if (message.speakerId && character.id === message.speakerId) return true
+    if (message.speakerName && character.name === message.speakerName) return true
+    return false
+  })
+}
+
+function MessageAvatar({
+  imageUrl,
+  fallback,
+  alt,
+  className,
+}: {
+  imageUrl?: string
+  fallback: string
+  alt: string
+  className?: string
+}) {
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt={alt}
+        className={cn("shrink-0 rounded-full bg-secondary object-cover", className)}
+      />
+    )
+  }
+
+  return (
+    <div className={cn("flex shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground", className)}>
+      {fallback}
+    </div>
+  )
+}
+
 interface ChatMessageListProps {
   messages: ChatMessage[]
   isTyping: boolean
@@ -145,6 +215,7 @@ interface ChatMessageListProps {
   disabled?: boolean
   textSize?: number
   lineHeight?: number
+  characters?: ChatMessageCharacterProfile[]
 }
 
 export function ChatMessageList({ 
@@ -164,6 +235,7 @@ export function ChatMessageList({
   disabled = false,
   textSize = 16,
   lineHeight = 1.5,
+  characters = [],
 }: ChatMessageListProps) {
   const { resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
@@ -215,11 +287,14 @@ export function ChatMessageList({
     <div className="flex flex-col gap-3 px-4 py-4 pb-44">
       {messages.map((message, index) => (
         (() => {
+          if (isGroupedAssistantExtra(message, messages, index)) return null
           const editTarget = getEditTargetMessage(message, messages)
+          const extraMessages = getAssistantExtraMessages(message, messages, index)
           return (
             <BubbleMessageBubble
               key={message.id}
               message={message}
+              extraMessages={extraMessages}
               onRewrite={onRewriteMessage}
               onRetry={onRetryFailedMessage}
               onDelete={onDeleteMessage}
@@ -228,10 +303,11 @@ export function ChatMessageList({
               themeConfig={themeConfig}
               textSize={textSize}
               lineHeight={lineHeight}
+              characters={characters}
               isLatest={index === messages.length - 1}
               canBranch={
                 (message.type === "ai" || message.type === "status" || message.type === "inner-thought") &&
-                (!message.turnId || messages[index + 1]?.turnId !== message.turnId)
+                (!message.turnId || messages[index + 1 + extraMessages.length]?.turnId !== message.turnId)
               }
               editInitialContent={editTarget.content}
               isEditing={editingMessageId === message.id}
@@ -270,6 +346,7 @@ export function ChatMessageList({
 
 interface BubbleMessageBubbleProps {
   message: ChatMessage
+  extraMessages?: ChatMessage[]
   onRewrite?: (messageId: string) => void
   onRetry?: (messageId: string) => void
   onDelete?: (messageId: string) => void
@@ -278,6 +355,7 @@ interface BubbleMessageBubbleProps {
   themeConfig: ChatThemeConfig
   textSize: number
   lineHeight: number
+  characters: ChatMessageCharacterProfile[]
   isLatest: boolean
   canBranch: boolean
   editInitialContent: string
@@ -290,6 +368,7 @@ interface BubbleMessageBubbleProps {
 
 function BubbleMessageBubble({
   message,
+  extraMessages = [],
   onRewrite,
   onRetry,
   onDelete,
@@ -298,6 +377,7 @@ function BubbleMessageBubble({
   themeConfig,
   textSize,
   lineHeight,
+  characters,
   isLatest,
   canBranch,
   editInitialContent,
@@ -310,12 +390,13 @@ function BubbleMessageBubble({
   const [isBranching, setIsBranching] = useState(false)
   const [editDraft, setEditDraft] = useState(editInitialContent)
   const [imageLoadFailed, setImageLoadFailed] = useState(false)
-  const isCharacterLine = message.isUserAuthoredCharacterLine && message.speakerType === "character"
+  const isCharacterLine = Boolean(message.isUserAuthoredCharacterLine && message.speakerType === "character")
   const isUser = message.type === "user" && !isCharacterLine
   const isAI = message.type === "ai"
   const isEvent = message.type === "event"
   const isInnerThought = message.type === "inner-thought"
   const isStatus = message.type === "status"
+  const speakerProfile = getSpeakerProfile(message, characters)
 
   useEffect(() => {
     if (isEditing) setEditDraft(editInitialContent)
@@ -439,6 +520,68 @@ function BubbleMessageBubble({
     "--mention-text": mentionStyle.text,
     "--mention-border": mentionStyle.border,
   } as CSSProperties
+  const segments = parseMessageSegments(message)
+  const shouldRenderSegments = !message.imageUrl && shouldRenderMessageSegments(message, segments)
+
+  if (shouldRenderSegments) {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <AssistantSegmentedMessage
+          message={message}
+          segments={segments}
+          mentionNames={mentionNames}
+          themeConfig={themeConfig}
+          textSize={textSize}
+          lineHeight={lineHeight}
+          isEdited={Boolean(isEdited)}
+          isCharacterLine={isCharacterLine}
+          extraMessages={extraMessages}
+          avatarUrl={speakerProfile?.avatarUrl}
+          avatarFallback={speakerProfile?.emoji}
+        />
+
+        {isEditing && (
+          <EditMessageForm
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            disabled={disabled}
+            isUser={false}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
+          />
+        )}
+
+        {isLatest && (isAI || isCharacterLine) && !isEditing && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+            <AuthorTools
+              messageId={message.id}
+              onRewrite={onRewrite}
+              onEdit={onStartEdit}
+              onDelete={onDelete}
+          isEdited={isEdited}
+              canRewrite={isAI}
+              disabled={disabled}
+            />
+          </div>
+        )}
+
+        {canBranch && !isEditing && (
+          <BranchButton
+            disabled={disabled}
+            isBranching={isBranching}
+            onClick={() => {
+              if (disabled) return
+              setIsBranching(true)
+              setTimeout(() => {
+                onBranch?.(message.id)
+                setIsBranching(false)
+              }, 800)
+            }}
+          />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div 
@@ -446,9 +589,12 @@ function BubbleMessageBubble({
     >
       <div className={cn("relative flex w-full", isUser ? "justify-end" : "justify-start")}>
         {isCharacterLine && (
-          <div className="mr-2 mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs">
-            {message.speakerName?.slice(0, 1) ?? "?"}
-          </div>
+          <MessageAvatar
+            className="mr-2 mt-1 h-8 w-8 text-xs"
+            imageUrl={speakerProfile?.avatarUrl}
+            fallback={speakerProfile?.emoji ?? message.speakerName?.slice(0, 1) ?? "?"}
+            alt={message.speakerName ?? "캐릭터"}
+          />
         )}
         <div
           className={cn(
@@ -501,40 +647,20 @@ function BubbleMessageBubble({
       </div>
 
       {isEditing && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (disabled) return
-            onSaveEdit(editDraft)
-          }}
-          className={cn("w-full max-w-[82%] space-y-2 sm:max-w-[80%]", isUser && "ml-auto")}
-        >
-          <textarea
-            value={editDraft}
-            onChange={(event) => setEditDraft(event.target.value)}
-            rows={3}
-            autoFocus
-            disabled={disabled}
-            className="w-full resize-none rounded-xl border border-border bg-input px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
-          />
-          <div className={cn("flex items-center gap-2", isUser ? "justify-end" : "justify-start")}>
-            <button
-              type="button"
-              onClick={onCancelEdit}
-              disabled={disabled}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              취소
-            </button>
-            <button
-              type="submit"
-              disabled={disabled || !editDraft.trim()}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
-            >
-              저장
-            </button>
-          </div>
-        </form>
+        <EditMessageForm
+          editDraft={editDraft}
+          setEditDraft={setEditDraft}
+          disabled={disabled}
+          isUser={isUser}
+          onCancelEdit={onCancelEdit}
+          onSaveEdit={onSaveEdit}
+        />
+      )}
+
+      {isAI && extraMessages.length > 0 && (
+        <div className="w-full max-w-[82%] sm:max-w-[80%]">
+          <AssistantExtraSection messages={extraMessages} textSize={textSize} lineHeight={lineHeight} />
+        </div>
       )}
       
       {/* Author Tools - only the latest message can be edited or deleted. */}
@@ -568,6 +694,265 @@ function BubbleMessageBubble({
         />
       )}
     </div>
+  )
+}
+
+function AssistantSegmentedMessage({
+  message,
+  segments,
+  extraMessages,
+  avatarUrl,
+  avatarFallback,
+  mentionNames,
+  themeConfig,
+  textSize,
+  lineHeight,
+  isEdited,
+  isCharacterLine,
+}: {
+  message: ChatMessage
+  segments: MessageSegment[]
+  extraMessages: ChatMessage[]
+  avatarUrl?: string
+  avatarFallback?: string
+  mentionNames: string[]
+  themeConfig: ChatThemeConfig
+  textSize: number
+  lineHeight: number
+  isEdited?: boolean
+  isCharacterLine: boolean
+}) {
+  const firstDialogue = segments.find(
+    (segment): segment is Extract<MessageSegment, { type: "dialogue" }> => segment.type === "dialogue",
+  )
+  const speakerName = message.speakerName ?? firstDialogue?.speakerName
+  const avatarLabel = speakerName?.slice(0, 1) ?? "AI"
+
+  return (
+    <div className="assistant-message-group w-full max-w-[92%] pb-1">
+      <div className="assistant-message-header mb-2 flex items-center gap-2">
+        <MessageAvatar
+          className="h-9 w-9 text-xs font-semibold"
+          imageUrl={avatarUrl}
+          fallback={avatarFallback ?? avatarLabel}
+          alt={speakerName ?? "AI"}
+        />
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-foreground">{speakerName ?? "AI"}</span>
+            {isCharacterLine && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                직접 작성
+              </span>
+            )}
+            {isEdited && !isCharacterLine && (
+              <span className="h-2 w-2 rounded-full bg-purple-500" aria-label="수정됨" />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="assistant-message-body flex w-full flex-col gap-2.5">
+        {segments.map((segment, index) => (
+          <MessageSegmentBlock
+            key={`${message.id}-segment-${index}`}
+            segment={segment}
+            mentionNames={mentionNames}
+            themeConfig={themeConfig}
+            textSize={textSize}
+            lineHeight={lineHeight}
+          />
+        ))}
+        {extraMessages.length > 0 && (
+          <AssistantExtraSection messages={extraMessages} textSize={textSize} lineHeight={lineHeight} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AssistantExtraSection({
+  messages,
+  textSize,
+  lineHeight,
+}: {
+  messages: ChatMessage[]
+  textSize: number
+  lineHeight: number
+}) {
+  return (
+    <div className="mt-1.5 w-full max-w-[92%] space-y-2">
+      <p className="px-1 text-[11px] font-semibold text-muted-foreground">부가 정보</p>
+      <div className="space-y-2">
+        {messages.map((message) => (
+          <AssistantExtraCard
+            key={message.id}
+            message={message}
+            textSize={Math.max(12, textSize - 2)}
+            lineHeight={Math.max(1.35, lineHeight)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AssistantExtraCard({
+  message,
+  textSize,
+  lineHeight,
+}: {
+  message: ChatMessage
+  textSize: number
+  lineHeight: number
+}) {
+  const lines = message.content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const titleLine = lines[0] ?? "부가 정보"
+  const iconMatch = titleLine.match(/^(\S+)\s*(.*)$/)
+  const icon = iconMatch?.[1] ?? "•"
+  const title = iconMatch?.[2] || titleLine
+  const bodyLines = lines.slice(1)
+
+  return (
+    <div
+      className="w-full rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-muted-foreground"
+      style={{ fontSize: textSize, lineHeight }}
+    >
+      <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground/80">
+        <span className="text-sm leading-none">{icon}</span>
+        <span>{title}</span>
+      </div>
+      {bodyLines.length > 0 && (
+        <div className="space-y-0.5">
+          {bodyLines.map((line, index) => (
+            <p key={`${message.id}-extra-line-${index}`} className="break-words [word-break:keep-all]">
+              {line}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MessageSegmentBlock({
+  segment,
+  mentionNames,
+  themeConfig,
+  textSize,
+  lineHeight,
+}: {
+  segment: MessageSegment
+  mentionNames: string[]
+  themeConfig: ChatThemeConfig
+  textSize: number
+  lineHeight: number
+}) {
+  if (segment.type === "narration") {
+    const narrationMentionStyle = {
+      bg: "var(--muted)",
+      text: "var(--foreground)",
+      border: "var(--border)",
+    }
+    const narrationStyle = {
+      color: "var(--muted-foreground)",
+      fontSize: textSize,
+      lineHeight,
+      "--mention-bg": narrationMentionStyle.bg,
+      "--mention-text": narrationMentionStyle.text,
+      "--mention-border": narrationMentionStyle.border,
+    } as CSSProperties
+
+    return (
+      <p
+        className="whitespace-pre-wrap break-words py-1 [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+        style={narrationStyle}
+      >
+        {renderHighlightedMentions(segment.content, mentionNames)}
+      </p>
+    )
+  }
+
+  const bubbleColor = themeConfig.preview.aiBubble
+  const bubbleTextColor = themeConfig.preview.aiText
+  const mentionStyle = getMentionStyle(bubbleColor)
+  const bubbleStyle = {
+    backgroundColor: bubbleColor,
+    color: bubbleTextColor,
+    "--mention-bg": mentionStyle.bg,
+    "--mention-text": mentionStyle.text,
+    "--mention-border": mentionStyle.border,
+  } as CSSProperties
+  return (
+    <div className="relative flex w-full justify-start">
+      <div
+        className="relative w-fit max-w-[92%] rounded-2xl px-4 py-2.5 sm:max-w-[88%]"
+        style={bubbleStyle}
+      >
+        <p
+          className="whitespace-pre-wrap break-words [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+          style={{ fontSize: textSize, lineHeight }}
+        >
+          {renderHighlightedMentions(segment.content, mentionNames)}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function EditMessageForm({
+  editDraft,
+  setEditDraft,
+  disabled,
+  isUser,
+  onCancelEdit,
+  onSaveEdit,
+}: {
+  editDraft: string
+  setEditDraft: (value: string) => void
+  disabled: boolean
+  isUser: boolean
+  onCancelEdit: () => void
+  onSaveEdit: (nextContent: string) => void
+}) {
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (disabled) return
+        onSaveEdit(editDraft)
+      }}
+      className={cn("w-full max-w-[82%] space-y-2 sm:max-w-[80%]", isUser && "ml-auto")}
+    >
+      <textarea
+        value={editDraft}
+        onChange={(event) => setEditDraft(event.target.value)}
+        rows={3}
+        autoFocus
+        disabled={disabled}
+        className="w-full resize-none rounded-xl border border-border bg-input px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
+      />
+      <div className={cn("flex items-center gap-2", isUser ? "justify-end" : "justify-start")}>
+        <button
+          type="button"
+          onClick={onCancelEdit}
+          disabled={disabled}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          취소
+        </button>
+        <button
+          type="submit"
+          disabled={disabled || !editDraft.trim()}
+          className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50"
+        >
+          저장
+        </button>
+      </div>
+    </form>
   )
 }
 

@@ -1,4 +1,5 @@
 import { type ChatMessage } from "@/lib/chat-types"
+import { DEFAULT_CHAT_MODEL_ID, DEFAULT_MIN_ANSWER_CHARS, type ChatModelId } from "@/lib/chat-models"
 import type { StoryCharacter, StoryPersona, StoryWork, StoryWorld } from "@/lib/storychat-storage"
 
 /**
@@ -51,6 +52,7 @@ export interface ImageCommandContext {
   persona?: StoryPersona
   status?: ImageCommandStatusContext
   recentMessages?: ChatMessage[]
+  memoryMemo?: string
 }
 
 export type AssistantReplyContext = ImageCommandContext
@@ -406,16 +408,31 @@ function buildAssistantSystemPrompt(context?: AssistantReplyContext) {
     status?.characterEmotion ? `${characterName} 감정: ${status.characterEmotion}` : "",
     status?.personaEmotion ? `${personaName} 감정: ${status.personaEmotion}` : "",
   ].filter(Boolean).join(" / ")
-  const sceneDialoguePairCount = 2 + Math.floor(Math.random() * 3)
+  const memoryMemo = compact(context?.memoryMemo)
 
   return [
     "너는 StoryChat의 역할극 채팅 AI다.",
     `주 캐릭터는 ${characterName}이고, 사용자의 자아는 ${personaName}이다.`,
     "사용자의 마지막 행동과 대사에 이어서 캐릭터의 자연스러운 반응을 한국어로 작성한다.",
-    "설정표처럼 설명하지 말고, 채팅 말풍선에 들어갈 본문만 작성한다.",
-    `답변은 반드시 '현재 상황에 대한 소설식 설명 한 문장' 다음 줄에 '캐릭터의 대사 한 줄'을 쓰는 패턴을 정확히 ${sceneDialoguePairCount}번 반복한다.`,
-    "대사는 반드시 큰따옴표로 감싼다.",
-    "상황 설명에는 따옴표를 쓰지 않는다.",
+    "설정표처럼 설명하지 말고, 채팅에 표시될 본문만 작성한다.",
+    `답변은 최소 ${DEFAULT_MIN_ANSWER_CHARS}자 이상 작성한다. 이 길이는 서술, 행동 묘사, 대사를 모두 합친 전체 길이다.`,
+    "장면의 흐름에 맞춰 서술과 대사의 비율을 자연스럽게 조절한다.",
+    "감정 대화에서는 대사를 더 늘리고, 액션이나 배경 설명이 중요한 장면에서는 서술을 더 늘린다.",
+    "갈등, 고백, 비밀 고백 장면에서는 대사와 침묵/행동 묘사를 균형 있게 섞는다.",
+    "세계관 설명 장면에서는 설명을 늘리되 캐릭터가 자연스럽게 말하는 방식으로 일부 대사를 섞는다.",
+    "일상이나 가벼운 장면에서는 대사를 조금 더 짧고 자연스럽게 유지한다.",
+    "매 답변을 고정된 설명-대사 반복 구조로 만들지 않는다.",
+    "설명-대사-설명-대사 패턴을 억지로 3번 반복하지 않는다.",
+    "장면에 필요한 만큼만 대사를 넣고, 필요한 만큼만 서술한다.",
+    "답변은 웹소설처럼 이어지되, 캐릭터 대사는 채팅 말풍선에 어울리도록 너무 장황하지 않게 한다.",
+    "장면 설명, 행동 묘사, 표정 묘사는 따옴표 없이 쓴다.",
+    "캐릭터가 말하는 대사는 반드시 큰따옴표 안에 쓴다.",
+    "여러 캐릭터가 말하는 경우에는 가능하면 캐릭터명과 주변 서술로 구분한다.",
+    "[설명], [대사], 설명:, 대사:, 번호, 제목, 마크다운 목록 같은 라벨이나 구조는 절대 쓰지 않는다.",
+    "대사만 길게 늘어놓지 말고, 서술만 1100자 이상 늘어놓고 대사를 거의 안 쓰는 방식도 피한다.",
+    memoryMemo
+      ? `[기억 메모]\n${memoryMemo}\n기억 메모는 사용자가 작품, 캐릭터, 관계 설정을 덮어쓰기 위해 입력한 정보다. 기존 작품/캐릭터/사용자 설정과 충돌하면 기억 메모를 우선한다.`
+      : "",
     "사용자의 대사나 행동을 새로 대신 작성하지 말고, 사용자가 이미 한 행동에 대한 캐릭터의 반응만 이어서 쓴다.",
     "번호, 제목, 화자명, 괄호 설명, 마크다운 목록은 쓰지 않는다.",
     "캐릭터의 말투와 관계성을 유지하고, 세계관을 깨는 메타 발언을 하지 않는다.",
@@ -462,6 +479,7 @@ async function generatePollinationsReply(
   userContent: string,
   introContext?: ChatIntroContext | null,
   context?: AssistantReplyContext,
+  modelId: ChatModelId = DEFAULT_CHAT_MODEL_ID,
 ) {
   const messages = buildAssistantMessages(history, userContent, introContext, context)
   const systemPrompt = messages.find((message) => message.role === "system")?.content ?? buildAssistantSystemPrompt(context)
@@ -469,12 +487,13 @@ async function generatePollinationsReply(
     .filter((message) => message.role !== "system")
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n\n")
-  const response = await fetch("/api/free-chat", {
+  const response = await fetch("/api/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
+      modelId,
       messages,
       systemPrompt,
       fallbackPrompt,
@@ -488,7 +507,7 @@ async function generatePollinationsReply(
     return content
   }
 
-  throw new Error(`Free chat API failed: ${response.status}`)
+  throw new Error(`Chat API failed: ${response.status}`)
 }
 
 /** 유저 메시지 객체 생성 */
@@ -538,13 +557,16 @@ export async function generateAssistantReply(
   _userContent: string,
   introContext?: ChatIntroContext | null,
   context?: AssistantReplyContext,
+  modelId: ChatModelId = DEFAULT_CHAT_MODEL_ID,
 ): Promise<ChatMessage> {
-  const content = await generatePollinationsReply(history, _userContent, introContext, context)
+  const content = await generatePollinationsReply(history, _userContent, introContext, context, modelId)
   return {
     id: makeId(),
     type: "ai",
     content,
     timestamp: new Date(),
+    speakerId: context?.character?.id,
+    speakerName: context?.character?.name || context?.status?.characterName,
   }
 }
 

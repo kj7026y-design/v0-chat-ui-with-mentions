@@ -518,7 +518,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const shouldShowAllMention = contextMode === "mention" && "모두".includes(mentionQuery.trim())
 
   return (
-    <div className="relative px-4 pt-3 pb-3 bg-background border-t border-border">
+    <div className="relative mx-3 mb-[calc(0.75rem+env(safe-area-inset-bottom))] rounded-3xl border border-border/80 bg-background/88 px-3 pb-3 pt-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -534,7 +534,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           ref={commandPopupRef}
           role="dialog"
           aria-label="명령어"
-          className="absolute bottom-full left-4 right-4 z-40 mb-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
+          className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
         >
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <p className="text-xs font-semibold text-foreground">명령어</p>
@@ -595,7 +595,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         onMouseLeave={stopQuickBarDrag}
         onClickCapture={handleQuickBarClickCapture}
         className={cn(
-          "flex items-center gap-2 mb-2 overflow-x-auto scrollbar-hide pb-1 select-none",
+          "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none",
           isQuickBarDragging ? "cursor-grabbing" : "cursor-grab",
         )}
       >
@@ -604,7 +604,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={handleImageClick}
           disabled={disabled}
-          className="flex h-8 min-w-10 items-center justify-center rounded-full border border-border bg-secondary px-3 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 min-w-9 items-center justify-center rounded-full border border-border bg-secondary/80 px-2.5 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="이미지 첨부"
           title="이미지 첨부"
         >
@@ -620,21 +620,21 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={handleCommandClick}
           disabled={disabled}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-sm whitespace-nowrap bg-secondary text-secondary-foreground hover:bg-accent transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-secondary/80 px-2.5 text-xs text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Zap className="w-4 h-4" />
           <span>명령어</span>
         </button>
 
         {/* Divider */}
-        <div className="w-px h-5 bg-border flex-shrink-0" />
+        <div className="h-4 w-px flex-shrink-0 bg-border" />
 
         <button
           ref={mentionButtonRef}
           type="button"
           onClick={() => openCharacterContext("mention")}
           disabled={disabled}
-          className="flex h-8 min-w-10 items-center justify-center rounded-full border border-border bg-secondary px-3 text-sm font-semibold text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 min-w-9 items-center justify-center rounded-full border border-border bg-secondary/80 px-2.5 text-xs font-semibold text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="캐릭터 멘션하기"
           title="캐릭터 멘션하기"
         >
@@ -645,7 +645,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={() => openCharacterContext("speech")}
           disabled={disabled}
-          className="flex h-8 min-w-10 items-center justify-center rounded-full border border-border bg-secondary px-3 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 min-w-9 items-center justify-center rounded-full border border-border bg-secondary/80 px-2.5 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="캐릭터 대사 삽입하기"
           title="캐릭터 대사 삽입하기"
         >
@@ -678,10 +678,10 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
 
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
-        <div className="relative flex flex-1 items-end gap-2 rounded-2xl border border-border bg-input px-4 py-3">
+        <div className="relative flex flex-1 items-end gap-2 rounded-2xl border border-border/80 bg-input/95 px-3 py-2.5">
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-4 bottom-3 top-3 overflow-hidden whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground [word-break:keep-all]"
+            className="pointer-events-none absolute inset-x-3 bottom-2.5 top-2.5 overflow-hidden whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground [word-break:keep-all]"
           >
             <div style={{ transform: `translateY(-${inputScrollTop}px)` }}>
               {renderHighlightedInput(input, mentionCharacters)}
@@ -710,7 +710,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="submit"
           disabled={disabled || (!input.trim() && !attachedImage)}
           className={cn(
-            "flex items-center justify-center w-11 h-11 rounded-full transition-colors flex-shrink-0",
+            "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors",
             input.trim() || attachedImage
               ? "bg-primary text-primary-foreground hover:bg-primary/90"
               : "bg-secondary text-muted-foreground border border-border"

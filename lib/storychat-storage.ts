@@ -4,6 +4,11 @@ export const STORYCHAT_LIBRARY_KEY = "storychat_library"
 
 export type StoryCharacterGender = "male" | "female" | "nonbinary" | "unknown" | "custom"
 
+function createPersonaAvatarUrl(label: string, background: string, foreground: string) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"><rect width="240" height="240" rx="56" fill="${background}"/><circle cx="120" cy="92" r="42" fill="${foreground}" opacity="0.92"/><path d="M48 206c10-42 39-66 72-66s62 24 72 66" fill="${foreground}" opacity="0.92"/><text x="120" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="54" font-weight="700" fill="${background}">${label}</text></svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
 export interface StoryCharacter {
   id: string
   name: string
@@ -107,6 +112,7 @@ export interface StoryPersona {
   secret: string
   preferredDevelopments: string
   forbiddenDevelopments: string
+  avatarUrl?: string
   createdAt: string
 }
 
@@ -446,6 +452,7 @@ export const defaultLibrary: StoryChatLibrary = {
       secret: "왕국 몰락의 단서를 알고 있다.",
       preferredDevelopments: "신뢰를 쌓으며 진실에 접근",
       forbiddenDevelopments: "무력한 방관자 전개",
+      avatarUrl: createPersonaAvatarUrl("나", "#334155", "#f8fafc"),
       createdAt: "2024.03.15",
     },
     {
@@ -463,6 +470,7 @@ export const defaultLibrary: StoryChatLibrary = {
       secret: "어릴 적 같은 문양을 본 적이 있다.",
       preferredDevelopments: "일상 속 미스터리",
       forbiddenDevelopments: "갑작스러운 먼치킨화",
+      avatarUrl: createPersonaAvatarUrl("민", "#7c3aed", "#f5f3ff"),
       createdAt: "2024.03.10",
     },
     {
@@ -480,6 +488,7 @@ export const defaultLibrary: StoryChatLibrary = {
       secret: "실종 탐사선의 생존자와 관련이 있다.",
       preferredDevelopments: "탐사와 선택 중심 전개",
       forbiddenDevelopments: "설명 없이 해결되는 전개",
+      avatarUrl: createPersonaAvatarUrl("아", "#0f766e", "#ecfeff"),
       createdAt: "2024.03.05",
     },
   ],
@@ -686,10 +695,12 @@ function normalizeStoredCharacter(character: StoryCharacter): StoryCharacter {
 }
 
 function normalizeStoredPersona(persona: StoryPersona): StoryPersona {
+  const defaultPersona = defaultLibrary.personas.find((item) => item.id === persona.id)
   return {
     ...persona,
     gender: persona.gender ?? "unknown",
     genderCustom: persona.genderCustom ?? "",
+    avatarUrl: persona.avatarUrl || defaultPersona?.avatarUrl || undefined,
   }
 }
 

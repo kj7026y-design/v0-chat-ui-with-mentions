@@ -1,13 +1,29 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { X, Clock, Palette, SlidersHorizontal, Image as ImageIcon, User, Trash2, LogOut, Check, Sun, Moon, MessageSquare, Send, Gem } from "lucide-react"
+import { X, Palette, SlidersHorizontal, Trash2, LogOut, Check, Sun, Moon, MessageSquare, Send, Gem } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/theme-provider"
 import { ConfirmModal } from "@/components/ui/app-modal"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  CHAT_MEMORY_MEMO_MAX_LENGTH,
+  getChatMemoryMemo,
+  normalizeChatMemoryMemo,
+  saveChatMemoryMemo,
+} from "@/lib/chat-memory-storage"
 import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage"
+import type { StoryPersona } from "@/lib/storychat-storage"
 import { AUTO_COMMAND_IDS, DEFAULT_COMMAND_SUGGESTION_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS } from "@/lib/chat-types"
+import { CHAT_MODELS, type ChatModelId } from "@/lib/chat-models"
 import {
   CHAT_LINE_HEIGHT_MAX,
   CHAT_LINE_HEIGHT_MIN,
@@ -91,7 +107,11 @@ interface ChatSettingsDrawerProps {
   characterEmoji: string
   chatId: string
   creditBalance?: number
+  selectedModelId: ChatModelId
+  currentPersona?: StoryPersona
+  modelFocusRequest?: number
   onChatThemeChange?: (theme: ChatThemeId) => void
+  onModelChange: (modelId: ChatModelId) => void
   onReadingSettingsChange?: (settings: ChatReadingSettings) => void
   onClearChat?: () => void
   onLeaveChat?: () => void
@@ -104,7 +124,11 @@ export function ChatSettingsDrawer({
   characterEmoji,
   chatId,
   creditBalance,
+  selectedModelId,
+  currentPersona,
+  modelFocusRequest = 0,
   onChatThemeChange,
+  onModelChange,
   onReadingSettingsChange,
   onClearChat,
   onLeaveChat,
@@ -120,7 +144,11 @@ export function ChatSettingsDrawer({
     selectedCommandIds: [],
   })
   const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([])
+  const [isMemoryMemoOpen, setIsMemoryMemoOpen] = useState(false)
+  const [memoryMemoDraft, setMemoryMemoDraft] = useState("")
+  const memoryTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
+  const modelSectionRef = useRef<HTMLDivElement>(null)
   const autoCommandOptions = SLASH_COMMANDS.filter((command) => AUTO_COMMAND_IDS.includes(command.id))
   const validSelectedCommandIds = readingSettings.selectedCommandIds.filter((id) =>
     autoCommandOptions.some((command) => command.id === id),
@@ -148,6 +176,14 @@ export function ChatSettingsDrawer({
       window.removeEventListener("storage", syncMedia)
     }
   }, [characterName, chatId])
+
+  useEffect(() => {
+    if (!isOpen || modelFocusRequest <= 0) return
+    const timer = window.setTimeout(() => {
+      modelSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 320)
+    return () => window.clearTimeout(timer)
+  }, [isOpen, modelFocusRequest])
 
   const handleChatThemeChange = (theme: ChatThemeId) => {
     setSelectedChatTheme(theme)
@@ -191,6 +227,32 @@ export function ChatSettingsDrawer({
     void mounted
     void resolvedTheme
     return themeConfig.preview
+  }
+
+  const openMemoryMemo = () => {
+    setMemoryMemoDraft(getChatMemoryMemo(chatId))
+    setIsMemoryMemoOpen(true)
+  }
+
+  const insertMemoryToken = (token: string) => {
+    const textarea = memoryTextareaRef.current
+    const selectionStart = textarea?.selectionStart ?? memoryMemoDraft.length
+    const selectionEnd = textarea?.selectionEnd ?? memoryMemoDraft.length
+    const nextValue = normalizeChatMemoryMemo(
+      `${memoryMemoDraft.slice(0, selectionStart)}${token}${memoryMemoDraft.slice(selectionEnd)}`,
+    )
+
+    setMemoryMemoDraft(nextValue)
+    window.requestAnimationFrame(() => {
+      textarea?.focus()
+      const nextCursor = Math.min(selectionStart + token.length, nextValue.length)
+      textarea?.setSelectionRange(nextCursor, nextCursor)
+    })
+  }
+
+  const saveMemoryMemo = () => {
+    saveChatMemoryMemo(chatId, memoryMemoDraft.trim())
+    setIsMemoryMemoOpen(false)
   }
 
   return (
@@ -246,13 +308,35 @@ export function ChatSettingsDrawer({
             </span>
           </Link>
 
+          <div className="grid grid-cols-3 gap-2">
+            <SettingsSquareLink
+              href={`/chat/${chatId}/media`}
+              label="갤러리"
+              onClick={onClose}
+              backgroundImage={sharedMedia[0]?.imageUrl}
+            />
+            <PersonaSquareButton
+              persona={currentPersona}
+              href={
+                currentPersona
+                  ? `/my-works?tab=personas&detailType=personas&detailId=${currentPersona.id}`
+                  : "/my-works?tab=personas"
+              }
+              onClick={onClose}
+            />
+            <div className="grid aspect-square min-h-[82px] gap-2">
+              <SettingsMiniLink href="/timeline" label="타임라인" onClick={onClose} />
+              <SettingsMiniButton label="기억 메모" onClick={openMemoryMemo} />
+            </div>
+          </div>
+
           <section className="space-y-3">
             <SectionTitle icon={<Palette className="h-4 w-4" />} title="채팅 표시" />
             <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-sm font-medium text-foreground">채팅 테마</p>
-                  <p className="text-[11px] text-muted-foreground">채팅방에만 적용되는 테마입니다.</p>
+                  <p className="text-[11px] text-muted-foreground">현재 채팅방에만 적용되는 테마입니다.</p>
                 </div>
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide">
                   {chatThemes.map((theme) => {
@@ -315,12 +399,73 @@ export function ChatSettingsDrawer({
           <section className="space-y-3">
             <SectionTitle icon={<SlidersHorizontal className="h-4 w-4" />} title="대화 보조" />
             <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
-              <ToggleRow
-                title="명령어 자동 실행"
-                description="선택한 명령어를 답변 뒤에 실행합니다."
-                checked={readingSettings.alwaysShowCommandSuggestions}
-                onClick={toggleAlwaysShowCommands}
-              />
+              <div ref={modelSectionRef} className="scroll-mt-20">
+                <div className="mb-2">
+                  <p className="text-sm font-medium text-foreground">AI 모델</p>
+                  <p className="text-[11px] text-muted-foreground">이 채팅방에서 사용할 답변 생성 모델을 선택합니다.</p>
+                </div>
+                <div className="grid gap-1.5">
+                  {CHAT_MODELS.map((model) => {
+                    const selected = selectedModelId === model.id
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => onModelChange(model.id)}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
+                          selected
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-background/50 text-muted-foreground hover:bg-accent",
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-semibold">{model.label}</span>
+                            {model.badge && (
+                              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {model.badge}
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-[11px]">{model.description}</p>
+                        </div>
+                        {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                      </button>
+                    )
+                  })}
+                </div>
+                {selectedModelId === "openai" && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    OpenAI 모델은 답변 생성 성공 시 크레딧이 더 많이 사용됩니다.
+                  </p>
+                )}
+              </div>
+              <div className="h-px bg-border/70" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">명령어 자동 실행</p>
+                  <p className="text-[11px] text-muted-foreground">선택한 명령어를 답변 뒤에 실행합니다.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAlwaysShowCommands}
+                  className={cn(
+                    "h-6 w-11 shrink-0 rounded-full border p-0.5 transition-colors",
+                    readingSettings.alwaysShowCommandSuggestions
+                      ? "border-blue-500 bg-blue-500 dark:border-sky-400 dark:bg-sky-500"
+                      : "border-border bg-border dark:bg-neutral-700",
+                  )}
+                  aria-pressed={readingSettings.alwaysShowCommandSuggestions}
+                >
+                  <span
+                    className={cn(
+                      "block h-5 w-5 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform dark:bg-white dark:ring-white/30",
+                      readingSettings.alwaysShowCommandSuggestions && "translate-x-5",
+                    )}
+                  />
+                </button>
+              </div>
               {readingSettings.alwaysShowCommandSuggestions && (
                 <div className="rounded-lg border border-border bg-background/50 px-2.5 py-2">
                   <div className="mb-1.5 flex items-center justify-between">
@@ -356,68 +501,12 @@ export function ChatSettingsDrawer({
                   </div>
                 </div>
               )}
-              <CompactInfoRow
-                icon={<User className="h-4 w-4" />}
-                title="현재 자아"
-                description="지은 · 22세 · 대학생"
-                action={
-                  <Link
-                    href="/my-works?tab=personas"
-                    onClick={onClose}
-                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
-                  >
-                    변경
-                  </Link>
-                }
-              />
             </div>
           </section>
 
-          <section className="space-y-3 pb-5">
-            <SectionTitle icon={<ImageIcon className="h-4 w-4" />} title="관리" />
+          <section className="pb-5">
             <div className="space-y-2 rounded-xl border border-border bg-muted/70 p-3">
-              <CompactInfoRow
-                icon={<ImageIcon className="h-4 w-4" />}
-                title="공유 미디어"
-                description={
-                  sharedMedia.length > 0
-                    ? `생성/업로드 이미지 ${sharedMedia.length}개`
-                    : "아직 공유된 미디어가 없어요."
-                }
-                action={
-                  <Link
-                    href={`/chat/${chatId}/media`}
-                    onClick={onClose}
-                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
-                  >
-                    전체 보기
-                  </Link>
-                }
-              />
-              {sharedMedia.length > 0 && (
-                <div className="flex gap-1.5 pl-8">
-                  {sharedMedia.slice(0, 3).map((media) => (
-                    <MediaThumb key={media.id} media={media} />
-                  ))}
-                </div>
-              )}
-
-              <CompactInfoRow
-                icon={<Clock className="h-4 w-4" />}
-                title="타임라인"
-                description="중요한 대화 흐름을 확인합니다."
-                action={
-                  <Link
-                    href="/timeline"
-                    onClick={onClose}
-                    className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-accent"
-                  >
-                    보기
-                  </Link>
-                }
-              />
-
-              <div className="border-t border-border pt-2">
+              <div>
                 <DangerRow
                   icon={<Trash2 className="h-4 w-4" />}
                   title="대화 초기화"
@@ -437,6 +526,79 @@ export function ChatSettingsDrawer({
           </section>
         </div>
       </div>
+      <Dialog open={isMemoryMemoOpen} onOpenChange={setIsMemoryMemoOpen}>
+        <DialogContent className="max-h-[86dvh] overflow-y-auto border-border bg-card sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>기억 메모</DialogTitle>
+            <DialogDescription>
+              작품이나 캐릭터 설정을 덮어쓰고 싶은 내용을 적어두면 다음 답변 생성에 우선 반영됩니다.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="rounded-md border border-border/70 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
+              <div className="mb-2 font-semibold text-foreground">작성 예시</div>
+              <pre className="whitespace-pre-wrap font-sans">{`#{유저} 정보
+- 30살
+
+#{유저}와 {캐릭터}의 관계
+- {유저}는 {캐릭터}와 친구이다.
+
+#이무기와 산신령의 관계
+- 산신령은 이무기가 선한일 100개를 하면 용으로 승격시켜 주기로 한다.`}</pre>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => insertMemoryToken("{유저}")}
+                className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                {"{유저}"} 입력
+              </button>
+              <button
+                type="button"
+                onClick={() => insertMemoryToken("{캐릭터}")}
+                className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                {"{캐릭터}"} 입력
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <textarea
+                ref={memoryTextareaRef}
+                value={memoryMemoDraft}
+                maxLength={CHAT_MEMORY_MEMO_MAX_LENGTH}
+                onChange={(event) => setMemoryMemoDraft(normalizeChatMemoryMemo(event.target.value))}
+                placeholder="#{유저} 정보&#10;- 30살&#10;&#10;#{유저}와 {캐릭터}의 관계&#10;- {유저}는 {캐릭터}와 친구이다."
+                className="min-h-[220px] w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary"
+              />
+              <div className="text-right text-xs text-muted-foreground">
+                {memoryMemoDraft.length}/{CHAT_MEMORY_MEMO_MAX_LENGTH}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMemoryMemoOpen(false)}
+              className="rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={saveMemoryMemo}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              저장
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmModal
         open={isLeaveConfirmOpen}
         title="채팅방 나가기"
@@ -459,6 +621,126 @@ function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string })
       <span className="text-muted-foreground">{icon}</span>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
     </div>
+  )
+}
+
+function SettingsSquareLink({
+  href,
+  label,
+  onClick,
+  backgroundImage,
+  icon,
+}: {
+  href: string
+  label: string
+  onClick: () => void
+  backgroundImage?: string
+  icon?: React.ReactNode
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className={cn(
+        "group relative flex aspect-square min-h-[72px] overflow-hidden rounded-lg border border-border bg-background/60 p-2 text-left transition-colors hover:bg-accent",
+        backgroundImage && "bg-cover bg-center",
+      )}
+      style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : undefined}
+    >
+      {backgroundImage && (
+        <span className="absolute inset-0 bg-black/35 transition-colors group-hover:bg-black/25" />
+      )}
+      <span
+        className={cn(
+          "relative mt-auto flex items-center gap-1.5 text-xs font-semibold",
+          backgroundImage ? "text-white drop-shadow" : "text-foreground",
+        )}
+      >
+        {icon}
+        {label}
+      </span>
+    </Link>
+  )
+}
+
+function SettingsMiniLink({
+  href,
+  label,
+  onClick,
+}: {
+  href: string
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="flex min-h-0 items-center justify-center rounded-xl border border-border bg-muted/40 px-2 text-center text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+    >
+      {label}
+    </Link>
+  )
+}
+
+function SettingsMiniButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-0 items-center justify-center rounded-xl border border-border bg-muted/40 px-2 text-center text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+    >
+      {label}
+    </button>
+  )
+}
+
+function PersonaSquareButton({
+  persona,
+  href,
+  onClick,
+}: {
+  persona?: StoryPersona
+  href: string
+  onClick: () => void
+}) {
+  const label = "현재 자아"
+  const fallback = persona?.name?.trim()?.slice(0, 1) || "나"
+
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="group relative flex aspect-square min-h-[82px] overflow-hidden rounded-xl border border-border bg-muted/40 p-3 text-left transition-colors hover:bg-muted"
+    >
+      {persona?.avatarUrl ? (
+        <img
+          src={persona.avatarUrl}
+          alt={persona.name || label}
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+        />
+      ) : (
+        <span className="absolute inset-0 flex items-center justify-center bg-muted text-2xl font-bold text-muted-foreground">
+          {fallback}
+        </span>
+      )}
+      <span className="absolute inset-0 bg-gradient-to-t from-background/85 via-background/20 to-transparent transition-all group-hover:backdrop-blur-[2px] group-hover:bg-background/40" />
+      <span className="relative z-10 mt-auto min-w-0 transition-opacity group-hover:opacity-0">
+        {persona?.name && (
+          <span className="mb-0.5 block truncate text-[10px] font-medium text-muted-foreground">{persona.name}</span>
+        )}
+        <span className="block text-sm font-semibold text-foreground">{label}</span>
+      </span>
+      <span className="absolute inset-0 z-20 flex items-center justify-center text-sm font-semibold text-foreground opacity-0 transition-opacity group-hover:opacity-100">
+        변경
+      </span>
+    </Link>
   )
 }
 
@@ -519,14 +801,16 @@ function ToggleRow({
         type="button"
         onClick={onClick}
         className={cn(
-          "h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors",
-          checked ? "bg-primary" : "bg-border",
+          "h-6 w-11 shrink-0 rounded-full border p-0.5 transition-colors",
+          checked
+            ? "border-blue-500 bg-blue-500 dark:border-sky-400 dark:bg-sky-500"
+            : "border-border bg-border dark:bg-neutral-700",
         )}
         aria-pressed={checked}
       >
         <span
           className={cn(
-            "block h-5 w-5 rounded-full bg-white transition-transform",
+            "block h-5 w-5 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform dark:bg-white dark:ring-white/30",
             checked && "translate-x-5",
           )}
         />
@@ -589,23 +873,3 @@ function DangerRow({
   )
 }
 
-function MediaThumb({ media }: { media: ChatMediaItem }) {
-  const [failed, setFailed] = useState(false)
-
-  return (
-    <div className="h-12 w-12 overflow-hidden rounded-md border border-border bg-background">
-      {!failed ? (
-        <img
-          src={media.imageUrl}
-          alt={media.title}
-          onError={() => setFailed(true)}
-          className="h-full w-full object-cover"
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-          <ImageIcon className="h-4 w-4" />
-        </div>
-      )}
-    </div>
-  )
-}

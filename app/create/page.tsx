@@ -179,6 +179,7 @@ const emptyPersona = (): StoryPersona => ({
   secret: "",
   preferredDevelopments: "",
   forbiddenDevelopments: "",
+  avatarUrl: "",
   createdAt: "",
 })
 
@@ -2049,6 +2050,11 @@ function PersonaForm({
     <Card className="bg-card border-border">
       <CardContent className="p-4 md:p-6">
         <FieldGroup className="space-y-4">
+          <ImageUploadField
+            label="프로필 사진"
+            value={value.avatarUrl}
+            onChange={(avatarUrl) => update("avatarUrl", avatarUrl)}
+          />
           <div className="grid gap-4 sm:grid-cols-3">
             <Field>
               <FieldLabel>자아 이름</FieldLabel>

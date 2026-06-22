@@ -21,9 +21,17 @@ import {
   parseChatInput,
   runCommand,
 } from "@/lib/chat-engine"
+import { getChatMemoryMemo } from "@/lib/chat-memory-storage"
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
 import { defaultChats, getChatList, type ChatListItemData } from "@/lib/chat-list-storage"
 import { defaultChatReadingSettings, getChatReadingSettings, type ChatReadingSettings } from "@/lib/chat-settings-storage"
+import {
+  DEFAULT_CHAT_MODEL_ID,
+  getChatModelConfig,
+  getChatModelId,
+  saveChatModelId,
+  type ChatModelId,
+} from "@/lib/chat-models"
 import {
   FREE_IMAGE_GENERATION_LIMIT,
   IMAGE_GENERATION_CREDIT_COST,
@@ -108,6 +116,23 @@ function inferLocation(text: string, fallback?: string) {
   return candidates.find((location) => text.includes(location)) || fallback
 }
 
+function getCompactChapterLabel(title?: string) {
+  const trimmed = title?.trim()
+  if (!trimmed) return undefined
+  const match = trimmed.match(/^(프롤로그|\d+\s*(?:장|화|챕터)|chapter\s*\d+)/i)
+  return match?.[1].replace(/\s+/g, "") ?? trimmed.split(/[:：·-]/)[0]?.trim()
+}
+
+function getCompactCharacterState(status: StoryStatus) {
+  if (status.characterEmotion) return status.characterEmotion
+  const compactStatus = status.characterStatus
+    ?.split(/[,.，。·|]/)[0]
+    ?.replace(/\s*상태로.*$/, "")
+    ?.trim()
+  if (!compactStatus) return undefined
+  return compactStatus.length > 10 ? `${compactStatus.slice(0, 10)}...` : compactStatus
+}
+
 function getAutoImageCount(chatId: string) {
   if (typeof window === "undefined") return 0
   return Number(window.localStorage.getItem(`chat-auto-image-count-${chatId}`)) || 0
@@ -180,10 +205,13 @@ export default function ChatPage() {
   const [typingLabel, setTypingLabel] = useState<string | undefined>(undefined)
   const [typingVariant, setTypingVariant] = useState<"text" | "image">("text")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [modelFocusRequest, setModelFocusRequest] = useState(0)
+  const [isStatusPanelOpen, setIsStatusPanelOpen] = useState(false)
   const [isQuestPopupOpen, setIsQuestPopupOpen] = useState(false)
   const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(new Set())
   const [chatTheme, setChatTheme] = useState<ChatThemeId>("system")
   const [readingSettings, setReadingSettings] = useState<ChatReadingSettings>(defaultChatReadingSettings)
+  const [selectedModelId, setSelectedModelId] = useState<ChatModelId>(DEFAULT_CHAT_MODEL_ID)
   const [branchTargetId, setBranchTargetId] = useState<string | null>(null)
   const [isIntroOpen, setIsIntroOpen] = useState(false)
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
@@ -285,6 +313,12 @@ export default function ChatPage() {
     characterName,
     personaName: currentPersona?.name || "나",
   }
+  const selectedModel = getChatModelConfig(selectedModelId)
+  const headerStatusSummary = [
+    getCompactChapterLabel(chatStoryStatus.currentChapterTitle),
+    chatStoryStatus.chapterProgress !== undefined ? `${chatStoryStatus.chapterProgress}%` : undefined,
+    getCompactCharacterState(chatStoryStatus),
+  ].filter(Boolean).join(" · ")
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -300,6 +334,7 @@ export default function ChatPage() {
     persona: currentPersona,
     status: statusOverride ?? chatStoryStatus,
     recentMessages,
+    memoryMemo: getChatMemoryMemo(chatId),
   })
 
   const buildGeneratedImageMessage = async ({
@@ -381,8 +416,34 @@ export default function ChatPage() {
     const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
     setChatTheme(savedTheme || "system")
     setReadingSettings(getChatReadingSettings(chatId))
+    setSelectedModelId(getChatModelId(chatId))
     setRuntimeStoryStatus({})
   }, [chatId])
+
+  useEffect(() => {
+    const syncModel = () => setSelectedModelId(getChatModelId(chatId))
+    window.addEventListener("storage", syncModel)
+    window.addEventListener("storychat-chat-model-updated", syncModel)
+    return () => {
+      window.removeEventListener("storage", syncModel)
+      window.removeEventListener("storychat-chat-model-updated", syncModel)
+    }
+  }, [chatId])
+
+  const handleModelChange = (modelId: ChatModelId) => {
+    setSelectedModelId(modelId)
+    saveChatModelId(chatId, modelId)
+  }
+
+  const showOpenAICreditShortage = () => {
+    toast.error("크레딧이 부족해 OpenAI 모델을 사용할 수 없어요.", {
+      description: "무료 모델로 전환하거나 크레딧을 충전해 주세요.",
+      action: {
+        label: "무료 모델로 전환",
+        onClick: () => handleModelChange("free"),
+      },
+    })
+  }
 
   useEffect(() => {
     const syncChatMeta = () => {
@@ -392,9 +453,11 @@ export default function ChatPage() {
     syncChatMeta()
     window.addEventListener("storage", syncChatMeta)
     window.addEventListener("storychat-chats-updated", syncChatMeta)
+    window.addEventListener("storychat-library-updated", syncChatMeta)
     return () => {
       window.removeEventListener("storage", syncChatMeta)
       window.removeEventListener("storychat-chats-updated", syncChatMeta)
+      window.removeEventListener("storychat-library-updated", syncChatMeta)
     }
   }, [chatId])
 
@@ -410,8 +473,12 @@ export default function ChatPage() {
       return
     }
 
-    // 크레딧 차감 (메시지 1)
-    if (!spendCredit(CREDIT_COSTS.message)) {
+    const replyCreditCost = CREDIT_COSTS.message + selectedModel.creditCostPerReply
+    if (credits < replyCreditCost) {
+      if (selectedModel.creditCostPerReply > 0) {
+        showOpenAICreditShortage()
+        return
+      }
       toast.error("크레딧이 부족해요.", {
         description: "크레딧을 충전하면 계속 대화할 수 있어요.",
         action: {
@@ -438,8 +505,12 @@ export default function ChatPage() {
           content,
           selectedIntroScenario,
           buildImageCommandContext([...messages, userMessage]),
+          selectedModelId,
         )),
         turnId,
+      }
+      if (!spendCredit(replyCreditCost)) {
+        throw new Error("Insufficient reply credits")
       }
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
@@ -521,14 +592,25 @@ export default function ChatPage() {
     setTypingVariant("text")
 
     try {
+      const retryCreditCost = selectedModel.creditCostPerReply
+      if (retryCreditCost > 0 && credits < retryCreditCost) {
+        showOpenAICreditShortage()
+        setMessages((prev) => [...prev, failedMessage])
+        return
+      }
+
       const reply = {
         ...(await generateAssistantReply(
           retryMessages,
           retryPayload.content,
           selectedIntroScenario,
           buildImageCommandContext(retryMessages),
+          selectedModelId,
         )),
         turnId: retryTurnId,
+      }
+      if (retryCreditCost > 0 && !spendCredit(retryCreditCost)) {
+        throw new Error("Insufficient model credits")
       }
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
@@ -819,18 +901,28 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="relative flex h-[100dvh] min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <ChatHeader
         characterName={characterName}
         characterEmoji={characterEmoji}
-        level={3}
+        modelLabel={selectedModel.badge ?? selectedModel.label}
+        statusSummary={headerStatusSummary}
+        isStatusOpen={isStatusPanelOpen}
         onProfileClick={() => setIsIntroOpen(true)}
+        onStatusClick={() => setIsStatusPanelOpen((current) => !current)}
+        onModelClick={() => {
+          setModelFocusRequest((current) => current + 1)
+          setIsSettingsOpen(true)
+        }}
         onMenuClick={() => setIsSettingsOpen(true)}
       />
 
       {readingSettings.showStoryStatus && (
         <StoryStatusCard
           status={chatStoryStatus}
+          compactPanel
+          open={isStatusPanelOpen}
+          onOpenChange={setIsStatusPanelOpen}
         />
       )}
 
@@ -841,6 +933,10 @@ export default function ChatPage() {
         characterEmoji={characterEmoji}
         chatId={chatId}
         creditBalance={credits}
+        selectedModelId={selectedModelId}
+        currentPersona={currentPersona}
+        modelFocusRequest={modelFocusRequest}
+        onModelChange={handleModelChange}
         onChatThemeChange={(theme) => setChatTheme(theme)}
         onReadingSettingsChange={setReadingSettings}
         onClearChat={handleClearChat}
@@ -891,7 +987,7 @@ export default function ChatPage() {
       />
 
       {/* Chat Area - Scrollable */}
-      <main className="min-h-0 flex-1 overflow-y-auto">
+      <main className="min-h-0 flex-1 overflow-y-auto pt-11">
         {hasMessages || isTyping ? (
           <ChatMessageList
             messages={messages}
@@ -909,6 +1005,7 @@ export default function ChatPage() {
             chatTheme={chatTheme}
             textSize={readingSettings.textSize}
             lineHeight={readingSettings.lineHeight}
+            characters={chatInputCharacters}
             disabled={isTyping}
           />
         ) : (
@@ -928,8 +1025,8 @@ export default function ChatPage() {
         )}
       </main>
 
-      {/* Input Area - normal block in flex column */}
-      <div className="shrink-0">
+      {/* Input Area - immersive floating dock */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
         <ChatInput
           onSendMessage={handleSendMessage}
           onCommand={handleCommand}
