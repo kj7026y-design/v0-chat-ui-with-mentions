@@ -1,6 +1,7 @@
 "use client"
 
 import { create } from "zustand"
+import { addCreditHistory, getStoredCredits, saveStoredCredits } from "@/lib/credit-storage"
 
 export type Category = "회사" | "학교" | "판타지" | "고대 서양" | "고대 아시아"
 
@@ -225,9 +226,12 @@ interface AppState {
   // Branches
   createBranch: (branch: Omit<Branch, "id" | "createdAt">) => void
   // Credits
-  chargeCredit: (amount: number) => void
-  spendCredit: (amount: number) => boolean
+  hydrateCredits: () => void
+  chargeCredit: (amount: number, title?: string, description?: string) => void
+  spendCredit: (amount: number, title?: string, description?: string) => boolean
 }
+
+const DEFAULT_CREDITS = 100
 
 const sampleCharacters: Character[] = [
   // 회사
@@ -427,7 +431,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   personas: samplePersonas,
   events: sampleEvents,
   branches: [],
-  credits: 100,
+  credits: DEFAULT_CREDITS,
   selectedCharacter: null,
   selectedStory: null,
   selectedPersona: null,
@@ -493,12 +497,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       ],
     })),
   // Credits
-  chargeCredit: (amount) =>
-    set((state) => ({ credits: state.credits + amount })),
-  spendCredit: (amount) => {
+  hydrateCredits: () => {
+    set({ credits: getStoredCredits(DEFAULT_CREDITS) })
+  },
+  chargeCredit: (amount, title = "크레딧 충전", description) => {
+    if (amount <= 0) return
+    const nextCredits = get().credits + amount
+    set({ credits: nextCredits })
+    saveStoredCredits(nextCredits)
+    addCreditHistory({ type: "earned", title, amount, description })
+  },
+  spendCredit: (amount, title = "크레딧 사용", description) => {
+    if (amount <= 0) return true
     const current = get().credits
     if (current < amount) return false
-    set({ credits: current - amount })
+    const nextCredits = current - amount
+    set({ credits: nextCredits })
+    saveStoredCredits(nextCredits)
+    addCreditHistory({ type: "spent", title, amount: -amount, description })
     return true
   },
 }))

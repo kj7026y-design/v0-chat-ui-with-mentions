@@ -3,20 +3,23 @@
 import { useState, useRef, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { useTheme } from "@/components/theme-provider"
 import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatMessageList } from "@/components/chat/chat-message-list"
 import { ChatInput } from "@/components/chat/chat-input"
 import { ChatSettingsDrawer } from "@/components/chat/chat-settings-drawer"
+import { ChatModelDrawer } from "@/components/chat/chat-model-drawer"
 import { WorkIntroModal } from "@/components/chat/work-intro-modal"
 import { QuestRewardPopup } from "@/components/chat/quest-reward-popup"
 import { EmptyChatState } from "@/components/chat/empty-chat-state"
 import { BranchConfirmModal } from "@/components/chat/branch-confirm-modal"
 import { StoryStatusCard, type StoryStatus } from "@/components/chat/story-status-card"
 import { AlertModal, ConfirmModal } from "@/components/ui/app-modal"
-import { AUTO_COMMAND_IDS, DEFAULT_COMMAND_SUGGESTION_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
+import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
 import {
   buildUserMessage,
   generateAssistantReply,
+  type ChatStreamEvent,
   type ImageCommandContext,
   parseChatInput,
   runCommand,
@@ -25,6 +28,7 @@ import { getChatMemoryMemo } from "@/lib/chat-memory-storage"
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
 import { defaultChats, getChatList, type ChatListItemData } from "@/lib/chat-list-storage"
 import { defaultChatReadingSettings, getChatReadingSettings, type ChatReadingSettings } from "@/lib/chat-settings-storage"
+import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser"
 import {
   DEFAULT_CHAT_MODEL_ID,
   getChatModelConfig,
@@ -46,9 +50,23 @@ import { defaultLibrary, getStoryChatLibrary, normalizeIntroScenarios, type Stor
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
+const CHAT_THEME_BACKGROUNDS: Record<Exclude<ChatThemeId, "system">, string> = {
+  light: "#FFFFFF",
+  dark: "#121212",
+  message: "#F2F2F7",
+  messenger: "#BACEE0",
+}
+
+function getChatThemeBackground(chatTheme: ChatThemeId, resolvedTheme: "light" | "dark") {
+  if (chatTheme === "system") {
+    return resolvedTheme === "dark" ? CHAT_THEME_BACKGROUNDS.dark : CHAT_THEME_BACKGROUNDS.light
+  }
+  return CHAT_THEME_BACKGROUNDS[chatTheme]
+}
+
 const CHARACTER_NAME = "이무기"
 const CHARACTER_EMOJI = "🐉"
-const AUTO_IMAGE_GENERATION_CHANCE = 0.02
+const AUTO_IMAGE_GENERATION_CHANCE = 0
 const AUTO_IMAGE_GENERATION_LIMIT = 3
 
 const storyStatus: StoryStatus = {
@@ -143,13 +161,19 @@ function incrementAutoImageCount(chatId: string) {
   window.localStorage.setItem(`chat-auto-image-count-${chatId}`, String(getAutoImageCount(chatId) + 1))
 }
 
+function getSelectedIntroScenarioKey(chatId: string) {
+  return `storychat_selected_intro_${chatId}`
+}
+
 function isMajorSceneCandidate(userContent: string, replyContent: string, status: Partial<StoryStatus>) {
   const combined = `${userContent}\n${replyContent}`
+  if (!/[가-힣]/.test(replyContent)) return false
   if (status.nextEventCondition && /발생|드러|열립|이어집/.test(status.nextEventCondition)) return true
   return /처음|비밀|발견|고백|전투|위기|눈물|손을|다가|키스|문이|깨어|돌아|결심|사라|죽|구하|마주|놀|긴장|신뢰|단서|운명/.test(combined)
 }
 
 function shouldAutoGenerateImage(chatId: string, userContent: string, replyContent: string, status: Partial<StoryStatus>) {
+  if (AUTO_IMAGE_GENERATION_CHANCE <= 0) return false
   if (getAutoImageCount(chatId) >= AUTO_IMAGE_GENERATION_LIMIT) return false
   if (!isMajorSceneCandidate(userContent, replyContent, status)) return false
   return Math.random() < AUTO_IMAGE_GENERATION_CHANCE
@@ -193,6 +217,7 @@ function buildNextRuntimeStatus({
 export default function ChatPage() {
   const params = useParams()
   const router = useRouter()
+  const { resolvedTheme } = useTheme()
   const chatId = params.id as string
 
   const credits = useAppStore((s) => s.credits)
@@ -205,7 +230,7 @@ export default function ChatPage() {
   const [typingLabel, setTypingLabel] = useState<string | undefined>(undefined)
   const [typingVariant, setTypingVariant] = useState<"text" | "image">("text")
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [modelFocusRequest, setModelFocusRequest] = useState(0)
+  const [isModelDrawerOpen, setIsModelDrawerOpen] = useState(false)
   const [isStatusPanelOpen, setIsStatusPanelOpen] = useState(false)
   const [isQuestPopupOpen, setIsQuestPopupOpen] = useState(false)
   const [editedMessageIds, setEditedMessageIds] = useState<Set<string>>(new Set())
@@ -277,11 +302,35 @@ export default function ChatPage() {
     ? inputCharacters
     : [{ id: "imugi", name: characterName, emoji: characterEmoji }]
   const introScenarios = currentWork ? normalizeIntroScenarios(currentWork) : []
+  const introScenarioIds = introScenarios.map((intro) => intro.id).join("|")
   const selectedIntroScenario =
     introScenarios.find((intro) => intro.id === selectedIntroScenarioId) ??
     (introScenarios.length === 1 ? introScenarios[0] : undefined)
+  const handleIntroScenarioSelect = (introId: string) => {
+    setSelectedIntroScenarioId(introId)
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(getSelectedIntroScenarioKey(chatId), introId)
+    }
+  }
+
+  useEffect(() => {
+    if (introScenarios.length === 0) {
+      setSelectedIntroScenarioId((current) => current === "" ? current : "")
+      return
+    }
+
+    const savedIntroId = window.localStorage.getItem(getSelectedIntroScenarioKey(chatId))
+    const nextIntroId = introScenarios.some((intro) => intro.id === savedIntroId)
+      ? savedIntroId
+      : introScenarios[0]?.id
+
+    const normalizedIntroId = nextIntroId ?? ""
+    setSelectedIntroScenarioId((current) => current === normalizedIntroId ? current : normalizedIntroId)
+  }, [chatId, introScenarioIds])
+
   const progressSettings = currentWork?.storyProgressSettings ?? currentWorld?.storyProgressSettings
-  const useChapters = progressSettings?.useChapters ?? false
+  const hasConfiguredChapters = Boolean(progressSettings?.useChapters && (progressSettings.chapters?.length ?? 0) > 0)
+  const useChapters = hasConfiguredChapters
   const activeChapter =
     progressSettings?.chapters.find((chapter) => chapter.title === (currentWork?.currentChapter || currentWorld?.currentChapter)) ??
     progressSettings?.chapters[0]
@@ -294,7 +343,9 @@ export default function ChatPage() {
       : undefined,
     chapterProgress: useChapters ? currentWorld?.progress : undefined,
     currentMission: useChapters ? activeChapter?.mission || currentWork?.currentGoal || currentWorld?.currentGoal : undefined,
-    currentGoal: useChapters ? currentWork?.currentGoal || currentWorld?.currentGoal || activeChapter?.goal : undefined,
+    currentGoal: useChapters
+      ? currentWork?.currentGoal || currentWorld?.currentGoal || activeChapter?.goal
+      : currentWork?.currentGoal || currentWorld?.currentGoal,
     worldDate: currentWork?.worldDate || currentWorld?.worldDate || currentWorld?.era,
     currentLocation: getStatusLocation(currentWork?.statusBarText),
     characterName,
@@ -313,6 +364,11 @@ export default function ChatPage() {
     characterName,
     personaName: currentPersona?.name || "나",
   }
+  const modelUserName = currentPersona?.name || chatStoryStatus.personaName || "사용자"
+  const buildModelContentFromUserInput = (content: string) => {
+    return buildModelUserMessageFromInput(content, modelUserName)
+  }
+  const canShowProgressStatus = hasConfiguredChapters
   const selectedModel = getChatModelConfig(selectedModelId)
   const headerStatusSummary = [
     getCompactChapterLabel(chatStoryStatus.currentChapterTitle),
@@ -377,7 +433,7 @@ export default function ChatPage() {
     if (shouldUseFreeImage) {
       incrementFreeImageGenerationUsage(userId)
     } else {
-      if (!spendCredit(IMAGE_GENERATION_CREDIT_COST)) return null
+      if (!spendCredit(IMAGE_GENERATION_CREDIT_COST, "이미지 생성", `${characterName} 주요 장면 자동 생성`)) return null
       chargeImageGenerationCredit(userId)
     }
     return imageMessage
@@ -435,11 +491,11 @@ export default function ChatPage() {
     saveChatModelId(chatId, modelId)
   }
 
-  const showOpenAICreditShortage = () => {
-    toast.error("크레딧이 부족해 OpenAI 모델을 사용할 수 없어요.", {
-      description: "무료 모델로 전환하거나 크레딧을 충전해 주세요.",
+  const showModelCreditShortage = () => {
+    toast.error(`크레딧이 부족해 ${selectedModel.label} 모델을 사용할 수 없어요.`, {
+      description: "Gemini 2.5 Flash로 전환하거나 크레딧을 충전해 주세요.",
       action: {
-        label: "무료 모델로 전환",
+        label: "Gemini 2.5 Flash로 전환",
         onClick: () => handleModelChange("free"),
       },
     })
@@ -467,16 +523,21 @@ export default function ChatPage() {
     mentions?: string[],
     image?: { url: string; name?: string },
   ) => {
-    const parsedInput = parseChatInput(content, chatInputCharacters, mentions)
+    const displayContent = content.trim()
+    const parsedInput = parseChatInput(displayContent, chatInputCharacters, mentions)
     if (parsedInput.kind === "character_line" && parsedInput.isEmptyLine) {
       toast.error("대사 내용을 입력하세요.")
       return
     }
 
+    const modelContent = parsedInput.kind === "plain"
+      ? buildModelContentFromUserInput(displayContent)
+      : displayContent
+
     const replyCreditCost = CREDIT_COSTS.message + selectedModel.creditCostPerReply
     if (credits < replyCreditCost) {
       if (selectedModel.creditCostPerReply > 0) {
-        showOpenAICreditShortage()
+        showModelCreditShortage()
         return
       }
       toast.error("크레딧이 부족해요.", {
@@ -492,8 +553,59 @@ export default function ChatPage() {
     }
 
     const turnId = makeTurnId()
-    const userMessage = { ...buildUserMessage(content, chatInputCharacters, mentions, image), turnId }
-    setMessages((prev) => [...prev, userMessage])
+    const userMessage = {
+      ...buildUserMessage(displayContent, chatInputCharacters, mentions, image),
+      ...(modelContent !== displayContent ? { originalContent: modelContent } : {}),
+      turnId,
+      status: "completed" as const,
+    }
+    const characterMessageId = `assistant-${turnId}`
+    const streamingMessage: ChatMessage = {
+      id: characterMessageId,
+      type: "ai",
+      content: "",
+      timestamp: new Date(),
+      status: "streaming",
+      speakerId: currentCharacter?.id,
+      speakerName: characterName,
+      turnId,
+    }
+    const handleStreamEvent = (event: ChatStreamEvent) => {
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (message.id !== characterMessageId) return message
+          if (event.is_final_event) {
+            const savedContent = event.saved_content ?? message.content
+            if (event.mismatch && process.env.NODE_ENV !== "production") {
+              console.debug("[generation stream mismatch]", {
+                runId: event.run_id,
+                streamedContentLength: message.content.length,
+                savedContentLength: savedContent.length,
+              })
+            }
+
+            return {
+              ...message,
+              id: event.message_id || message.id,
+              content: savedContent,
+              status: event.status === "failed" ? "failed" : "completed",
+              generationRunId: event.run_id,
+              provider: event.provider,
+              model: event.model,
+              savedContent,
+              streamedContent: message.content,
+            }
+          }
+
+          return {
+            ...message,
+            content: `${message.content}${event.content ?? ""}`,
+            status: "streaming",
+          }
+        }),
+      )
+    }
+    setMessages((prev) => [...prev, userMessage, streamingMessage])
     setIsTyping(true)
     setTypingLabel(undefined)
     setTypingVariant("text")
@@ -502,20 +614,26 @@ export default function ChatPage() {
       const reply = {
         ...(await generateAssistantReply(
           [...messages, userMessage],
-          content,
+          modelContent,
           selectedIntroScenario,
           buildImageCommandContext([...messages, userMessage]),
           selectedModelId,
+          {
+            roomId: chatId,
+            userMessageId: userMessage.id,
+            characterMessageId,
+            onStreamEvent: handleStreamEvent,
+          },
         )),
         turnId,
       }
-      if (!spendCredit(replyCreditCost)) {
+      if (!spendCredit(replyCreditCost, "채팅 답변 생성", selectedModel.creditCostPerReply > 0 ? `${selectedModel.label} 모델 답변` : "기본 답변")) {
         throw new Error("Insufficient reply credits")
       }
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
         previousStatus: runtimeStoryStatus,
-        userContent: content,
+        userContent: displayContent,
         replyContent: reply.content,
       })
       const nextChatStoryStatus = {
@@ -525,17 +643,14 @@ export default function ChatPage() {
       setRuntimeStoryStatus(nextRuntimeStatus)
 
       const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
-      const effectiveAutoCommandIds = autoCommandIds.length > 0 ? autoCommandIds : DEFAULT_COMMAND_SUGGESTION_IDS
-      const autoCommandMessages = readingSettings.alwaysShowCommandSuggestions
-        ? await buildAutoCommandMessages({
-            turnId,
-            contextMessages: [...messages, userMessage, reply],
-            statusOverride: nextChatStoryStatus,
-            commandIds: effectiveAutoCommandIds,
-          })
-        : []
+      const autoCommandMessages = await buildAutoCommandMessages({
+        turnId,
+        contextMessages: [...messages, userMessage, reply],
+        statusOverride: nextChatStoryStatus,
+        commandIds: autoCommandIds,
+      })
       const contextMessages = [...messages, userMessage, reply, ...autoCommandMessages]
-      const shouldGenerateAutoImage = shouldAutoGenerateImage(chatId, content, reply.content, nextChatStoryStatus)
+      const shouldGenerateAutoImage = shouldAutoGenerateImage(chatId, displayContent, reply.content, nextChatStoryStatus)
       let autoImageMessage: ChatMessage | null = null
       if (shouldGenerateAutoImage) {
         setTypingLabel("주요 장면 이미지 생성중...")
@@ -550,17 +665,18 @@ export default function ChatPage() {
       }
 
       setMessages((prev) => [
-        ...prev,
-        reply,
+        ...prev.map((message) => message.id === characterMessageId ? reply : message),
         ...autoCommandMessages,
         ...(autoImageMessage ? [autoImageMessage] : []),
       ])
-    } catch {
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "응답을 가져오지 못했어요."
       const errorMessage: ChatMessage = {
-        id: `reply-error-${Date.now()}`,
+        id: characterMessageId,
         type: "status",
-        content: "답변을 생성하지 못했어요. 무료로 다시 생성할 수 있습니다.",
+        content: `${errorText}\n다시 생성할 수 있습니다.`,
         timestamp: new Date(),
+        status: "failed",
         turnId,
         isGenerationError: true,
         retryPayload: {
@@ -570,8 +686,12 @@ export default function ChatPage() {
           turnId,
         },
       }
-      setMessages((prev) => [...prev, errorMessage])
-      toast.error("응답을 가져오지 못했어요.")
+      setMessages((prev) =>
+        prev.some((message) => message.id === characterMessageId)
+          ? prev.map((message) => message.id === characterMessageId ? errorMessage : message)
+          : [...prev, errorMessage],
+      )
+      toast.error(errorText)
     } finally {
       setIsTyping(false)
       setTypingLabel(undefined)
@@ -586,7 +706,45 @@ export default function ChatPage() {
 
     const retryTurnId = retryPayload.turnId || failedMessage.turnId || makeTurnId()
     const retryMessages = messages.filter((message) => message.id !== messageId)
-    setMessages(retryMessages)
+    const characterMessageId = `assistant-${retryTurnId}`
+    const streamingMessage: ChatMessage = {
+      id: characterMessageId,
+      type: "ai",
+      content: "",
+      timestamp: new Date(),
+      status: "streaming",
+      speakerId: currentCharacter?.id,
+      speakerName: characterName,
+      turnId: retryTurnId,
+    }
+    const handleStreamEvent = (event: ChatStreamEvent) => {
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (message.id !== characterMessageId) return message
+          if (event.is_final_event) {
+            const savedContent = event.saved_content ?? message.content
+            return {
+              ...message,
+              id: event.message_id || message.id,
+              content: savedContent,
+              status: event.status === "failed" ? "failed" : "completed",
+              generationRunId: event.run_id,
+              provider: event.provider,
+              model: event.model,
+              savedContent,
+              streamedContent: message.content,
+            }
+          }
+
+          return {
+            ...message,
+            content: `${message.content}${event.content ?? ""}`,
+            status: "streaming",
+          }
+        }),
+      )
+    }
+    setMessages([...retryMessages, streamingMessage])
     setIsTyping(true)
     setTypingLabel(undefined)
     setTypingVariant("text")
@@ -594,7 +752,7 @@ export default function ChatPage() {
     try {
       const retryCreditCost = selectedModel.creditCostPerReply
       if (retryCreditCost > 0 && credits < retryCreditCost) {
-        showOpenAICreditShortage()
+        showModelCreditShortage()
         setMessages((prev) => [...prev, failedMessage])
         return
       }
@@ -606,10 +764,16 @@ export default function ChatPage() {
           selectedIntroScenario,
           buildImageCommandContext(retryMessages),
           selectedModelId,
+          {
+            roomId: chatId,
+            userMessageId: retryMessages.findLast((message) => message.type === "user")?.id,
+            characterMessageId,
+            onStreamEvent: handleStreamEvent,
+          },
         )),
         turnId: retryTurnId,
       }
-      if (retryCreditCost > 0 && !spendCredit(retryCreditCost)) {
+      if (retryCreditCost > 0 && !spendCredit(retryCreditCost, "답변 재생성", `${selectedModel.label} 모델 재생성`)) {
         throw new Error("Insufficient model credits")
       }
       const nextRuntimeStatus = buildNextRuntimeStatus({
@@ -625,15 +789,12 @@ export default function ChatPage() {
       setRuntimeStoryStatus(nextRuntimeStatus)
 
       const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
-      const effectiveAutoCommandIds = autoCommandIds.length > 0 ? autoCommandIds : DEFAULT_COMMAND_SUGGESTION_IDS
-      const autoCommandMessages = readingSettings.alwaysShowCommandSuggestions
-        ? await buildAutoCommandMessages({
-            turnId: retryTurnId,
-            contextMessages: [...retryMessages, reply],
-            statusOverride: nextChatStoryStatus,
-            commandIds: effectiveAutoCommandIds,
-          })
-        : []
+      const autoCommandMessages = await buildAutoCommandMessages({
+        turnId: retryTurnId,
+        contextMessages: [...retryMessages, reply],
+        statusOverride: nextChatStoryStatus,
+        commandIds: autoCommandIds,
+      })
       const contextMessages = [...retryMessages, reply, ...autoCommandMessages]
       const shouldGenerateAutoImage = shouldAutoGenerateImage(
         chatId,
@@ -655,14 +816,17 @@ export default function ChatPage() {
       }
 
       setMessages((prev) => [
-        ...prev,
-        reply,
+        ...prev.map((message) => message.id === characterMessageId ? reply : message),
         ...autoCommandMessages,
         ...(autoImageMessage ? [autoImageMessage] : []),
       ])
-    } catch {
-      setMessages((prev) => [...prev, failedMessage])
-      toast.error("다시 생성하지 못했어요.")
+    } catch (error) {
+      setMessages((prev) =>
+        prev.some((message) => message.id === characterMessageId)
+          ? prev.map((message) => message.id === characterMessageId ? { ...failedMessage, status: "failed" } : message)
+          : [...prev, { ...failedMessage, status: "failed" }],
+      )
+      toast.error(error instanceof Error ? error.message : "다시 생성하지 못했어요.")
     } finally {
       setIsTyping(false)
       setTypingLabel(undefined)
@@ -716,7 +880,7 @@ export default function ChatPage() {
         if (shouldUseFreeImage) {
           incrementFreeImageGenerationUsage(userId)
         } else {
-          if (!spendCredit(IMAGE_GENERATION_CREDIT_COST)) {
+          if (!spendCredit(IMAGE_GENERATION_CREDIT_COST, "이미지 생성", `${characterName} 이미지 명령어`)) {
             throw new Error("Insufficient credits")
           }
           chargeImageGenerationCredit(userId)
@@ -740,19 +904,75 @@ export default function ChatPage() {
   }
 
   // Author tools handlers
-  const handleRewriteMessage = (messageId: string) => {
+  const handleRewriteMessage = async (messageId: string) => {
+    const targetIndex = messages.findIndex((message) => message.id === messageId)
+    const targetMessage = messages[targetIndex]
+    if (targetIndex < 0 || !targetMessage || targetMessage.type !== "ai") return
+
+    const turnMessages = targetMessage.turnId
+      ? messages.filter((message) => message.turnId === targetMessage.turnId)
+      : []
+    const sourceUserMessage =
+      turnMessages.find((message) => message.type === "user" && message.content.trim()) ??
+      messages.slice(0, targetIndex).findLast((message) => message.type === "user" && message.content.trim())
+    const userContent = (sourceUserMessage?.originalContent || sourceUserMessage?.content || "").trim()
+    if (!userContent) {
+      toast.error("다시 생성할 사용자 메시지를 찾지 못했어요.")
+      return
+    }
+
+    const rewriteHistoryBase = messages.slice(0, targetIndex)
+    const sourceUserIndex = sourceUserMessage
+      ? rewriteHistoryBase.findIndex((message) => message.id === sourceUserMessage.id)
+      : -1
+    const failedAssistantMessage: ChatMessage = {
+      ...targetMessage,
+      id: `${targetMessage.id}-failed-rewrite`,
+      content: targetMessage.content,
+      timestamp: new Date(),
+    }
+    const rewriteHistory = sourceUserIndex >= 0
+      ? [
+          ...rewriteHistoryBase.slice(0, sourceUserIndex),
+          failedAssistantMessage,
+          ...rewriteHistoryBase.slice(sourceUserIndex),
+        ]
+      : rewriteHistoryBase
     setIsTyping(true)
-    setTimeout(() => {
-      setIsTyping(false)
+    setTypingLabel(undefined)
+    setTypingVariant("text")
+
+    try {
+      const rewrittenReply = await generateAssistantReply(
+        rewriteHistory,
+        userContent,
+        selectedIntroScenario,
+        buildImageCommandContext(rewriteHistory),
+        selectedModelId,
+      )
+
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === messageId
-            ? { ...msg, content: "다시 생각해보니... 네 말이 맞는 것 같아. 함께 있어서 좋아." }
-            : msg
-        )
+            ? {
+                ...msg,
+                content: rewrittenReply.content,
+                timestamp: new Date(),
+                speakerId: rewrittenReply.speakerId ?? msg.speakerId,
+                speakerName: rewrittenReply.speakerName ?? msg.speakerName,
+              }
+            : msg,
+        ),
       )
+      setEditedMessageIds((prev) => new Set(prev).add(messageId))
       toast.success("메시지를 다시 작성했어요.")
-    }, 1500)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "다시 작성하지 못했어요.")
+    } finally {
+      setIsTyping(false)
+      setTypingLabel(undefined)
+      setTypingVariant("text")
+    }
   }
 
   const handleEditMessage = async (messageId: string, nextContent: string) => {
@@ -767,11 +987,20 @@ export default function ChatPage() {
       targetMessage?.turnId &&
         messages.some((message) => message.turnId === targetMessage.turnId && message.imageUrl),
     )
-    const editedMessages = messages.map((msg) =>
-        msg.id === messageId
-          ? { ...msg, content: trimmedContent }
-          : msg,
-    )
+    const editedMessages = messages.map((msg) => {
+      if (msg.id !== messageId) return msg
+
+      if (msg.type === "user" && !msg.isUserAuthoredCharacterLine) {
+        const nextModelContent = buildModelContentFromUserInput(trimmedContent)
+        return {
+          ...msg,
+          content: trimmedContent,
+          originalContent: nextModelContent,
+        }
+      }
+
+      return { ...msg, content: trimmedContent }
+    })
 
     setMessages(editedMessages)
     setEditedMessageIds((prev) => new Set(prev).add(messageId))
@@ -822,7 +1051,7 @@ export default function ChatPage() {
         if (shouldUseFreeImage) {
           incrementFreeImageGenerationUsage(userId)
         } else {
-          if (!spendCredit(IMAGE_GENERATION_CREDIT_COST)) {
+          if (!spendCredit(IMAGE_GENERATION_CREDIT_COST, "이미지 재생성", "메시지 수정 후 이미지 재생성")) {
             throw new Error("Insufficient credits")
           }
           chargeImageGenerationCredit(userId)
@@ -873,7 +1102,7 @@ export default function ChatPage() {
 
   const confirmBranch = () => {
     if (!branchTargetId) return
-    if (!spendCredit(CREDIT_COSTS.branch)) {
+    if (!spendCredit(CREDIT_COSTS.branch, "분기 생성", "대화 분기 생성")) {
       setBranchTargetId(null)
       toast.error("크레딧이 부족해요.", {
         description: "분기 생성에는 3 크레딧이 필요해요.",
@@ -890,6 +1119,7 @@ export default function ChatPage() {
   }
 
   const hasMessages = messages.length > 0
+  const chatBackgroundColor = getChatThemeBackground(chatTheme, resolvedTheme)
 
   const handleClearChat = () => {
     setIsClearConfirmOpen(true)
@@ -901,23 +1131,23 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="relative flex h-[100dvh] min-h-0 flex-1 flex-col overflow-hidden bg-background">
+    <div
+      className="relative flex h-[100dvh] min-h-0 flex-1 flex-col overflow-hidden bg-background transition-colors duration-200"
+      style={{ backgroundColor: chatBackgroundColor }}
+    >
       <ChatHeader
         characterName={characterName}
         characterEmoji={characterEmoji}
         modelLabel={selectedModel.badge ?? selectedModel.label}
-        statusSummary={headerStatusSummary}
+        statusSummary={canShowProgressStatus ? headerStatusSummary : undefined}
         isStatusOpen={isStatusPanelOpen}
         onProfileClick={() => setIsIntroOpen(true)}
         onStatusClick={() => setIsStatusPanelOpen((current) => !current)}
-        onModelClick={() => {
-          setModelFocusRequest((current) => current + 1)
-          setIsSettingsOpen(true)
-        }}
+        onModelClick={() => setIsModelDrawerOpen(true)}
         onMenuClick={() => setIsSettingsOpen(true)}
       />
 
-      {readingSettings.showStoryStatus && (
+      {canShowProgressStatus && readingSettings.showStoryStatus && (
         <StoryStatusCard
           status={chatStoryStatus}
           compactPanel
@@ -933,14 +1163,20 @@ export default function ChatPage() {
         characterEmoji={characterEmoji}
         chatId={chatId}
         creditBalance={credits}
-        selectedModelId={selectedModelId}
         currentPersona={currentPersona}
-        modelFocusRequest={modelFocusRequest}
-        onModelChange={handleModelChange}
+        canShowProgressStatus={canShowProgressStatus}
         onChatThemeChange={(theme) => setChatTheme(theme)}
         onReadingSettingsChange={setReadingSettings}
         onClearChat={handleClearChat}
         onLeaveChat={handleLeaveChat}
+      />
+
+      <ChatModelDrawer
+        open={isModelDrawerOpen}
+        onOpenChange={setIsModelDrawerOpen}
+        selectedModelId={selectedModelId}
+        creditBalance={credits}
+        onModelChange={handleModelChange}
       />
 
       <WorkIntroModal
@@ -987,7 +1223,10 @@ export default function ChatPage() {
       />
 
       {/* Chat Area - Scrollable */}
-      <main className="min-h-0 flex-1 overflow-y-auto pt-11">
+      <main
+        className="min-h-0 flex-1 overflow-y-auto pb-[calc(9.5rem+env(safe-area-inset-bottom))] pt-11 transition-colors duration-200"
+        style={{ backgroundColor: chatBackgroundColor }}
+      >
         {hasMessages || isTyping ? (
           <ChatMessageList
             messages={messages}
@@ -1016,10 +1255,11 @@ export default function ChatPage() {
                 startScenario={startScenario}
                 introScenarios={introScenarios}
                 selectedIntroScenarioId={selectedIntroScenario?.id}
-                onIntroSelect={setSelectedIntroScenarioId}
+                onIntroSelect={handleIntroScenarioSelect}
                 onSuggestionClick={(suggestion) => handleSendMessage(suggestion)}
                 textSize={readingSettings.textSize}
                 lineHeight={readingSettings.lineHeight}
+                chatTheme={chatTheme}
               />
           </div>
         )}

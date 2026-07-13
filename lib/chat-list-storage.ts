@@ -52,7 +52,21 @@ export const defaultChats: ChatListItemData[] = [
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48),
     unreadCount: 1,
   },
+  {
+    id: "6",
+    characterName: "서윤",
+    characterEmoji: "🥀",
+    lastMessage: "이 시간에 다시 온 이유가 계약 때문이라고 하면, 난 조금 실망할 것 같은데.",
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6),
+    unreadCount: 0,
+  },
 ]
+
+function ensureDefaultChats(chats: ChatListItemData[], ids: string[]) {
+  const existingIds = new Set(chats.map((chat) => chat.id))
+  const missingChats = defaultChats.filter((chat) => ids.includes(chat.id) && !existingIds.has(chat.id))
+  return missingChats.length ? [...missingChats, ...chats] : chats
+}
 
 export function getChatList() {
   if (typeof window === "undefined") return defaultChats
@@ -65,10 +79,11 @@ export function getChatList() {
 
   try {
     const parsedChats = JSON.parse(savedChats) as Array<Omit<ChatListItemData, "timestamp"> & { timestamp: string }>
-    return parsedChats.map((chat) => ({
+    const normalizedChats = parsedChats.map((chat) => ({
       ...chat,
       timestamp: new Date(chat.timestamp),
     }))
+    return ensureDefaultChats(normalizedChats, ["6"])
   } catch {
     window.localStorage.removeItem(STORYCHAT_CHATS_KEY)
     saveChatList(defaultChats)

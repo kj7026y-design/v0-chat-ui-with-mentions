@@ -21,6 +21,7 @@ import {
   Sparkles,
   Trash2,
   UserRound,
+  X,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -502,21 +503,42 @@ export default function CreatePage() {
       </header>
 
       <AlertDialog open={isExitPromptOpen} onOpenChange={setIsExitPromptOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>임시 저장할까요?</AlertDialogTitle>
-            <AlertDialogDescription>
+        <AlertDialogContent className="w-[min(calc(100vw-2rem),340px)] gap-0 rounded-[20px] border-0 bg-[#FFFFFF] px-5 pb-5 pt-6 text-[#1A1A1A] shadow-2xl shadow-black/25 dark:bg-[#2E2E2C] dark:text-[#F5F5F3] sm:max-w-none">
+          <AlertDialogCancel className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[#9B9A93] shadow-none transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#888780] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]">
+            <X className="h-4 w-4" />
+            <span className="sr-only">닫기</span>
+          </AlertDialogCancel>
+
+          <div className="mb-[14px] flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary">
+            <Save className="h-[22px] w-[22px]" />
+          </div>
+
+          <AlertDialogHeader className="gap-2 text-left">
+            <AlertDialogTitle className="text-[18px] font-medium leading-tight tracking-normal text-[#1A1A1A] dark:text-[#F5F5F3]">
+              임시 저장할까요?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[14px] font-normal leading-[1.6] text-[#6B6B68] dark:text-[#B4B2A9]">
               작성 중인 내용이 있어요. 임시저장하면 다음에 이어서 작성할 수 있습니다.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <Button variant="outline" onClick={leaveCreateMode}>
-              저장 안 함
-            </Button>
-            <AlertDialogAction onClick={handleSaveAndExit}>
+
+          <AlertDialogFooter className="mt-5 flex-col gap-2 sm:flex-col sm:justify-start">
+            <AlertDialogAction
+              onClick={handleSaveAndExit}
+              className="flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
               임시저장 후 나가기
             </AlertDialogAction>
+            <Button
+              variant="ghost"
+              onClick={leaveCreateMode}
+              className="flex h-11 w-full items-center justify-center rounded-xl bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+            >
+              저장 안 함
+            </Button>
+            <AlertDialogCancel className="flex h-11 w-full items-center justify-center rounded-xl border-0 bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] shadow-none transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]">
+              취소
+            </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

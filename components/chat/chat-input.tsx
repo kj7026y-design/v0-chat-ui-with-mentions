@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useRef, useEffect, type ReactNode, type RefObject, type UIEvent } from "react"
-import { Send, Image as ImageIcon, MessageCircle, X, Zap } from "lucide-react"
+import { Send, Image as ImageIcon, MessageCircle, X, Zap, Asterisk } from "lucide-react"
 import { AlertModal } from "@/components/ui/app-modal"
 import { SLASH_COMMANDS } from "@/lib/chat-types"
+import { hasUnclosedActionMarker } from "@/lib/rp-input-parser"
 import { cn } from "@/lib/utils"
 
 type CharacterContextMode = "mention" | "speech"
@@ -123,6 +124,13 @@ function renderHighlightedInput(value: string, characters: ChatInputCharacter[])
   }
 
   return parts
+}
+
+function shouldRenderHighlightedInput(value: string, characters: ChatInputCharacter[]) {
+  if (!value) return false
+  return [...characters.map((character) => character.name), "모두"]
+    .filter(Boolean)
+    .some((name) => value.includes(`@${name}`) || value.includes(`ⓣ${name}`))
 }
 
 export function ChatInput({ onSendMessage, onCommand, characters, disabled = false, insertTextRequest, imageGenerationNotice }: ChatInputProps) {
@@ -333,6 +341,38 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     })
   }
 
+  const insertActionMarker = () => {
+    if (disabled) return
+
+    const textarea = textareaRef.current
+    const start = textarea?.selectionStart ?? input.length
+    const end = textarea?.selectionEnd ?? input.length
+    const selectedText = input.slice(start, end)
+    const before = input.slice(0, start)
+    const after = input.slice(end)
+
+    if (selectedText) {
+      const nextValue = `${before}*${selectedText}*${after}`
+      const nextCursor = start + selectedText.length + 2
+      setInput(nextValue)
+      closeCharacterContext()
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+        textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
+      })
+      return
+    }
+
+    const nextValue = `${before}**${after}`
+    const nextCursor = start + 1
+    setInput(nextValue)
+    closeCharacterContext()
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
+    })
+  }
+
   const handleCharacterSelect = (target: ChatInputCharacter | "all") => {
     if (disabled) return
     if (target === "all") {
@@ -441,6 +481,11 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       return
     }
 
+    if (hasUnclosedActionMarker(input)) {
+      setAlertMessage("지문 표시(*)가 닫히지 않았어요. *내용* 형태로 닫은 뒤 전송해 주세요.")
+      return
+    }
+
     const mentionedTargets = extractTypedMentions(input, mentionCharacters)
 
     onSendMessage(
@@ -516,9 +561,10 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     return character.name.includes(query)
   })
   const shouldShowAllMention = contextMode === "mention" && "모두".includes(mentionQuery.trim())
+  const showHighlightedInput = shouldRenderHighlightedInput(input, mentionCharacters)
 
   return (
-    <div className="relative mx-3 mb-[calc(0.75rem+env(safe-area-inset-bottom))] rounded-3xl border border-border/80 bg-background/88 px-3 pb-3 pt-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
+    <div className="relative mx-3 mb-[calc(0.75rem+env(safe-area-inset-bottom))] rounded-lg border border-border/80 bg-background/88 px-3 pb-3 pt-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -625,6 +671,17 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           <Zap className="w-4 h-4" />
           <span>명령어</span>
         </button>
+        <button
+          type="button"
+          onClick={insertActionMarker}
+          disabled={disabled}
+          className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-secondary/80 px-2.5 text-xs text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="지문 삽입"
+          title="지문 삽입"
+        >
+          <Asterisk className="w-4 h-4" />
+          <span>지문</span>
+        </button>
 
         {/* Divider */}
         <div className="h-4 w-px flex-shrink-0 bg-border" />
@@ -679,15 +736,17 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
         <div className="relative flex flex-1 items-end gap-2 rounded-2xl border border-border/80 bg-input/95 px-3 py-2.5">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-3 bottom-2.5 top-2.5 overflow-hidden whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground [word-break:keep-all]"
-          >
-            <div style={{ transform: `translateY(-${inputScrollTop}px)` }}>
-              {renderHighlightedInput(input, mentionCharacters)}
-              {input.endsWith("\n") && " "}
+          {showHighlightedInput && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-3 bottom-2.5 top-2.5 overflow-hidden whitespace-pre-wrap break-words text-[15px] leading-6 text-foreground [word-break:keep-all]"
+            >
+              <div style={{ transform: `translateY(-${inputScrollTop}px)` }}>
+                {renderHighlightedInput(input, mentionCharacters)}
+                {input.endsWith("\n") && " "}
+              </div>
             </div>
-          </div>
+          )}
           <textarea
             ref={textareaRef}
             value={input}
@@ -698,8 +757,8 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
             placeholder="메시지를 입력하세요..."
             rows={1}
             className={cn(
-              "relative z-10 max-h-24 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground",
-              input ? "text-transparent" : "text-foreground",
+              "relative z-10 max-h-24 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
+              showHighlightedInput ? "text-transparent" : "text-foreground",
               disabled && "cursor-not-allowed opacity-60",
             )}
           />

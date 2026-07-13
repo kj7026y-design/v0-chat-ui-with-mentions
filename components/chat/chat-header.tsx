@@ -81,7 +81,10 @@ export function ChatHeader({
         {modelLabel && (
           <button
             type="button"
-            onClick={onModelClick ?? onMenuClick}
+            onClick={(event) => {
+              event.currentTarget.blur()
+              ;(onModelClick ?? onMenuClick)?.()
+            }}
               className="rounded-full border border-border/80 bg-muted/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
               {modelLabel}

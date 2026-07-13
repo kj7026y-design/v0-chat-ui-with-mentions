@@ -4,6 +4,7 @@ import { useState, useEffect, type CSSProperties, type ReactNode, type RefObject
 import { useTheme } from "@/components/theme-provider"
 import { type ChatMessage } from "@/lib/chat-types"
 import { parseMessageSegments, shouldRenderMessageSegments, type MessageSegment } from "@/lib/message-segments"
+import { parseComposerInput, type ComposerPart } from "@/lib/rp-input-parser"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
 
@@ -25,6 +26,25 @@ interface ChatThemeConfig {
     aiBubble: string
     aiText: string
   }
+}
+
+function getChatThemeTextPalette(backgroundColor: string) {
+  const isDark = isDarkColor(backgroundColor)
+  return isDark
+    ? {
+        text: "#F5F5F5",
+        mutedText: "rgba(245,245,245,0.74)",
+        panelBg: "rgba(255,255,255,0.08)",
+        panelBorder: "rgba(255,255,255,0.16)",
+        indicator: "rgba(245,245,245,0.72)",
+      }
+    : {
+        text: "#1F2937",
+        mutedText: "rgba(31,41,55,0.72)",
+        panelBg: "rgba(255,255,255,0.58)",
+        panelBorder: "rgba(17,24,39,0.12)",
+        indicator: "rgba(31,41,55,0.52)",
+      }
 }
 
 // Mention target name mapping
@@ -97,8 +117,8 @@ const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
       bg: "#121212",
       userBubble: "#333333",
       userText: "#FFFFFF",
-      aiBubble: "#1E1E1E",
-      aiText: "#E5E5E5",
+      aiBubble: "#363636",
+      aiText: "#F5F5F5",
     },
   },
   message: {
@@ -136,9 +156,29 @@ function getEditTargetMessage(message: ChatMessage, messages: ChatMessage[]) {
     ) ?? message
 }
 
+function normalizeMessageNewlines(content: string) {
+  return content
+    .replace(/\\r\\n|\\n|\\r/g, "\n")
+    .replace(/([^\s\n])(["“][^"“”\n]{1,500}["”])/g, "$1\n\n$2")
+    .replace(/(["“][^"“”\n]{1,500}["”])([^\s\n])/g, "$1\n\n$2")
+    .replace(/\n{3,}/g, "\n\n")
+}
+
+function getLatestEditableMessageId(messages: ChatMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (isAssistantExtraMessage(message)) continue
+    const editTarget = getEditTargetMessage(message, messages)
+    const isCharacterLine = editTarget.isUserAuthoredCharacterLine && editTarget.speakerType === "character"
+    const isEditable = editTarget.type === "user" || editTarget.type === "ai" || isCharacterLine
+    if (isEditable && editTarget.content.trim()) return editTarget.id
+  }
+  return null
+}
+
 function isAssistantExtraMessage(message: ChatMessage) {
   if (message.type !== "status" || message.isGenerationError || !message.turnId) return false
-  return /^(📱 휴대폰|💬 SNS|👀 시청자 반응)/.test(message.content.trim())
+  return /^(📱 휴대폰|💬 SNS|📊 상태창|📍장소:)/.test(message.content.trim())
 }
 
 function getAssistantExtraMessages(message: ChatMessage, messages: ChatMessage[], index: number) {
@@ -282,9 +322,21 @@ export function ChatMessageList({
   }
 
   const themeConfig = getActualThemeConfig()
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+  const latestEditableMessageId = getLatestEditableMessageId(messages)
   // Bubble style rendering
   return (
-    <div className="flex flex-col gap-3 px-4 py-4 pb-44">
+    <div
+      className="flex flex-col gap-3 px-4 py-4 pb-44"
+      style={{
+        color: themeTextPalette.text,
+        "--chat-theme-text": themeTextPalette.text,
+        "--chat-theme-muted-text": themeTextPalette.mutedText,
+        "--chat-theme-panel-bg": themeTextPalette.panelBg,
+        "--chat-theme-panel-border": themeTextPalette.panelBorder,
+        "--chat-theme-indicator": themeTextPalette.indicator,
+      } as CSSProperties}
+    >
       {messages.map((message, index) => (
         (() => {
           if (isGroupedAssistantExtra(message, messages, index)) return null
@@ -304,7 +356,7 @@ export function ChatMessageList({
               textSize={textSize}
               lineHeight={lineHeight}
               characters={characters}
-              isLatest={index === messages.length - 1}
+              isLatest={editTarget.id === latestEditableMessageId}
               canBranch={
                 (message.type === "ai" || message.type === "status" || message.type === "inner-thought") &&
                 (!message.turnId || messages[index + 1 + extraMessages.length]?.turnId !== message.turnId)
@@ -329,9 +381,9 @@ export function ChatMessageList({
       {/* Typing Indicator */}
       {isTyping && (
         typingVariant === "image" ? (
-          <BubbleImageGeneratingIndicator label={typingLabel ?? "이미지 생성중..."} />
+          <BubbleImageGeneratingIndicator label={typingLabel ?? "이미지 생성중..."} themeConfig={themeConfig} />
         ) : (
-          <BubbleTypingIndicator label={typingLabel} />
+          <BubbleTypingIndicator label={typingLabel} themeConfig={themeConfig} />
         )
       )}
       {/* Scroll anchor */}
@@ -388,7 +440,7 @@ function BubbleMessageBubble({
   onSaveEdit,
 }: BubbleMessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false)
-  const [editDraft, setEditDraft] = useState(editInitialContent)
+  const [editDraft, setEditDraft] = useState(() => normalizeMessageNewlines(editInitialContent))
   const [imageLoadFailed, setImageLoadFailed] = useState(false)
   const isCharacterLine = Boolean(message.isUserAuthoredCharacterLine && message.speakerType === "character")
   const isUser = message.type === "user" && !isCharacterLine
@@ -397,9 +449,10 @@ function BubbleMessageBubble({
   const isInnerThought = message.type === "inner-thought"
   const isStatus = message.type === "status"
   const speakerProfile = getSpeakerProfile(message, characters)
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
 
   useEffect(() => {
-    if (isEditing) setEditDraft(editInitialContent)
+    if (isEditing) setEditDraft(normalizeMessageNewlines(editInitialContent))
   }, [editInitialContent, isEditing])
 
   useEffect(() => {
@@ -409,7 +462,14 @@ function BubbleMessageBubble({
   if (message.isGenerationError) {
     return (
       <div className="flex justify-start">
-        <div className="max-w-[92%] rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-3 text-muted-foreground shadow-sm">
+        <div
+          className="max-w-[92%] rounded-xl border px-3 py-3 shadow-sm"
+          style={{
+            backgroundColor: themeTextPalette.panelBg,
+            borderColor: "rgba(220,38,38,0.35)",
+            color: themeTextPalette.text,
+          }}
+        >
           <p
             className="whitespace-pre-wrap break-words [word-break:keep-all]"
             style={{ fontSize: Math.min(14, Math.max(11, textSize)), lineHeight: Math.max(1.45, lineHeight) }}
@@ -433,7 +493,14 @@ function BubbleMessageBubble({
   if (isEvent) {
     return (
       <div className="flex justify-center my-4">
-        <div className="w-full max-w-sm rounded-xl bg-card overflow-hidden">
+        <div
+          className="w-full max-w-sm overflow-hidden rounded-xl border"
+          style={{
+            backgroundColor: themeTextPalette.panelBg,
+            borderColor: themeTextPalette.panelBorder,
+            color: themeTextPalette.text,
+          }}
+        >
           {/* Event Image */}
           <div className="relative aspect-video bg-muted">
             {message.eventImage ? (
@@ -452,8 +519,8 @@ function BubbleMessageBubble({
             
             {/* Event Title */}
             <div className="absolute bottom-3 left-4 right-4">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Event</span>
-              <h4 className="text-lg font-semibold text-foreground mt-0.5">
+              <span className="text-xs uppercase tracking-wider" style={{ color: themeTextPalette.mutedText }}>Event</span>
+              <h4 className="mt-0.5 text-lg font-semibold" style={{ color: themeTextPalette.text }}>
                 {message.content}
               </h4>
             </div>
@@ -462,7 +529,7 @@ function BubbleMessageBubble({
           {/* Event Description */}
           {message.eventDescription && (
             <div className="px-4 py-3">
-              <p className="text-sm text-muted-foreground leading-relaxed">
+              <p className="text-sm leading-relaxed" style={{ color: themeTextPalette.mutedText }}>
                 {message.eventDescription}
               </p>
             </div>
@@ -479,8 +546,14 @@ function BubbleMessageBubble({
       <div className="flex flex-col items-start gap-2">
         <div className="flex justify-start">
           <div
-            className="max-w-[92%] rounded-xl border border-border bg-card/85 px-3 py-2.5 text-muted-foreground shadow-sm"
-            style={{ fontSize: statusTextSize, lineHeight: Math.max(1.45, lineHeight) }}
+            className="max-w-[92%] rounded-xl border px-3 py-2.5 shadow-sm"
+            style={{
+              backgroundColor: themeTextPalette.panelBg,
+              borderColor: themeTextPalette.panelBorder,
+              color: themeTextPalette.text,
+              fontSize: statusTextSize,
+              lineHeight: Math.max(1.45, lineHeight),
+            }}
           >
             <p className="whitespace-pre-wrap break-words [word-break:keep-all]">
               {message.content}
@@ -510,22 +583,90 @@ function BubbleMessageBubble({
     ...getMentionDisplayNames(message.mentions),
     ...(message.speakerName ? [message.speakerName] : []),
   ]
+  const displayContent = normalizeMessageNewlines(message.content)
+  const statusLabel =
+    message.status === "streaming"
+      ? "응답 생성 중..."
+      : message.status === "failed"
+        ? "생성 실패"
+        : message.status === "repaired"
+          ? "검수 후 수정됨"
+          : ""
+  const displayMessage = displayContent === message.content ? message : { ...message, content: displayContent }
   const bubbleColor = isUser ? themeConfig.preview.userBubble : themeConfig.preview.aiBubble
   const bubbleTextColor = isUser ? themeConfig.preview.userText : themeConfig.preview.aiText
   const mentionStyle = getMentionStyle(bubbleColor)
   const bubbleStyle = {
     backgroundColor: bubbleColor,
     color: bubbleTextColor,
+    boxShadow: isDarkColor(themeConfig.preview.bg) ? "0 0 0 1px rgba(255,255,255,0.14)" : undefined,
     "--mention-bg": mentionStyle.bg,
     "--mention-text": mentionStyle.text,
     "--mention-border": mentionStyle.border,
   } as CSSProperties
-  const segments = parseMessageSegments(message)
-  const shouldRenderSegments = !message.imageUrl && shouldRenderMessageSegments(message, segments)
+  const segments = parseMessageSegments(displayMessage)
+  const shouldRenderSegments = !message.imageUrl && shouldRenderMessageSegments(displayMessage, segments)
+  const composerParts = isUser && !message.imageUrl ? parseComposerInput(displayContent) : []
+  const shouldRenderComposerParts = isUser && composerParts.some((part) => part.type === "action")
+
+  if (shouldRenderComposerParts) {
+    return (
+      <div className="flex flex-col items-end gap-2">
+        <UserSegmentedMessage
+          parts={composerParts}
+          mentionNames={mentionNames}
+          themeConfig={themeConfig}
+          textSize={textSize}
+          lineHeight={lineHeight}
+          bubbleStyle={bubbleStyle}
+        />
+
+        {isEditing && (
+          <EditMessageForm
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            disabled={disabled}
+            isUser={isUser}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
+          />
+        )}
+
+        {isLatest && !isEditing && !disabled && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+            <AuthorTools
+              messageId={message.id}
+              onRewrite={onRewrite}
+              onEdit={onStartEdit}
+              onDelete={onDelete}
+              isEdited={isEdited}
+              canRewrite={false}
+              disabled={disabled}
+            />
+          </div>
+        )}
+
+        {canBranch && !isEditing && (
+          <BranchButton
+            disabled={disabled}
+            isBranching={isBranching}
+            onClick={() => {
+              if (disabled) return
+              setIsBranching(true)
+              setTimeout(() => {
+                onBranch?.(message.id)
+                setIsBranching(false)
+              }, 800)
+            }}
+          />
+        )}
+      </div>
+    )
+  }
 
   if (shouldRenderSegments) {
     return (
-      <div className="flex flex-col items-start gap-2">
+      <div className="flex flex-col items-start">
         <AssistantSegmentedMessage
           message={message}
           segments={segments}
@@ -551,7 +692,7 @@ function BubbleMessageBubble({
           />
         )}
 
-        {isLatest && (isAI || isCharacterLine) && !isEditing && (
+        {isLatest && (isAI || isCharacterLine) && !isEditing && !disabled && (
           <div className="animate-in fade-in slide-in-from-top-1 duration-150">
             <AuthorTools
               messageId={message.id}
@@ -621,7 +762,14 @@ function BubbleMessageBubble({
             />
           )}
           {message.imageUrl && imageLoadFailed && (
-            <div className="rounded-xl border border-border bg-card/85 px-3 py-2.5 text-muted-foreground">
+            <div
+              className="rounded-xl border px-3 py-2.5"
+              style={{
+                backgroundColor: themeTextPalette.panelBg,
+                borderColor: themeTextPalette.panelBorder,
+                color: themeTextPalette.text,
+              }}
+            >
               <p
                 className="whitespace-pre-wrap break-words [word-break:keep-all]"
                 style={{ fontSize: Math.min(14, Math.max(11, textSize)), lineHeight: Math.max(1.45, lineHeight) }}
@@ -630,13 +778,24 @@ function BubbleMessageBubble({
               </p>
             </div>
           )}
-          {message.content && (
+          {displayContent && (
             <p
               className="whitespace-pre-wrap break-words [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
               style={{ fontSize: textSize, lineHeight }}
             >
-              {renderHighlightedMentions(message.content, mentionNames)}
+              {renderHighlightedMentions(displayContent, mentionNames)}
             </p>
+          )}
+          {!displayContent && message.status === "streaming" && (
+            <p
+              className="whitespace-pre-wrap break-words opacity-70 [word-break:keep-all]"
+              style={{ fontSize: Math.max(12, textSize - 1), lineHeight }}
+            >
+              응답 생성 중...
+            </p>
+          )}
+          {statusLabel && displayContent && (
+            <p className="mt-1 text-[10px] font-medium opacity-60">{statusLabel}</p>
           )}
           
           {/* Edited indicator dot */}
@@ -659,12 +818,17 @@ function BubbleMessageBubble({
 
       {isAI && extraMessages.length > 0 && (
         <div className="w-full max-w-[82%] sm:max-w-[80%]">
-          <AssistantExtraSection messages={extraMessages} textSize={textSize} lineHeight={lineHeight} />
+          <AssistantExtraSection
+            messages={extraMessages}
+            textSize={textSize}
+            lineHeight={lineHeight}
+            themeConfig={themeConfig}
+          />
         </div>
       )}
       
       {/* Author Tools - only the latest message can be edited or deleted. */}
-      {isLatest && (isUser || isAI || isCharacterLine) && !isEditing && (
+      {isLatest && (isUser || isAI || isCharacterLine) && !isEditing && !disabled && (
         <div className="animate-in fade-in slide-in-from-top-1 duration-150">
           <AuthorTools
             messageId={message.id}
@@ -727,6 +891,7 @@ function AssistantSegmentedMessage({
   )
   const speakerName = message.speakerName ?? firstDialogue?.speakerName
   const avatarLabel = speakerName?.slice(0, 1) ?? "AI"
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
 
   return (
     <div className="assistant-message-group w-full max-w-[92%] pb-1">
@@ -739,9 +904,14 @@ function AssistantSegmentedMessage({
         />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">{speakerName ?? "AI"}</span>
+            <span className="truncate text-sm font-semibold" style={{ color: themeTextPalette.text }}>
+              {speakerName ?? "AI"}
+            </span>
             {isCharacterLine && (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                style={{ backgroundColor: themeTextPalette.panelBg, color: themeTextPalette.mutedText }}
+              >
                 직접 작성
               </span>
             )}
@@ -764,9 +934,75 @@ function AssistantSegmentedMessage({
           />
         ))}
         {extraMessages.length > 0 && (
-          <AssistantExtraSection messages={extraMessages} textSize={textSize} lineHeight={lineHeight} />
+          <AssistantExtraSection
+            messages={extraMessages}
+            textSize={textSize}
+            lineHeight={lineHeight}
+            themeConfig={themeConfig}
+          />
         )}
       </div>
+    </div>
+  )
+}
+
+function UserSegmentedMessage({
+  parts,
+  mentionNames,
+  themeConfig,
+  textSize,
+  lineHeight,
+  bubbleStyle,
+}: {
+  parts: ComposerPart[]
+  mentionNames: string[]
+  themeConfig: ChatThemeConfig
+  textSize: number
+  lineHeight: number
+  bubbleStyle: CSSProperties
+}) {
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+  const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg)
+  const actionStyle = {
+    color: themeTextPalette.mutedText,
+    fontSize: Math.max(12, textSize - 1),
+    lineHeight: Math.max(1.45, lineHeight),
+    "--mention-bg": narrationMentionStyle.bg,
+    "--mention-text": narrationMentionStyle.text,
+    "--mention-border": narrationMentionStyle.border,
+  } as CSSProperties
+
+  return (
+    <div className="flex w-full flex-col items-end gap-2">
+      {parts.map((part, index) => {
+        if (part.type === "action") {
+          return (
+            <p
+              key={`user-action-${index}`}
+              className="max-w-[82%] whitespace-pre-wrap break-words px-1.5 py-0.5 text-right italic [word-break:keep-all] sm:max-w-[80%] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+              style={actionStyle}
+            >
+              {renderHighlightedMentions(part.text, mentionNames)}
+            </p>
+          )
+        }
+
+        return (
+          <div key={`user-dialogue-${index}`} className="relative flex w-full justify-end">
+            <div
+              className="relative w-fit max-w-[82%] rounded-2xl px-4 py-2.5 sm:max-w-[80%]"
+              style={bubbleStyle}
+            >
+              <p
+                className="whitespace-pre-wrap break-words [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+                style={{ fontSize: textSize, lineHeight }}
+              >
+                {renderHighlightedMentions(part.text, mentionNames)}
+              </p>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -775,14 +1011,18 @@ function AssistantExtraSection({
   messages,
   textSize,
   lineHeight,
+  themeConfig,
 }: {
   messages: ChatMessage[]
   textSize: number
   lineHeight: number
+  themeConfig: ChatThemeConfig
 }) {
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+
   return (
     <div className="mt-1.5 w-full max-w-[92%] space-y-2">
-      <p className="px-1 text-[11px] font-semibold text-muted-foreground">부가 정보</p>
+      <p className="px-1 text-[11px] font-semibold" style={{ color: themeTextPalette.mutedText }}>부가 정보</p>
       <div className="space-y-2">
         {messages.map((message) => (
           <AssistantExtraCard
@@ -790,6 +1030,7 @@ function AssistantExtraSection({
             message={message}
             textSize={Math.max(12, textSize - 2)}
             lineHeight={Math.max(1.35, lineHeight)}
+            themeConfig={themeConfig}
           />
         ))}
       </div>
@@ -801,11 +1042,14 @@ function AssistantExtraCard({
   message,
   textSize,
   lineHeight,
+  themeConfig,
 }: {
   message: ChatMessage
   textSize: number
   lineHeight: number
+  themeConfig: ChatThemeConfig
 }) {
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
   const lines = message.content
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -818,10 +1062,16 @@ function AssistantExtraCard({
 
   return (
     <div
-      className="w-full rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-muted-foreground"
-      style={{ fontSize: textSize, lineHeight }}
+      className="w-full rounded-lg border px-3 py-2"
+      style={{
+        backgroundColor: themeTextPalette.panelBg,
+        borderColor: themeTextPalette.panelBorder,
+        color: themeTextPalette.mutedText,
+        fontSize: textSize,
+        lineHeight,
+      }}
     >
-      <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground/80">
+      <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: themeTextPalette.text }}>
         <span className="text-sm leading-none">{icon}</span>
         <span>{title}</span>
       </div>
@@ -852,13 +1102,10 @@ function MessageSegmentBlock({
   lineHeight: number
 }) {
   if (segment.type === "narration") {
-    const narrationMentionStyle = {
-      bg: "var(--muted)",
-      text: "var(--foreground)",
-      border: "var(--border)",
-    }
+    const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+    const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg)
     const narrationStyle = {
-      color: "var(--muted-foreground)",
+      color: themeTextPalette.mutedText,
       fontSize: textSize,
       lineHeight,
       "--mention-bg": narrationMentionStyle.bg,
@@ -868,7 +1115,7 @@ function MessageSegmentBlock({
 
     return (
       <p
-        className="whitespace-pre-wrap break-words py-1 [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+        className="max-w-[92%] whitespace-pre-wrap break-words px-1.5 py-1.5 [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
         style={narrationStyle}
       >
         {renderHighlightedMentions(segment.content, mentionNames)}
@@ -882,6 +1129,7 @@ function MessageSegmentBlock({
   const bubbleStyle = {
     backgroundColor: bubbleColor,
     color: bubbleTextColor,
+    boxShadow: isDarkColor(themeConfig.preview.bg) ? "0 0 0 1px rgba(255,255,255,0.14)" : undefined,
     "--mention-bg": mentionStyle.bg,
     "--mention-text": mentionStyle.text,
     "--mention-border": mentionStyle.border,
@@ -923,17 +1171,17 @@ function EditMessageForm({
       onSubmit={(event) => {
         event.preventDefault()
         if (disabled) return
-        onSaveEdit(editDraft)
+        onSaveEdit(normalizeMessageNewlines(editDraft))
       }}
       className={cn("w-full max-w-[82%] space-y-2 sm:max-w-[80%]", isUser && "ml-auto")}
     >
       <textarea
         value={editDraft}
         onChange={(event) => setEditDraft(event.target.value)}
-        rows={3}
+        rows={6}
         autoFocus
         disabled={disabled}
-        className="w-full resize-none rounded-xl border border-border bg-input px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
+        className="max-h-[50vh] min-h-[168px] w-full resize-y whitespace-pre-wrap rounded-xl border border-border bg-input px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
       />
       <div className={cn("flex items-center gap-2", isUser ? "justify-end" : "justify-start")}>
         <button
@@ -971,8 +1219,8 @@ function BranchButton({
         onClick={onClick}
         disabled={disabled || isBranching}
         className={cn(
-          "flex items-center gap-1.5 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors",
-          isBranching && "text-foreground",
+          "flex items-center gap-1.5 px-2 py-1 text-[10px] text-[var(--chat-theme-muted-text)] transition-colors hover:text-[var(--chat-theme-text)]",
+          isBranching && "text-[var(--chat-theme-text)]",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
@@ -1010,28 +1258,38 @@ function isDarkColor(hexColor: string) {
   return luminance < 0.55
 }
 
-function BubbleTypingIndicator({ label }: { label?: string }) {
+function BubbleTypingIndicator({ label, themeConfig }: { label?: string; themeConfig: ChatThemeConfig }) {
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+
   return (
     <div className="flex justify-start">
-      <div className="px-4 py-3 rounded-2xl bg-muted">
+      <div
+        className="rounded-2xl border px-4 py-3"
+        style={{
+          backgroundColor: themeTextPalette.panelBg,
+          borderColor: themeTextPalette.panelBorder,
+          color: themeTextPalette.text,
+        }}
+      >
         {label && (
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
+          <p className="mb-2 text-xs font-medium" style={{ color: themeTextPalette.mutedText }}>
             {label}
           </p>
         )}
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-          <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-          <span className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+          <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
+          <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
+          <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
         </div>
       </div>
     </div>
   )
 }
 
-function BubbleImageGeneratingIndicator({ label }: { label: string }) {
+function BubbleImageGeneratingIndicator({ label, themeConfig }: { label: string; themeConfig: ChatThemeConfig }) {
   const [dotCount, setDotCount] = useState(1)
   const baseLabel = label.replace(/\.+$/, "")
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1042,16 +1300,19 @@ function BubbleImageGeneratingIndicator({ label }: { label: string }) {
 
   return (
     <div className="flex justify-start">
-      <div className="w-full max-w-[82%] overflow-hidden rounded-2xl border border-border bg-card shadow-sm sm:max-w-[80%]">
-        <div className="flex aspect-square max-h-80 min-h-48 w-full flex-col items-center justify-center gap-3 bg-muted/70 px-4 text-center">
-          <p className="text-sm font-medium text-muted-foreground" aria-live="polite">
+      <div
+        className="w-full max-w-[82%] overflow-hidden rounded-2xl border shadow-sm sm:max-w-[80%]"
+        style={{ backgroundColor: themeTextPalette.panelBg, borderColor: themeTextPalette.panelBorder }}
+      >
+        <div className="flex aspect-square max-h-80 min-h-48 w-full flex-col items-center justify-center gap-3 px-4 text-center">
+          <p className="text-sm font-medium" style={{ color: themeTextPalette.mutedText }} aria-live="polite">
             {baseLabel}
             <span className="inline-block w-5 text-left">{".".repeat(dotCount)}</span>
           </p>
           <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-            <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-            <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
+            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
+            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
+            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
           </div>
         </div>
       </div>

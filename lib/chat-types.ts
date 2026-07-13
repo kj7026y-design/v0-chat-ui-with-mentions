@@ -1,8 +1,16 @@
+export type ChatMessageStatus = "pending" | "streaming" | "completed" | "failed" | "repaired"
+
 export interface ChatMessage {
   id: string
   type: "user" | "ai" | "event" | "inner-thought" | "status"
   content: string
   timestamp: Date
+  status?: ChatMessageStatus
+  generationRunId?: string
+  provider?: string
+  model?: string
+  streamedContent?: string
+  savedContent?: string
   imageUrl?: string
   imageName?: string
   mediaId?: string
@@ -50,10 +58,10 @@ export const SLASH_COMMANDS: Command[] = [
     icon: "💬",
   },
   {
-    id: "audience-reaction",
-    name: "시청자반응",
-    description: "현재 장면을 보는 시청자 반응을 보여줘요",
-    icon: "👀",
+    id: "status",
+    name: "상태창",
+    description: "현재 진행 상황과 상태 정보를 보여줘요",
+    icon: "📊",
   },
   {
     id: "image",
@@ -63,6 +71,6 @@ export const SLASH_COMMANDS: Command[] = [
   },
 ]
 
-export const AUTO_COMMAND_IDS = ["phone", "sns", "audience-reaction"]
-export const DEFAULT_COMMAND_SUGGESTION_IDS = ["phone", "sns"]
+export const AUTO_COMMAND_IDS = ["phone", "sns", "status"]
+export const DEFAULT_COMMAND_SUGGESTION_IDS: string[] = []
 export const MAX_COMMAND_SUGGESTIONS = 2

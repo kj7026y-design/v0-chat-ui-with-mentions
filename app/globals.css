@@ -158,6 +158,29 @@
     @apply bg-background text-foreground;
   }
 
+  button:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  summary,
+  label:has(input:not(:disabled)),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  textarea:disabled,
+  input:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   .dark .shadow-xs,
   .dark .shadow-sm,
   .dark .shadow-md,

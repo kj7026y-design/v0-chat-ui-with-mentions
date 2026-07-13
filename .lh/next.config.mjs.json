@@ -1,0 +1,22 @@
+{
+    "sourceFile": "next.config.mjs",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1783384805438,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1783907215776,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -5,8 +5,9 @@\n     \"127.0.0.1\",\n     \"192.168.1.120\",\n     \"192.168.1.164\",\n     \"192.168.1.179\",\n+    \"192.168.1.110\"\n   ],\n   typescript: {\n     ignoreBuildErrors: true,\n   },\n"
+                }
+            ],
+            "date": 1783384805438,
+            "name": "Commit-0",
+            "content": "/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  allowedDevOrigins: [\n    \"localhost\",\n    \"127.0.0.1\",\n    \"192.168.1.120\",\n    \"192.168.1.164\",\n    \"192.168.1.179\",\n  ],\n  typescript: {\n    ignoreBuildErrors: true,\n  },\n  images: {\n    unoptimized: true,\n  },\n}\n\nexport default nextConfig\n"
+        }
+    ]
+}

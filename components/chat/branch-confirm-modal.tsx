@@ -1,5 +1,7 @@
 "use client"
 
+import { GitBranch, X } from "lucide-react"
+
 interface BranchConfirmModalProps {
   isOpen: boolean
   onConfirm: () => void
@@ -10,38 +12,49 @@ export function BranchConfirmModal({ isOpen, onConfirm, onCancel }: BranchConfir
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70"
         onClick={onCancel}
       />
 
-      {/* Modal */}
-      <div className="relative w-full max-w-xs bg-popover rounded-2xl border border-border p-5 text-center animate-in fade-in zoom-in-95 duration-200">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
-          <svg className="w-6 h-6 text-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <h3 className="text-base font-semibold text-foreground">새로운 분기 만들기</h3>
-        <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-          이 장면부터 새로운 이야기로 이어갈까요?
-        </p>
-        <p className="text-xs text-muted-foreground mt-2">분기 생성에는 3 크레딧이 필요해요.</p>
+      <div className="relative w-[min(calc(100vw-2rem),340px)] rounded-[20px] bg-[#FFFFFF] px-5 pb-5 pt-6 text-[#1A1A1A] shadow-2xl shadow-black/25 animate-in fade-in zoom-in-95 duration-200 dark:bg-[#2E2E2C] dark:text-[#F5F5F3]">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[#9B9A93] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#888780] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+          aria-label="닫기"
+        >
+          <X className="h-4 w-4" />
+        </button>
 
-        <div className="flex gap-2 mt-5">
+        <div className="mb-[14px] flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary">
+          <GitBranch className="h-[22px] w-[22px]" />
+        </div>
+
+        <h3 className="text-[18px] font-medium leading-tight tracking-normal text-[#1A1A1A] dark:text-[#F5F5F3]">
+          새로운 분기 만들기
+        </h3>
+        <p className="mt-2 text-[14px] font-normal leading-[1.6] text-[#6B6B68] dark:text-[#B4B2A9]">
+          이 장면부터 새로운 이야기로 이어갈까요?
+          <br />
+          분기 생성에는 3 크레딧이 필요해요.
+        </p>
+
+        <div className="mt-5 space-y-2">
           <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl bg-secondary text-secondary-foreground text-sm font-medium hover:bg-accent transition-colors"
-          >
-            취소
-          </button>
-          <button
+            type="button"
             onClick={onConfirm}
-            className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-colors"
+            className="flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             분기 만들기
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex h-11 w-full items-center justify-center rounded-xl bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+          >
+            취소
           </button>
         </div>
       </div>

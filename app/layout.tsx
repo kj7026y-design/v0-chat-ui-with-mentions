@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { BottomNavBar } from '@/components/chat/bottom-nav-bar'
+import { CreditHydrator } from '@/components/credit-hydrator'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
@@ -46,6 +47,7 @@ export default function RootLayout({
           enableSystem={true}
           disableTransitionOnChange
         >
+          <CreditHydrator />
           {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}
           <div className="flex flex-col h-[100dvh] overflow-hidden">
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -58,7 +60,7 @@ export default function RootLayout({
             </div>
           </div>
 
-          <Toaster position="top-center" />
+          <Toaster position="top-center" swipeDirections={["left", "right", "top"]} />
         </ThemeProvider>
         
         {process.env.NODE_ENV === 'production' && <Analytics />}

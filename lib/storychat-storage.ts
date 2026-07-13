@@ -316,6 +316,32 @@ export const defaultLibrary: StoryChatLibrary = {
       emoji: "🎸",
       createdAt: "2024.03.20",
     },
+    {
+      id: "c6",
+      name: "서윤",
+      genre: "로맨스",
+      gender: "female",
+      genderCustom: "",
+      age: "32",
+      role: "프라이빗 라운지의 오너",
+      residence: "청담의 멤버십 라운지",
+      appearance: "검은 실크 셔츠와 붉은 립, 느슨하게 묶은 머리, 상대의 숨결까지 읽는 듯한 눈빛",
+      summary: "위험할 만큼 우아하고 노골적일 만큼 솔직한 라운지 오너",
+      personality: "침착하고 도발적이며 주도권을 즐긴다. 상대가 물러서면 기다리고, 다가오면 한 걸음 더 깊이 끌어당긴다.",
+      speechStyle: "낮고 느린 반말을 쓴다. 짧은 문장으로 압박하고, 농담처럼 유혹을 건넨다.",
+      relationship: "서로의 욕망과 약점을 알고도 선을 넘을 듯 말 듯 밀고 당기는 계약 관계",
+      secret: "서윤은 오래전 당신과 맺은 비공식 계약의 마지막 조항을 아직 숨기고 있다.",
+      forbiddenDevelopments: "미성년자 등장, 강압적 관계, 동의 없는 접촉, 갑작스러운 순애 일상화, 우스꽝스러운 개그 전개",
+      defaultStartScenario: "비가 내리는 밤, 당신은 서윤이 운영하는 멤버십 라운지의 닫힌 문 앞에서 마지막 계약서를 들고 선다.",
+      allowStartChange: true,
+      allowCustomStart: true,
+      startOptions: ["닫힌 라운지", "계약서의 마지막 조항", "새벽 2시의 바 카운터"],
+      tags: ["성인 로맨스", "관능적", "도발적인", "위험한 계약"],
+      visualTags: ["검은 실크", "붉은 립", "어두운 라운지", "젖은 유리창"],
+      relationshipTags: ["계약 관계", "위험한 밀당", "오래된 비밀"],
+      emoji: "🥀",
+      createdAt: "2024.04.01",
+    },
   ],
   worlds: [
     {
@@ -435,6 +461,29 @@ export const defaultLibrary: StoryChatLibrary = {
       },
       createdAt: "2024.03.20",
     },
+    {
+      id: "s7",
+      name: "벨벳 라운지",
+      genre: "로맨스",
+      era: "2024년 깊은 밤",
+      coreSetting: "청담 골목 안쪽, 초대받은 사람만 들어갈 수 있는 프라이빗 라운지. 향수, 술, 낮은 조명, 비밀 계약이 뒤섞인 성인 로맨스 공간.",
+      places: "닫힌 바 카운터, 붉은 벨벳 소파, 비 내리는 테라스, 라운지 안쪽의 금고방",
+      events: "마지막 계약서 도착, 금고 속 사진 발견, 새벽 2시의 선택, 서로의 약점을 건 협상",
+      mood: "짙고 관능적이며 위험한 긴장감",
+      currentChapter: "",
+      currentGoal: "",
+      worldDate: "2024년 4월 1일 새벽 2시",
+      progress: 0,
+      forbiddenSettings: "동의 없는 접촉, 미성년자 등장, 폭력적 강압, 노골적인 범죄 미화, 가벼운 개그 전개",
+      coverColor: "from-rose-950/50 via-neutral-950 to-black",
+      storyProgressSettings: {
+        useChapters: false,
+        chapters: [],
+      },
+      moodKeywords: ["관능", "계약", "밀실", "위험한 유혹", "성인 로맨스"],
+      tagline: "닫힌 라운지, 젖은 유리창, 끝내 서명하지 못한 마지막 조항.",
+      createdAt: "2024.04.01",
+    },
   ],
   personas: [
     {
@@ -490,6 +539,24 @@ export const defaultLibrary: StoryChatLibrary = {
       forbiddenDevelopments: "설명 없이 해결되는 전개",
       avatarUrl: createPersonaAvatarUrl("아", "#0f766e", "#ecfeff"),
       createdAt: "2024.03.05",
+    },
+    {
+      id: "p4",
+      name: "윤재",
+      gender: "male",
+      genderCustom: "",
+      age: "29",
+      role: "계약서를 들고 돌아온 전 파트너",
+      summary: "서윤과의 마지막 계약을 끝내기 위해 라운지를 다시 찾은 사람",
+      personality: "차분하지만 쉽게 물러서지 않는다. 상대의 도발을 받아치면서도 감정이 흔들리는 순간을 숨긴다.",
+      speechStyle: "낮고 직설적인 현대어를 쓴다. 짧은 농담과 단호한 질문을 섞는다.",
+      appearance: "젖은 코트와 느슨한 넥타이, 오래 망설인 사람처럼 피곤하지만 선명한 눈빛",
+      relationship: "서윤의 옛 계약 상대이자 서로의 욕망과 약점을 가장 잘 아는 사람",
+      secret: "계약을 끝내러 왔다고 말하지만, 사실은 서윤이 자신을 붙잡아주길 바라고 있다.",
+      preferredDevelopments: "느린 긴장감, 위험한 플러팅, 서로의 선을 시험하는 대화, 주도권을 주고받는 성인 로맨스",
+      forbiddenDevelopments: "동의 없는 관계, 미성년자 설정, 갑작스러운 폭력, 캐릭터 붕괴",
+      avatarUrl: createPersonaAvatarUrl("윤", "#7f1d1d", "#fff1f2"),
+      createdAt: "2024.04.01",
     },
   ],
   works: [
@@ -638,6 +705,60 @@ export const defaultLibrary: StoryChatLibrary = {
       createdAt: "2024.03.20",
       updatedAt: "오늘",
     },
+    {
+      id: "w6",
+      title: "벨벳 라운지의 마지막 조항",
+      characterId: "c6",
+      worldId: "s7",
+      personaId: "p4",
+      startScenario: "비가 내리는 새벽 2시, 윤재는 서윤이 운영하는 벨벳 라운지에 마지막 계약서를 들고 돌아온다.",
+      introScenarios: [
+        {
+          id: "intro-w6-1",
+          title: "닫힌 라운지",
+          scene: "영업이 끝난 벨벳 라운지. 붉은 조명 아래 바닥은 비에 젖은 발자국으로 희미하게 번져 있고, 서윤은 잠긴 문 앞에서 윤재의 느슨한 넥타이를 바라본다.",
+          firstMessage: "이 시간에 다시 온 이유가 계약 때문이라고 하면, 난 조금 실망할 것 같은데.",
+          options: ["계약서를 바 카운터 위에 올려놓는다", "서윤의 시선을 피하지 않는다", "넥타이를 느슨하게 풀며 마지막 조항을 묻는다"],
+        },
+        {
+          id: "intro-w6-2",
+          title: "금고방의 열쇠",
+          scene: "라운지 안쪽 금고방의 문이 반쯤 열려 있다. 은은한 향수 냄새와 오래된 위스키 향 사이로, 서윤은 손끝에 걸린 열쇠를 천천히 흔든다.",
+          firstMessage: "열어볼래? 대신 보고 나면 모르는 척은 못 해.",
+          options: ["열쇠를 받지 않고 서윤에게 다가간다", "무엇을 숨겼는지 묻는다", "손목을 잡고 조건을 다시 말하라고 한다"],
+        },
+        {
+          id: "intro-w6-3",
+          title: "비 내리는 테라스",
+          scene: "테라스 난간 너머로 새벽비가 쏟아지고, 도시의 불빛은 젖은 유리창 위에서 붉게 번진다. 서윤은 담배도 피우지 않으면서 라이터를 켰다 껐다 한다.",
+          firstMessage: "도망치려면 지금이 마지막이야. 내가 붙잡기 전에.",
+          options: ["도망치지 않겠다고 말한다", "서윤의 라이터를 빼앗는다", "먼저 붙잡아보라고 도발한다"],
+        },
+      ],
+      storyProgressSettings: {
+        useChapters: false,
+        chapters: [],
+      },
+      genre: "로맨스",
+      tagline: "성인만 입장 가능한 라운지, 끝내 서명하지 못한 계약, 위험할 만큼 가까운 유혹.",
+      coreSetting: "서윤과 윤재는 오래전 비공식 계약으로 얽힌 전 파트너다. 오늘 밤 두 사람은 계약을 끝내려 하지만, 말과 시선과 침묵이 계속 다른 결론으로 미끄러진다.",
+      majorLocations: "벨벳 라운지, 바 카운터, 금고방, 비 내리는 테라스",
+      majorEvents: "마지막 계약서 재등장, 금고 속 사진 발견, 새벽 2시의 협상, 서로의 본심을 건 도발",
+      mood: "아주 짙고 선정적인 성인 로맨스, 느린 긴장감, 노골적인 플러팅, 상호 동의 기반의 위험한 밀당",
+      currentChapter: "",
+      currentGoal: "",
+      worldDate: "2024년 4월 1일 새벽 2시",
+      statusBarEnabled: false,
+      statusBarText: "",
+      authorId: "storychat",
+      authorName: "StoryChat",
+      isPublic: true,
+      viewCount: 18420,
+      likeCount: 2390,
+      chatCount: 1280,
+      createdAt: "2024.04.01",
+      updatedAt: "오늘",
+    },
   ],
 }
 
@@ -651,14 +772,16 @@ export function getStoryChatLibrary(): StoryChatLibrary {
     const parsed = JSON.parse(raw) as Partial<StoryChatLibrary>
     return {
       characters: Array.isArray(parsed.characters)
-        ? ensureDefaultItems(parsed.characters.map(normalizeStoredCharacter), defaultLibrary.characters, ["c4", "c5"])
+        ? ensureDefaultItems(parsed.characters.map(normalizeStoredCharacter), defaultLibrary.characters, ["c4", "c5", "c6"])
         : defaultLibrary.characters,
       worlds: Array.isArray(parsed.worlds)
-        ? ensureDefaultItems(parsed.worlds.map(normalizeStoredWorld), defaultLibrary.worlds, ["s4", "s5", "s6"])
+        ? ensureDefaultItems(parsed.worlds.map(normalizeStoredWorld), defaultLibrary.worlds, ["s4", "s5", "s6", "s7"])
         : defaultLibrary.worlds,
-      personas: Array.isArray(parsed.personas) ? parsed.personas.map(normalizeStoredPersona) : defaultLibrary.personas,
+      personas: Array.isArray(parsed.personas)
+        ? ensureDefaultItems(parsed.personas.map(normalizeStoredPersona), defaultLibrary.personas, ["p4"])
+        : defaultLibrary.personas,
       works: Array.isArray(parsed.works)
-        ? ensureDefaultItems(parsed.works.map(normalizeStoredWork), defaultLibrary.works, ["w3", "w4", "w5"])
+        ? ensureDefaultItems(parsed.works.map(normalizeStoredWork), defaultLibrary.works, ["w3", "w4", "w5", "w6"])
         : defaultLibrary.works,
     }
   } catch {
@@ -705,9 +828,15 @@ function normalizeStoredPersona(persona: StoryPersona): StoryPersona {
 }
 
 function normalizeStoredWork(work: StoryWork): StoryWork {
+  const defaultWork = defaultLibrary.works.find((item) => item.id === work.id)
+  const normalizedIntroScenarios = normalizeIntroScenarios(work)
+  const shouldRestoreDefaultIntros =
+    defaultWork?.introScenarios?.length &&
+    (!work.introScenarios?.length || normalizedIntroScenarios.every((intro) => /^도입부 \d+$/.test(intro.title)))
+
   return {
     ...work,
-    introScenarios: normalizeIntroScenarios(work),
+    introScenarios: shouldRestoreDefaultIntros ? defaultWork.introScenarios : normalizedIntroScenarios,
     storyProgressSettings: work.storyProgressSettings
       ? normalizeProgressSettings(work.storyProgressSettings)
       : undefined,
@@ -735,7 +864,7 @@ export function cleanIntroScenarios(input: Partial<IntroScenario>[] | undefined 
         .filter(Boolean)
 
       return {
-        id: intro.id?.trim() || createId("intro"),
+        id: intro.id?.trim() || `intro-${index + 1}`,
         title: intro.title?.trim() || `도입부 ${index + 1}`,
         scene: intro.scene?.trim() || undefined,
         firstMessage: intro.firstMessage?.trim() || undefined,

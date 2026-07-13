@@ -1,0 +1,30 @@
+{
+    "sourceFile": "components/chat/author-tools.tsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 3,
+            "patches": [
+                {
+                    "date": 1782881310769,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1782881320133,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -50,9 +50,9 @@\n     },\n   ]\n \n   return (\n-    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mg-2\">\n+    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mb-2\">\n       {tools.filter((tool) => tool.visible).map((tool) => (\n         <button\n           key={tool.label}\n           onClick={tool.action}\n"
+                },
+                {
+                    "date": 1782881344841,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -50,9 +50,9 @@\n     },\n   ]\n \n   return (\n-    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mb-2\">\n+    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mb-1\">\n       {tools.filter((tool) => tool.visible).map((tool) => (\n         <button\n           key={tool.label}\n           onClick={tool.action}\n"
+                },
+                {
+                    "date": 1782881569412,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -50,9 +50,9 @@\n     },\n   ]\n \n   return (\n-    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mb-1\">\n+    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mb-1.5\">\n       {tools.filter((tool) => tool.visible).map((tool) => (\n         <button\n           key={tool.label}\n           onClick={tool.action}\n"
+                }
+            ],
+            "date": 1782881310769,
+            "name": "Commit-0",
+            "content": "\"use client\"\n\nimport { RefreshCw, Pencil, Trash2 } from \"lucide-react\"\nimport {\n  AlertDialog,\n  AlertDialogAction,\n  AlertDialogCancel,\n  AlertDialogContent,\n  AlertDialogDescription,\n  AlertDialogFooter,\n  AlertDialogHeader,\n  AlertDialogTitle,\n  AlertDialogTrigger,\n} from \"@/components/ui/alert-dialog\"\nimport { cn } from \"@/lib/utils\"\n\ninterface AuthorToolsProps {\n  messageId: string\n  onRewrite?: (messageId: string) => void\n  onEdit?: (messageId: string) => void\n  onDelete?: (messageId: string) => void\n  isEdited?: boolean\n  canRewrite?: boolean\n  disabled?: boolean\n}\n\nexport function AuthorTools({ \n  messageId, \n  onRewrite, \n  onEdit, \n  onDelete,\n  isEdited,\n  canRewrite = true,\n  disabled = false,\n}: AuthorToolsProps) {\n  const tools = [\n    { \n      icon: RefreshCw, \n      label: \"다시 쓰기\", \n      action: () => onRewrite?.(messageId),\n      className: \"hover:text-foreground hover:bg-accent\",\n      visible: canRewrite,\n    },\n    { \n      icon: Pencil, \n      label: \"문장 수정\", \n      action: () => onEdit?.(messageId),\n      className: \"hover:text-purple-400 hover:bg-purple-900/30\",\n      visible: true,\n    },\n  ]\n\n  return (\n    <div className=\"flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mg-2\">\n      {tools.filter((tool) => tool.visible).map((tool) => (\n        <button\n          key={tool.label}\n          onClick={tool.action}\n          disabled={disabled}\n          className={cn(\n            \"flex items-center gap-1.5 px-2 py-1.5 rounded-md\",\n            \"text-muted-foreground text-[11px] font-medium\",\n            \"transition-all duration-150\",\n            \"disabled:cursor-not-allowed disabled:opacity-50\",\n            tool.className\n          )}\n          title={tool.label}\n        >\n          <tool.icon className=\"w-3.5 h-3.5\" />\n          <span className=\"hidden sm:inline\">{tool.label}</span>\n        </button>\n      ))}\n\n      <AlertDialog>\n        <AlertDialogTrigger asChild>\n          <button\n            disabled={disabled}\n            className={cn(\n              \"flex items-center gap-1.5 px-2 py-1.5 rounded-md\",\n              \"text-muted-foreground text-[11px] font-medium\",\n              \"transition-all duration-150 hover:text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50\",\n            )}\n            title=\"기억 삭제\"\n          >\n            <Trash2 className=\"w-3.5 h-3.5\" />\n            <span className=\"hidden sm:inline\">기억 삭제</span>\n          </button>\n        </AlertDialogTrigger>\n        <AlertDialogContent>\n          <AlertDialogHeader>\n            <AlertDialogTitle>메시지를 삭제할까요?</AlertDialogTitle>\n            <AlertDialogDescription>\n              삭제한 메시지는 되돌릴 수 없어요. 이 메시지를 채팅에서 삭제합니다.\n            </AlertDialogDescription>\n          </AlertDialogHeader>\n          <AlertDialogFooter>\n            <AlertDialogCancel>취소</AlertDialogCancel>\n            <AlertDialogAction\n              onClick={() => onDelete?.(messageId)}\n              className=\"bg-destructive text-destructive-foreground hover:bg-destructive/90\"\n            >\n              삭제\n            </AlertDialogAction>\n          </AlertDialogFooter>\n        </AlertDialogContent>\n      </AlertDialog>\n      \n      {/* Edited indicator */}\n      {isEdited && (\n        <div className=\"w-2 h-2 rounded-full bg-purple-500 ml-1\" title=\"수정됨\" />\n      )}\n    </div>\n  )\n}\n"
+        }
+    ]
+}

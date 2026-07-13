@@ -131,7 +131,7 @@ export default function ExplorePage() {
               </ContentRail>
             )}
             {visibleWorks.length === 0 && visibleCharacters.length === 0 && (
-              <div className="rounded-3xl border border-border bg-card px-5 py-10 text-center">
+              <div className="rounded-lg border border-border bg-card px-5 py-10 text-center">
                 <p className="text-sm text-muted-foreground">검색 결과가 없어요. 다른 키워드로 찾아보세요.</p>
               </div>
             )}
@@ -448,7 +448,7 @@ function WorkPosterCard({ item, compact }: { item: ExploreWork; compact?: boolea
       <Link
         href={`/my-works/${work.id}`}
         className={cn(
-          "block overflow-hidden rounded-3xl border border-border bg-card transition active:scale-[0.98] group-hover:border-ring/50",
+          "block overflow-hidden rounded-lg border border-border bg-card transition active:scale-[0.98] group-hover:border-ring/50",
         )}
       >
         <div
@@ -481,7 +481,7 @@ function CharacterExploreCard({ item }: { item: ExploreCharacter }) {
   const detailHref = `/my-works?tab=characters&detailType=characters&detailId=${character.id}`
 
   return (
-    <article className="w-[168px] shrink-0 overflow-hidden rounded-3xl border border-border bg-card p-3">
+    <article className="w-[168px] shrink-0 overflow-hidden rounded-lg border border-border bg-card p-3">
       <Link href={detailHref} className="block w-full text-left transition active:scale-[0.98]">
         <div
           className={cn(
@@ -550,7 +550,7 @@ function ExploreSkeleton() {
       <div className="h-80 animate-pulse rounded-[28px] bg-muted" />
       <div className="flex gap-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-72 w-[178px] shrink-0 animate-pulse rounded-3xl bg-muted" />
+          <div key={index} className="h-72 w-[178px] shrink-0 animate-pulse rounded-lg bg-muted" />
         ))}
       </div>
     </div>

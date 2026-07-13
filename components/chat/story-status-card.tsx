@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface StoryStatus {
@@ -83,30 +83,35 @@ export function StoryStatusCard({ status, compactPanel = false, open, onOpenChan
     return (
       <div
         ref={panelRef}
-        className="fixed left-3 right-3 top-[3rem] z-50 max-h-[45dvh] overflow-y-auto rounded-2xl border border-border bg-card/95 p-3 shadow-2xl shadow-black/35 backdrop-blur-xl"
+        role="dialog"
+        aria-label="진행상황"
+        className="fixed left-3 right-3 top-[3rem] z-50 max-h-[58dvh] overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="min-w-0 truncate text-xs font-semibold text-muted-foreground">{summaryText}</p>
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <p className="min-w-0 truncate text-xs font-semibold text-foreground">진행상황</p>
           <button
             type="button"
             onClick={() => setExpanded(false)}
-            className="rounded-full px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="rounded-full p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            aria-label="진행상황 닫기"
           >
-            닫기
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
-        <StatusDetails
-          status={status}
-          progress={progress}
-          sceneSummary={sceneSummary}
-          progressText={progressText}
-          hasScene={hasScene}
-          hasProgress={hasProgress}
-          hasPeopleState={hasPeopleState}
-          hasCharacterState={hasCharacterState}
-          hasPersonaState={hasPersonaState}
-          hasNextFlow={hasNextFlow}
-        />
+        <div className="max-h-[calc(58dvh-2.5rem)] overflow-y-auto pb-4">
+          <StatusDetails
+            status={status}
+            progress={progress}
+            sceneSummary={sceneSummary}
+            progressText={progressText}
+            hasScene={hasScene}
+            hasProgress={hasProgress}
+            hasPeopleState={hasPeopleState}
+            hasCharacterState={hasCharacterState}
+            hasPersonaState={hasPersonaState}
+            hasNextFlow={hasNextFlow}
+          />
+        </div>
       </div>
     )
   }
@@ -177,35 +182,47 @@ function StatusDetails({
   hasPersonaState: boolean
   hasNextFlow: boolean
 }) {
-  return (
-    <div className="space-y-3">
-      {hasScene && (
-        <StatusSection title="현재 장면">
-          <p className="line-clamp-2 text-sm font-semibold leading-relaxed text-foreground">
-            {sceneSummary}
-          </p>
-        </StatusSection>
-      )}
+  const [locationText, timeText] = (status.currentLocation ?? "")
+    .split("·")
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const sceneMeta = [
+    status.worldDate,
+    locationText,
+    [timeText, status.weather].filter(Boolean).join(" · "),
+  ].filter(Boolean).join(" | ")
+  const sceneHighlight = sceneMeta || sceneSummary
 
-      {hasProgress && (
-        <StatusSection title="진행">
+  return (
+    <div className="space-y-5 pb-4">
+      {(hasScene || hasProgress) && (
+        <section className="space-y-3 pb-1">
+          {sceneHighlight && (
+            <div className="bg-muted/70 px-3 py-3">
+              {status.currentChapterTitle && (
+                <p className="text-sm font-semibold leading-relaxed text-foreground">{status.currentChapterTitle}</p>
+              )}
+              <p className="text-xs font-medium leading-relaxed text-muted-foreground">{sceneHighlight}</p>
+            </div>
+          )}
           {progressText && (
-            <p className="line-clamp-2 text-sm leading-relaxed text-foreground">{progressText}</p>
+            <p className="px-3 text-base leading-relaxed text-foreground">{progressText}</p>
           )}
           {status.chapterProgress !== undefined && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 px-3">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
               </div>
-              <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{progress}%</span>
+              <span className="min-w-9 text-right text-sm font-bold tabular-nums text-muted-foreground">{progress}%</span>
             </div>
           )}
-        </StatusSection>
+        </section>
       )}
 
       {hasPeopleState && (
-        <StatusSection title="인물 상태">
-          <div className="grid gap-2">
+        <section className="space-y-3 px-3 pb-1">
+          <h3 className="text-sm font-bold text-muted-foreground">인물 상태</h3>
+          <div className="grid gap-3">
             {hasCharacterState && (
               <PersonStatus
                 name={status.characterName}
@@ -221,11 +238,11 @@ function StatusDetails({
               />
             )}
           </div>
-        </StatusSection>
+        </section>
       )}
 
       {hasNextFlow && (
-        <StatusSection title="다음 흐름">
+        <StatusSection title="다음 흐름" className="px-3">
           <p className="text-sm leading-relaxed text-foreground">{status.nextEventCondition}</p>
         </StatusSection>
       )}
@@ -233,9 +250,9 @@ function StatusDetails({
   )
 }
 
-function StatusSection({ title, children }: { title: string; children: ReactNode }) {
+function StatusSection({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
-    <section className="space-y-1.5">
+    <section className={cn("space-y-1.5", className)}>
       <h3 className="text-[11px] font-semibold text-muted-foreground">{title}</h3>
       <div className="space-y-2">{children}</div>
     </section>
@@ -252,17 +269,17 @@ function PersonStatus({
   statusText?: string
 }) {
   return (
-    <div className="rounded-xl border border-border bg-background/45 px-3 py-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs font-semibold text-foreground">{name}</span>
+    <div className="rounded-2xl border border-border bg-background px-4 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-base font-bold text-foreground">{name}</span>
         {emotion && (
-          <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+          <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-bold text-foreground">
             {emotion}
           </span>
         )}
       </div>
       {statusText && (
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{statusText}</p>
+        <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{statusText}</p>
       )}
     </div>
   )

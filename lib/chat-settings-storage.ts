@@ -8,6 +8,7 @@ export const CHAT_LINE_HEIGHT_MAX = 1.8
 
 export interface ChatReadingSettings {
   textSize: number
+  textSizeUserSet?: boolean
   lineHeight: number
   showStoryStatus: boolean
   alwaysShowCommandSuggestions: boolean
@@ -15,7 +16,8 @@ export interface ChatReadingSettings {
 }
 
 export const defaultChatReadingSettings: ChatReadingSettings = {
-  textSize: 16,
+  textSize: 13,
+  textSizeUserSet: false,
   lineHeight: 1.5,
   showStoryStatus: true,
   alwaysShowCommandSuggestions: false,
@@ -27,22 +29,28 @@ export function getChatReadingSettings(chatId?: string): ChatReadingSettings {
   const scoped = chatId ? readScopedSettings(chatId) : null
   if (scoped) return scoped
 
+  const rawTextSize = window.localStorage.getItem(CHAT_TEXT_SIZE_KEY)
+  const rawLineHeight = window.localStorage.getItem(CHAT_LINE_HEIGHT_KEY)
+
   return {
     textSize: clampNumber(
-      Number(window.localStorage.getItem(CHAT_TEXT_SIZE_KEY)),
+      rawTextSize === null ? Number.NaN : Number(rawTextSize),
       CHAT_TEXT_SIZE_MIN,
       CHAT_TEXT_SIZE_MAX,
       defaultChatReadingSettings.textSize,
     ),
+    textSizeUserSet: rawTextSize !== null,
     lineHeight: clampNumber(
-      Number(window.localStorage.getItem(CHAT_LINE_HEIGHT_KEY)),
+      rawLineHeight === null ? Number.NaN : Number(rawLineHeight),
       CHAT_LINE_HEIGHT_MIN,
       CHAT_LINE_HEIGHT_MAX,
       defaultChatReadingSettings.lineHeight,
     ),
     showStoryStatus: true,
     alwaysShowCommandSuggestions: window.localStorage.getItem(ALWAYS_SHOW_COMMAND_SUGGESTIONS_KEY) === "true",
-    selectedCommandIds: readStringArray(window.localStorage.getItem("selectedCommandIds"), 2),
+    selectedCommandIds: window.localStorage.getItem(ALWAYS_SHOW_COMMAND_SUGGESTIONS_KEY) === "true"
+      ? readStringArray(window.localStorage.getItem("selectedCommandIds"), 2)
+      : [],
   }
 }
 
@@ -73,14 +81,27 @@ function readScopedSettings(chatId: string): ChatReadingSettings | null {
 }
 
 function normalizeSettings(settings: Partial<ChatReadingSettings>): ChatReadingSettings {
+  const wasAutoEnabled = Boolean(settings.alwaysShowCommandSuggestions)
+  const selectedCommandIds = wasAutoEnabled && Array.isArray(settings.selectedCommandIds)
+    ? settings.selectedCommandIds.filter((item): item is string => typeof item === "string").slice(0, 2)
+    : []
+  const textSizeUserSet = Boolean(settings.textSizeUserSet)
+  const normalizedTextSize = clampNumber(
+    Number(settings.textSize),
+    CHAT_TEXT_SIZE_MIN,
+    CHAT_TEXT_SIZE_MAX,
+    defaultChatReadingSettings.textSize,
+  )
+
   return {
-    textSize: clampNumber(Number(settings.textSize), CHAT_TEXT_SIZE_MIN, CHAT_TEXT_SIZE_MAX, defaultChatReadingSettings.textSize),
+    textSize: !textSizeUserSet && (normalizedTextSize === 16 || normalizedTextSize === CHAT_TEXT_SIZE_MIN)
+      ? defaultChatReadingSettings.textSize
+      : normalizedTextSize,
+    textSizeUserSet,
     lineHeight: clampNumber(Number(settings.lineHeight), CHAT_LINE_HEIGHT_MIN, CHAT_LINE_HEIGHT_MAX, defaultChatReadingSettings.lineHeight),
     showStoryStatus: settings.showStoryStatus === undefined ? true : Boolean(settings.showStoryStatus),
-    alwaysShowCommandSuggestions: Boolean(settings.alwaysShowCommandSuggestions),
-    selectedCommandIds: Array.isArray(settings.selectedCommandIds)
-      ? settings.selectedCommandIds.filter((item): item is string => typeof item === "string").slice(0, 2)
-      : [],
+    alwaysShowCommandSuggestions: selectedCommandIds.length > 0,
+    selectedCommandIds,
   }
 }
 

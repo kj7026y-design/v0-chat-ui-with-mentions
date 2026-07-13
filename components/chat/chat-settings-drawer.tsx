@@ -22,8 +22,7 @@ import {
 } from "@/lib/chat-memory-storage"
 import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage"
 import type { StoryPersona } from "@/lib/storychat-storage"
-import { AUTO_COMMAND_IDS, DEFAULT_COMMAND_SUGGESTION_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS } from "@/lib/chat-types"
-import { CHAT_MODELS, type ChatModelId } from "@/lib/chat-models"
+import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS } from "@/lib/chat-types"
 import {
   CHAT_LINE_HEIGHT_MAX,
   CHAT_LINE_HEIGHT_MIN,
@@ -35,6 +34,9 @@ import {
 } from "@/lib/chat-settings-storage"
 
 type ChatThemeId = "light" | "dark" | "message" | "messenger"
+type AppThemeMode = "light" | "dark"
+
+const CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY = "storychat_chat_theme_mode_suggestion_dismissed"
 
 interface ChatThemeConfig {
   id: ChatThemeId
@@ -70,8 +72,8 @@ const chatThemes: ChatThemeConfig[] = [
       bg: "#121212",
       userBubble: "#333333",
       userText: "#FFFFFF",
-      aiBubble: "#1E1E1E",
-      aiText: "#E5E5E5",
+      aiBubble: "#363636",
+      aiText: "#F5F5F5",
     },
   },
   {
@@ -100,6 +102,18 @@ const chatThemes: ChatThemeConfig[] = [
   },
 ]
 
+function getPreferredAppThemeForChatTheme(chatTheme: ChatThemeId): AppThemeMode {
+  return chatTheme === "dark" ? "dark" : "light"
+}
+
+function getAppThemeLabel(theme: AppThemeMode) {
+  return theme === "dark" ? "다크 모드" : "라이트 모드"
+}
+
+function getChatThemeLabel(themeId: ChatThemeId) {
+  return chatThemes.find((theme) => theme.id === themeId)?.label ?? "선택한"
+}
+
 interface ChatSettingsDrawerProps {
   isOpen: boolean
   onClose: () => void
@@ -107,11 +121,9 @@ interface ChatSettingsDrawerProps {
   characterEmoji: string
   chatId: string
   creditBalance?: number
-  selectedModelId: ChatModelId
   currentPersona?: StoryPersona
-  modelFocusRequest?: number
+  canShowProgressStatus?: boolean
   onChatThemeChange?: (theme: ChatThemeId) => void
-  onModelChange: (modelId: ChatModelId) => void
   onReadingSettingsChange?: (settings: ChatReadingSettings) => void
   onClearChat?: () => void
   onLeaveChat?: () => void
@@ -124,20 +136,24 @@ export function ChatSettingsDrawer({
   characterEmoji,
   chatId,
   creditBalance,
-  selectedModelId,
   currentPersona,
-  modelFocusRequest = 0,
+  canShowProgressStatus = false,
   onChatThemeChange,
-  onModelChange,
   onReadingSettingsChange,
   onClearChat,
   onLeaveChat,
 }: ChatSettingsDrawerProps) {
-  const { resolvedTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("light")
+  const [themeModeSuggestion, setThemeModeSuggestion] = useState<{
+    chatTheme: ChatThemeId
+    targetTheme: AppThemeMode
+  } | null>(null)
+  const [dontShowThemeModeSuggestion, setDontShowThemeModeSuggestion] = useState(false)
   const [readingSettings, setReadingSettings] = useState<ChatReadingSettings>({
-    textSize: 16,
+    textSize: 13,
+    textSizeUserSet: false,
     lineHeight: 1.5,
     showStoryStatus: true,
     alwaysShowCommandSuggestions: false,
@@ -148,7 +164,6 @@ export function ChatSettingsDrawer({
   const [memoryMemoDraft, setMemoryMemoDraft] = useState("")
   const memoryTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
-  const modelSectionRef = useRef<HTMLDivElement>(null)
   const autoCommandOptions = SLASH_COMMANDS.filter((command) => AUTO_COMMAND_IDS.includes(command.id))
   const validSelectedCommandIds = readingSettings.selectedCommandIds.filter((id) =>
     autoCommandOptions.some((command) => command.id === id),
@@ -177,35 +192,41 @@ export function ChatSettingsDrawer({
     }
   }, [characterName, chatId])
 
-  useEffect(() => {
-    if (!isOpen || modelFocusRequest <= 0) return
-    const timer = window.setTimeout(() => {
-      modelSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-    }, 320)
-    return () => window.clearTimeout(timer)
-  }, [isOpen, modelFocusRequest])
-
   const handleChatThemeChange = (theme: ChatThemeId) => {
+    if (theme === selectedChatTheme) return
+
     setSelectedChatTheme(theme)
     localStorage.setItem(`chat-theme-${chatId}`, theme)
     onChatThemeChange?.(theme)
+
+    const targetTheme = getPreferredAppThemeForChatTheme(theme)
+    const isDismissed = localStorage.getItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY) === "true"
+    if (!isDismissed && targetTheme !== resolvedTheme) {
+      setDontShowThemeModeSuggestion(false)
+      setThemeModeSuggestion({ chatTheme: theme, targetTheme })
+    }
+  }
+
+  const closeThemeModeSuggestion = () => {
+    if (dontShowThemeModeSuggestion) {
+      localStorage.setItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY, "true")
+    }
+    setThemeModeSuggestion(null)
+  }
+
+  const confirmThemeModeSuggestion = () => {
+    if (!themeModeSuggestion) return
+    if (dontShowThemeModeSuggestion) {
+      localStorage.setItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY, "true")
+    }
+    setTheme(themeModeSuggestion.targetTheme)
+    setThemeModeSuggestion(null)
   }
 
   const updateReadingSettings = (nextSettings: ChatReadingSettings) => {
     setReadingSettings(nextSettings)
     saveChatReadingSettings(nextSettings, chatId)
     onReadingSettingsChange?.(nextSettings)
-  }
-
-  const toggleAlwaysShowCommands = () => {
-    const nextEnabled = !readingSettings.alwaysShowCommandSuggestions
-    updateReadingSettings({
-      ...readingSettings,
-      alwaysShowCommandSuggestions: nextEnabled,
-      selectedCommandIds: nextEnabled && validSelectedCommandIds.length === 0
-        ? DEFAULT_COMMAND_SUGGESTION_IDS
-        : validSelectedCommandIds,
-    })
   }
 
   const toggleCommandSelection = (commandId: string) => {
@@ -218,6 +239,7 @@ export function ChatSettingsDrawer({
 
     updateReadingSettings({
       ...readingSettings,
+      alwaysShowCommandSuggestions: nextSelected.length > 0,
       selectedCommandIds: nextSelected,
     })
   }
@@ -270,44 +292,32 @@ export function ChatSettingsDrawer({
       <div
         className={cn(
           "fixed right-0 top-0 bottom-0 z-50 w-[80%] max-w-sm overflow-y-auto border-l border-border bg-card shadow-2xl shadow-black/60 transition-transform duration-300 ease-out dark:border-white/25 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),-24px_0_48px_rgba(0,0,0,0.72)]",
-          isOpen ? "translate-x-0" : "translate-x-full"
+          isOpen ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none"
         )}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-card px-4 py-4 flex items-center justify-between border-b border-border dark:border-white/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-              <span className="text-lg">{characterEmoji}</span>
-            </div>
-            <div>
-              <h2 className="font-semibold text-foreground">{characterName}</h2>
-              <p className="text-xs text-muted-foreground">세계관 날짜: 2024년 6월 15일</p>
-            </div>
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 dark:border-white/20">
+          <h2 className="text-base font-bold text-foreground">채팅방 설정</h2>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/credits"
+              onClick={onClose}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-accent"
+            >
+              <Gem className="h-3.5 w-3.5 text-primary" />
+              <span className="tabular-nums">{mounted ? (creditBalance ?? 0).toLocaleString() : "-"} 크레딧</span>
+            </Link>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="닫기"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
-            aria-label="닫기"
-          >
-            <X className="w-5 h-5 text-muted-foreground" />
-          </button>
         </div>
 
         <div className="px-4 py-3 space-y-4">
-          <Link
-            href="/credits"
-            onClick={onClose}
-            className="flex items-center justify-between rounded-full border border-border bg-muted px-3 py-2 transition-colors hover:bg-accent"
-          >
-            <div className="flex items-center gap-2">
-              <Gem className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">크레딧</span>
-            </div>
-            <span className="text-sm font-bold tabular-nums text-foreground">
-              {(creditBalance ?? 0).toLocaleString()}
-            </span>
-          </Link>
-
           <div className="grid grid-cols-3 gap-2">
             <SettingsSquareLink
               href={`/chat/${chatId}/media`}
@@ -376,7 +386,7 @@ export function ChatSettingsDrawer({
                 min={CHAT_TEXT_SIZE_MIN}
                 max={CHAT_TEXT_SIZE_MAX}
                 value={readingSettings.textSize}
-                onChange={(value) => updateReadingSettings({ ...readingSettings, textSize: value })}
+                onChange={(value) => updateReadingSettings({ ...readingSettings, textSize: value, textSizeUserSet: true })}
               />
               <SliderSetting
                 label="줄간격"
@@ -387,93 +397,31 @@ export function ChatSettingsDrawer({
                 value={readingSettings.lineHeight}
                 onChange={(value) => updateReadingSettings({ ...readingSettings, lineHeight: value })}
               />
-              <ToggleRow
-                title="상태창 표시"
-                description="현재 장면과 진행 상태를 상단에 표시합니다."
-                checked={readingSettings.showStoryStatus}
-                onClick={() => updateReadingSettings({ ...readingSettings, showStoryStatus: !readingSettings.showStoryStatus })}
-              />
+              {canShowProgressStatus && (
+                <ToggleRow
+                  title="진행상황 표시"
+                  description="챕터나 퀘스트 진행 상태를 상단에 표시합니다."
+                  checked={readingSettings.showStoryStatus}
+                  onClick={() => updateReadingSettings({ ...readingSettings, showStoryStatus: !readingSettings.showStoryStatus })}
+                />
+              )}
             </div>
           </section>
 
           <section className="space-y-3">
             <SectionTitle icon={<SlidersHorizontal className="h-4 w-4" />} title="대화 보조" />
             <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
-              <div ref={modelSectionRef} className="scroll-mt-20">
-                <div className="mb-2">
-                  <p className="text-sm font-medium text-foreground">AI 모델</p>
-                  <p className="text-[11px] text-muted-foreground">이 채팅방에서 사용할 답변 생성 모델을 선택합니다.</p>
-                </div>
-                <div className="grid gap-1.5">
-                  {CHAT_MODELS.map((model) => {
-                    const selected = selectedModelId === model.id
-                    return (
-                      <button
-                        key={model.id}
-                        type="button"
-                        onClick={() => onModelChange(model.id)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors",
-                          selected
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-background/50 text-muted-foreground hover:bg-accent",
-                        )}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-semibold">{model.label}</span>
-                            {model.badge && (
-                              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                {model.badge}
-                              </span>
-                            )}
-                          </div>
-                          <p className="truncate text-[11px]">{model.description}</p>
-                        </div>
-                        {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                      </button>
-                    )
-                  })}
-                </div>
-                {selectedModelId === "openai" && (
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    OpenAI 모델은 답변 생성 성공 시 크레딧이 더 많이 사용됩니다.
-                  </p>
-                )}
-              </div>
-              <div className="h-px bg-border/70" />
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">명령어 자동 실행</p>
-                  <p className="text-[11px] text-muted-foreground">선택한 명령어를 답변 뒤에 실행합니다.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={toggleAlwaysShowCommands}
-                  className={cn(
-                    "h-6 w-11 shrink-0 rounded-full border p-0.5 transition-colors",
-                    readingSettings.alwaysShowCommandSuggestions
-                      ? "border-blue-500 bg-blue-500 dark:border-sky-400 dark:bg-sky-500"
-                      : "border-border bg-border dark:bg-neutral-700",
-                  )}
-                  aria-pressed={readingSettings.alwaysShowCommandSuggestions}
-                >
-                  <span
-                    className={cn(
-                      "block h-5 w-5 rounded-full bg-white shadow-sm ring-1 ring-black/10 transition-transform dark:bg-white dark:ring-white/30",
-                      readingSettings.alwaysShowCommandSuggestions && "translate-x-5",
-                    )}
-                  />
-                </button>
-              </div>
-              {readingSettings.alwaysShowCommandSuggestions && (
-                <div className="rounded-lg border border-border bg-background/50 px-2.5 py-2">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <p className="text-xs font-semibold text-foreground">표시할 명령어 선택</p>
-                    <span className="text-[11px] text-muted-foreground">
-                      {validSelectedCommandIds.length}/{MAX_COMMAND_SUGGESTIONS}
-                    </span>
+              <div>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">자동 실행할 명령어 선택</p>
+                    <p className="text-[11px] text-muted-foreground">선택한 명령어를 답변 뒤에 실행합니다. 선택하지 않으면 실행하지 않습니다.</p>
                   </div>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                    {validSelectedCommandIds.length}/{MAX_COMMAND_SUGGESTIONS}
+                  </span>
+                </div>
+                <div className="rounded-lg border border-border bg-background/50 px-2.5 py-2">
                   <div className="grid gap-1">
                     {autoCommandOptions.map((command) => {
                       const checked = validSelectedCommandIds.includes(command.id)
@@ -500,7 +448,7 @@ export function ChatSettingsDrawer({
                     })}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </section>
 
@@ -599,6 +547,69 @@ export function ChatSettingsDrawer({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={Boolean(themeModeSuggestion)}
+        onOpenChange={(open) => {
+          if (!open) closeThemeModeSuggestion()
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(calc(100vw-2rem),340px)] gap-0 rounded-[20px] border-0 bg-[#FFFFFF] px-5 pb-5 pt-6 text-[#1A1A1A] shadow-2xl shadow-black/25 dark:bg-[#2E2E2C] dark:text-[#F5F5F3]"
+        >
+          <button
+            type="button"
+            onClick={closeThemeModeSuggestion}
+            className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[#9B9A93] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#888780] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+            aria-label="닫기"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="mb-[14px] flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary">
+            <Palette className="h-[22px] w-[22px]" />
+          </div>
+
+          <DialogHeader className="gap-2 text-left">
+            <DialogTitle className="text-[18px] font-medium leading-tight tracking-normal text-[#1A1A1A] dark:text-[#F5F5F3]">
+              앱 테마도 맞출까요?
+            </DialogTitle>
+            <DialogDescription className="text-[14px] font-normal leading-[1.6] text-[#6B6B68] dark:text-[#B4B2A9]">
+              {themeModeSuggestion
+                ? `${getChatThemeLabel(themeModeSuggestion.chatTheme)} 채팅 테마는 ${getAppThemeLabel(themeModeSuggestion.targetTheme)}에서 더 자연스럽게 보여요. 앱 전체 테마를 ${getAppThemeLabel(themeModeSuggestion.targetTheme)}로 전환할까요?`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <label className="mt-5 flex w-fit items-center gap-2.5 text-[13px] font-medium leading-snug text-[#1A1A1A] dark:text-[#F5F5F3]">
+            <input
+              type="checkbox"
+              checked={dontShowThemeModeSuggestion}
+              onChange={(event) => setDontShowThemeModeSuggestion(event.target.checked)}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+            <span>다시 보지 않기</span>
+          </label>
+
+          <div className="mt-5 space-y-2">
+            <button
+              type="button"
+              onClick={confirmThemeModeSuggestion}
+              className="flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              {themeModeSuggestion ? `${getAppThemeLabel(themeModeSuggestion.targetTheme)}로 전환` : "전환"}
+            </button>
+            <button
+              type="button"
+              onClick={closeThemeModeSuggestion}
+              className="flex h-11 w-full items-center justify-center rounded-xl bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+            >
+              그대로 두기
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmModal
         open={isLeaveConfirmOpen}
         title="채팅방 나가기"
@@ -642,22 +653,22 @@ function SettingsSquareLink({
       href={href}
       onClick={onClick}
       className={cn(
-        "group relative flex aspect-square min-h-[72px] overflow-hidden rounded-lg border border-border bg-background/60 p-2 text-left transition-colors hover:bg-accent",
+        "group relative flex aspect-square min-h-[72px] overflow-hidden rounded-lg border border-border bg-background/60 p-2 text-center transition-colors hover:bg-accent",
         backgroundImage && "bg-cover bg-center",
       )}
       style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : undefined}
     >
       {backgroundImage && (
-        <span className="absolute inset-0 bg-black/35 transition-colors group-hover:bg-black/25" />
+        <span className="absolute inset-0 bg-[rgba(999,999,999,0.8)] transition-colors group-hover:bg-[rgba(999,999,999,0.72)] dark:bg-black/35 dark:group-hover:bg-black/25" />
       )}
       <span
         className={cn(
-          "relative mt-auto flex items-center gap-1.5 text-xs font-semibold",
-          backgroundImage ? "text-white drop-shadow" : "text-foreground",
+          "relative mt-auto flex w-full items-center justify-center gap-1.5 text-center text-sm font-semibold leading-tight",
+          backgroundImage ? "text-neutral-950 drop-shadow-sm dark:text-white dark:drop-shadow" : "text-foreground",
         )}
       >
         {icon}
-        {label}
+        <span className="block truncate">{label}</span>
       </span>
     </Link>
   )
@@ -717,27 +728,28 @@ function PersonaSquareButton({
     <Link
       href={href}
       onClick={onClick}
-      className="group relative flex aspect-square min-h-[82px] overflow-hidden rounded-xl border border-border bg-muted/40 p-3 text-left transition-colors hover:bg-muted"
+      className="group relative flex aspect-square min-h-[82px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-border bg-muted/40 p-2 text-center transition-colors hover:bg-muted"
     >
-      {persona?.avatarUrl ? (
-        <img
-          src={persona.avatarUrl}
-          alt={persona.name || label}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-        />
-      ) : (
-        <span className="absolute inset-0 flex items-center justify-center bg-muted text-2xl font-bold text-muted-foreground">
-          {fallback}
-        </span>
-      )}
-      <span className="absolute inset-0 bg-gradient-to-t from-background/85 via-background/20 to-transparent transition-all group-hover:backdrop-blur-[2px] group-hover:bg-background/40" />
-      <span className="relative z-10 mt-auto min-w-0 transition-opacity group-hover:opacity-0">
-        {persona?.name && (
-          <span className="mb-0.5 block truncate text-[10px] font-medium text-muted-foreground">{persona.name}</span>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background ring-1 ring-border transition-opacity group-hover:opacity-35">
+        {persona?.avatarUrl ? (
+          <img
+            src={persona.avatarUrl}
+            alt={persona.name || label}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="text-base font-bold text-muted-foreground">
+            {fallback}
+          </span>
         )}
-        <span className="block text-sm font-semibold text-foreground">{label}</span>
       </span>
-      <span className="absolute inset-0 z-20 flex items-center justify-center text-sm font-semibold text-foreground opacity-0 transition-opacity group-hover:opacity-100">
+      <span className="mt-auto min-w-0 max-w-full leading-tight transition-opacity group-hover:opacity-20">
+        {persona?.name && (
+          <span className="block truncate text-[10px] font-medium leading-tight text-muted-foreground">{persona.name}</span>
+        )}
+        <span className="block truncate text-sm font-semibold leading-tight text-foreground">{label}</span>
+      </span>
+      <span className="absolute inset-0 flex items-center justify-center bg-background/45 text-sm font-semibold text-foreground opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100">
         변경
       </span>
     </Link>
