@@ -13,6 +13,7 @@ import {
 import { buildModelBackground } from "@/lib/model-background"
 import { parseRoleplayInputParts } from "@/lib/rp-input-parser"
 import { getRoleplayModelProfile, type RoleplayModelProfile } from "@/lib/rp/model-profiles"
+import { buildGeminiAdultFictionInstruction } from "@/lib/rp/prompt/gemini-adult-fiction"
 import {
   buildGeminiRoleplayConfig,
   buildOpenAIRoleplayRequest,
@@ -82,10 +83,10 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v2"
+const PROMPT_VERSION = "rp-pipeline-v3"
 const NORMALIZER_VERSION = "rp-normalizer-v1"
 const VALIDATOR_VERSION = "rp-validator-v2"
-const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "OFF"
+const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
   HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -2077,6 +2078,7 @@ export function generateDynamicPrompt({
   currentScene = "",
   compiledContext,
   profile,
+  adultFictionMode = false,
 }: {
   characterName?: string
   userName?: string
@@ -2086,12 +2088,16 @@ export function generateDynamicPrompt({
   currentScene?: string
   compiledContext?: CompiledRoleplayContext
   profile?: RoleplayModelProfile
+  adultFictionMode?: boolean
 }) {
   const responseMaxChars = profile?.targetChars.max ?? compiledContext?.turnPolicy.maxChars ?? MAX_OPENROUTER_RESPONSE_CHARS
   const responseMinChars = profile?.targetChars.min ?? 300
   const maxDialogues = profile?.maxDialogues ?? 1
   const compiledSection = buildCompiledRoleplaySection(compiledContext)
   const profileInstructions = buildProfilePromptInstructions(profile)
+  const adultFictionInstruction = adultFictionMode
+    ? buildGeminiAdultFictionInstruction(characterName)
+    : ""
 
   return `너는 역할극 채팅에서 오직 "${characterName}" 한 명만 연기한다.
 
@@ -2103,6 +2109,8 @@ export function generateDynamicPrompt({
 - "${userName}"이 웃었다, 물러섰다, 말했다, 생각했다 같은 문장을 쓰지 않는다.
 - "${userName}"의 제공된 행동과 대사에만 반응한다.
 - 답변 마지막은 "${userName}"이 다음 행동을 할 수 있게 열린 상태로 끝낸다.
+
+${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 
 [출력 형식]
 - 한국어로만 쓴다.
@@ -2720,6 +2728,7 @@ async function handleRoleplayChatFromNormalized(
     currentScene: currentSceneForPrompt,
     compiledContext,
     profile,
+    adultFictionMode: model.id === "gemini-3-flash-rp",
   })
   const finalMessages = buildRoleplayMessages(
     messages,
@@ -3249,6 +3258,7 @@ async function streamGeminiRoleplay({
     currentScene: currentSceneForPrompt,
     compiledContext,
     profile,
+    adultFictionMode: model.id === "gemini-3-flash-rp",
   })
   const finalMessages = buildRoleplayMessages(messages, systemPromptText, userName, compiledContext)
   const { systemPrompt, contents } = splitGeminiRoleplayMessages(finalMessages)

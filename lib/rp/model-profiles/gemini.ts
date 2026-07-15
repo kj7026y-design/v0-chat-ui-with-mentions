@@ -1,6 +1,6 @@
 import type { RoleplayModelProfile } from "./types"
 
-const geminiSafetyThreshold = (process.env.GEMINI_SAFETY_THRESHOLD || "OFF") as NonNullable<RoleplayModelProfile["safety"]>["geminiSafetyThreshold"]
+const geminiSafetyThreshold = (process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE") as NonNullable<RoleplayModelProfile["safety"]>["geminiSafetyThreshold"]
 
 export const geminiFlashRpProfile: RoleplayModelProfile = {
   id: "gemini-flash-rp",
