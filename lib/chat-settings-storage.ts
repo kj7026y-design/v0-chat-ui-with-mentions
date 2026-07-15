@@ -1,6 +1,8 @@
 export const CHAT_TEXT_SIZE_KEY = "chatTextSize"
 export const CHAT_LINE_HEIGHT_KEY = "chatLineHeight"
 export const ALWAYS_SHOW_COMMAND_SUGGESTIONS_KEY = "alwaysShowCommandSuggestions"
+export const TEST_BYPASS_ROLEPLAY_RULES_KEY = "testBypassRoleplayRules"
+export const TEST_RAW_ROLEPLAY_STREAM_KEY = "testRawRoleplayStream"
 export const CHAT_TEXT_SIZE_MIN = 10
 export const CHAT_TEXT_SIZE_MAX = 16
 export const CHAT_LINE_HEIGHT_MIN = 1.2
@@ -13,6 +15,8 @@ export interface ChatReadingSettings {
   showStoryStatus: boolean
   alwaysShowCommandSuggestions: boolean
   selectedCommandIds: string[]
+  testBypassRoleplayRules: boolean
+  testRawRoleplayStream: boolean
 }
 
 export const defaultChatReadingSettings: ChatReadingSettings = {
@@ -22,6 +26,8 @@ export const defaultChatReadingSettings: ChatReadingSettings = {
   showStoryStatus: true,
   alwaysShowCommandSuggestions: false,
   selectedCommandIds: [],
+  testBypassRoleplayRules: false,
+  testRawRoleplayStream: false,
 }
 
 export function getChatReadingSettings(chatId?: string): ChatReadingSettings {
@@ -51,6 +57,8 @@ export function getChatReadingSettings(chatId?: string): ChatReadingSettings {
     selectedCommandIds: window.localStorage.getItem(ALWAYS_SHOW_COMMAND_SUGGESTIONS_KEY) === "true"
       ? readStringArray(window.localStorage.getItem("selectedCommandIds"), 2)
       : [],
+    testBypassRoleplayRules: window.localStorage.getItem(TEST_BYPASS_ROLEPLAY_RULES_KEY) === "true",
+    testRawRoleplayStream: window.localStorage.getItem(TEST_RAW_ROLEPLAY_STREAM_KEY) === "true",
   }
 }
 
@@ -62,6 +70,8 @@ export function saveChatReadingSettings(settings: ChatReadingSettings, chatId?: 
     window.localStorage.setItem(CHAT_LINE_HEIGHT_KEY, String(settings.lineHeight))
     window.localStorage.setItem(ALWAYS_SHOW_COMMAND_SUGGESTIONS_KEY, String(settings.alwaysShowCommandSuggestions))
     window.localStorage.setItem("selectedCommandIds", JSON.stringify(settings.selectedCommandIds.slice(0, 2)))
+    window.localStorage.setItem(TEST_BYPASS_ROLEPLAY_RULES_KEY, String(settings.testBypassRoleplayRules))
+    window.localStorage.setItem(TEST_RAW_ROLEPLAY_STREAM_KEY, String(settings.testRawRoleplayStream))
   }
   window.dispatchEvent(new Event("storychat-reading-settings-updated"))
 }
@@ -102,6 +112,8 @@ function normalizeSettings(settings: Partial<ChatReadingSettings>): ChatReadingS
     showStoryStatus: settings.showStoryStatus === undefined ? true : Boolean(settings.showStoryStatus),
     alwaysShowCommandSuggestions: selectedCommandIds.length > 0,
     selectedCommandIds,
+    testBypassRoleplayRules: Boolean(settings.testBypassRoleplayRules),
+    testRawRoleplayStream: Boolean(settings.testRawRoleplayStream),
   }
 }
 

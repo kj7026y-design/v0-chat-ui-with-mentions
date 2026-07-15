@@ -1,4 +1,13 @@
 export type GenerationRunStatus = "streaming" | "completed" | "failed"
+export type GenerationValidationStatus = "passed" | "accepted_with_warnings" | "repaired" | "fallback" | "failed"
+export type GenerationValidationAttempt = {
+  stage: "initial" | "repair" | "fallback" | "final"
+  status: GenerationValidationStatus
+  failures: string[]
+  hardFailures: string[]
+  repairableFailures: string[]
+  softFailures: string[]
+}
 
 export type GenerationRun = {
   id: string
@@ -10,6 +19,10 @@ export type GenerationRun = {
   promptVersion: string
   normalizerVersion?: string
   validatorVersion?: string
+  validationStatus?: GenerationValidationStatus
+  validationFailures?: string[]
+  validationAttempts?: GenerationValidationAttempt[]
+  repairAttempted?: boolean
   ttftMs?: number
   rawOutput?: string
   savedContent?: string

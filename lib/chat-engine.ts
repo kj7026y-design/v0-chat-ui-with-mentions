@@ -1,6 +1,6 @@
 import { type ChatMessage } from "@/lib/chat-types"
 import { DEFAULT_CHAT_MODEL_ID, DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS, getChatModelConfig, type ChatModelId } from "@/lib/chat-models"
-import { saveGenerationRun } from "@/lib/generation-runs"
+import { saveGenerationRun, type GenerationValidationAttempt, type GenerationValidationStatus } from "@/lib/generation-runs"
 import { buildModelBackground } from "@/lib/model-background"
 import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser"
 import type { StoryCharacter, StoryPersona, StoryWork, StoryWorld } from "@/lib/storychat-storage"
@@ -60,9 +60,16 @@ export interface ImageCommandContext {
 
 export type AssistantReplyContext = ImageCommandContext
 
+export type ChatStreamPhase = "preparing" | "generating" | "validating" | "repairing" | "fallback" | "finalizing"
+
 export type ChatStreamEvent = {
   event_id?: number
+  event_type?: "phase" | "delta" | "raw_delta" | "final"
   content?: string
+  raw_content?: string
+  phase?: ChatStreamPhase
+  phase_label?: string
+  elapsed_ms?: number
   is_final_event?: boolean
   run_id?: string
   message_id?: string
@@ -72,6 +79,10 @@ export type ChatStreamEvent = {
   prompt_version?: string
   normalizer_version?: string
   validator_version?: string
+  validation_status?: GenerationValidationStatus
+  validation_failures?: string[]
+  validation_attempts?: GenerationValidationAttempt[]
+  repair_attempted?: boolean
   ttft_ms?: number
   mismatch?: boolean
   fallback?: boolean
@@ -87,6 +98,8 @@ export type GenerateAssistantReplyOptions = {
   roomId?: string
   userMessageId?: string
   characterMessageId?: string
+  bypassRoleplayRules?: boolean
+  debugRawRoleplayStream?: boolean
   onStreamEvent?: (event: ChatStreamEvent) => void
 }
 
@@ -783,6 +796,19 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
   const handleEvent = (event: ChatStreamEvent) => {
     options.onStreamEvent?.(event)
 
+    if (event.event_type === "raw_delta") {
+      if (process.env.NODE_ENV !== "production" && event.raw_content) {
+        console.debug("[RP raw stream delta]", {
+          runId: event.run_id,
+          elapsedMs: event.elapsed_ms,
+          content: event.raw_content,
+        })
+      }
+      return null
+    }
+
+    if (event.event_type === "phase") return null
+
     if (!event.is_final_event) {
       streamedContent += event.content ?? ""
       return null
@@ -802,6 +828,10 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
         promptVersion: event.prompt_version || "unknown",
         normalizerVersion: event.normalizer_version,
         validatorVersion: event.validator_version,
+        validationStatus: event.validation_status,
+        validationFailures: event.validation_failures,
+        validationAttempts: event.validation_attempts,
+        repairAttempted: event.repair_attempted,
         ttftMs: event.ttft_ms,
         rawOutput: streamedContent.slice(0, 1200),
         savedContent: savedContent.slice(0, 1200),
@@ -820,6 +850,17 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
         runId: event.run_id,
         streamedContentLength: streamedContent.length,
         savedContentLength: savedContent.length,
+      })
+    }
+
+    if (
+      event.validation_status === "accepted_with_warnings" &&
+      process.env.NODE_ENV !== "production"
+    ) {
+      console.debug("[generation validation warning]", {
+        runId: event.run_id,
+        failures: event.validation_failures ?? [],
+        repairAttempted: event.repair_attempted,
       })
     }
 
@@ -865,7 +906,9 @@ async function generatePollinationsReply(
   const model = getChatModelConfig(modelId)
   const maxAnswerChars = model.maxAnswerChars ?? DEFAULT_MAX_ANSWER_CHARS
   const messages = cleanChatHistory(buildAssistantMessages(history, userContent, introContext, context, modelId))
-  const outboundMessages = model.provider === "openrouter"
+  const bypassRoleplayRules = process.env.NODE_ENV !== "production" && options.bypassRoleplayRules === true
+  const debugRawRoleplayStream = process.env.NODE_ENV !== "production" && options.debugRawRoleplayStream === true
+  const outboundMessages = model.provider === "openrouter" && !bypassRoleplayRules
     ? messages.filter((message) => message.role !== "system")
     : messages
   const systemPrompt = messages.find((message) => message.role === "system")?.content ?? buildAssistantSystemPrompt(context, modelId, introContext)
@@ -882,6 +925,8 @@ async function generatePollinationsReply(
     userMessageId: options.userMessageId,
     characterMessageId: options.characterMessageId,
     messages: outboundMessages,
+    bypassRoleplayRules,
+    debugRawRoleplayStream,
     ...promptContext,
     ...(model.provider === "pollinations" ? { systemPrompt, fallbackPrompt } : {}),
   }
@@ -978,6 +1023,13 @@ export async function generateAssistantReply(
     generationRunId: completedEvent?.run_id,
     provider: completedEvent?.provider,
     model: completedEvent?.model,
+    validationStatus: completedEvent?.validation_status,
+    validationFailures: completedEvent?.validation_failures,
+    validationAttempts: completedEvent?.validation_attempts,
+    repairAttempted: completedEvent?.repair_attempted,
+    fallback: completedEvent?.fallback,
+    fallbackProvider: completedEvent?.fallback_provider,
+    fallbackModel: completedEvent?.fallback_model,
     savedContent: completedEvent?.saved_content || content,
     speakerId: context?.character?.id,
     speakerName: context?.character?.name || context?.status?.characterName,

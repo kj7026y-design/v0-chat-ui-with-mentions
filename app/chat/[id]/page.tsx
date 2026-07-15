@@ -571,6 +571,19 @@ export default function ChatPage() {
       turnId,
     }
     const handleStreamEvent = (event: ChatStreamEvent) => {
+      if (event.event_type === "phase") {
+        setTypingLabel(event.phase_label)
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[generation phase]", {
+            runId: event.run_id,
+            phase: event.phase,
+            elapsedMs: event.elapsed_ms,
+          })
+        }
+        return
+      }
+      if (event.event_type === "raw_delta") return
+
       setMessages((prev) =>
         prev.map((message) => {
           if (message.id !== characterMessageId) return message
@@ -592,6 +605,13 @@ export default function ChatPage() {
               generationRunId: event.run_id,
               provider: event.provider,
               model: event.model,
+              validationStatus: event.validation_status,
+              validationFailures: event.validation_failures,
+              validationAttempts: event.validation_attempts,
+              repairAttempted: event.repair_attempted,
+              fallback: event.fallback,
+              fallbackProvider: event.fallback_provider,
+              fallbackModel: event.fallback_model,
               savedContent,
               streamedContent: message.content,
             }
@@ -622,6 +642,8 @@ export default function ChatPage() {
             roomId: chatId,
             userMessageId: userMessage.id,
             characterMessageId,
+            bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
+            debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
             onStreamEvent: handleStreamEvent,
           },
         )),
@@ -718,6 +740,19 @@ export default function ChatPage() {
       turnId: retryTurnId,
     }
     const handleStreamEvent = (event: ChatStreamEvent) => {
+      if (event.event_type === "phase") {
+        setTypingLabel(event.phase_label)
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[generation phase]", {
+            runId: event.run_id,
+            phase: event.phase,
+            elapsedMs: event.elapsed_ms,
+          })
+        }
+        return
+      }
+      if (event.event_type === "raw_delta") return
+
       setMessages((prev) =>
         prev.map((message) => {
           if (message.id !== characterMessageId) return message
@@ -731,6 +766,13 @@ export default function ChatPage() {
               generationRunId: event.run_id,
               provider: event.provider,
               model: event.model,
+              validationStatus: event.validation_status,
+              validationFailures: event.validation_failures,
+              validationAttempts: event.validation_attempts,
+              repairAttempted: event.repair_attempted,
+              fallback: event.fallback,
+              fallbackProvider: event.fallback_provider,
+              fallbackModel: event.fallback_model,
               savedContent,
               streamedContent: message.content,
             }
@@ -768,6 +810,8 @@ export default function ChatPage() {
             roomId: chatId,
             userMessageId: retryMessages.findLast((message) => message.type === "user")?.id,
             characterMessageId,
+            bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
+            debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
             onStreamEvent: handleStreamEvent,
           },
         )),
@@ -949,6 +993,9 @@ export default function ChatPage() {
         selectedIntroScenario,
         buildImageCommandContext(rewriteHistory),
         selectedModelId,
+        {
+          bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
+        },
       )
 
       setMessages((prev) =>

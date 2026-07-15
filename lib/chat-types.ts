@@ -1,3 +1,5 @@
+import type { GenerationValidationAttempt, GenerationValidationStatus } from "@/lib/generation-runs"
+
 export type ChatMessageStatus = "pending" | "streaming" | "completed" | "failed" | "repaired"
 
 export interface ChatMessage {
@@ -9,6 +11,13 @@ export interface ChatMessage {
   generationRunId?: string
   provider?: string
   model?: string
+  validationStatus?: GenerationValidationStatus
+  validationFailures?: string[]
+  validationAttempts?: GenerationValidationAttempt[]
+  repairAttempted?: boolean
+  fallback?: boolean
+  fallbackProvider?: string
+  fallbackModel?: string
   streamedContent?: string
   savedContent?: string
   imageUrl?: string

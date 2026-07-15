@@ -1,0 +1,41 @@
+import type { RoleplayModelProfile } from "./types"
+
+export const openaiRpProfile: RoleplayModelProfile = {
+  id: "openai-rp",
+  provider: "openai",
+  modelName: process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini",
+  temperature: 0.75,
+  topP: 0.9,
+  maxOutputTokens: 900,
+  promptStyle: "concise-direct",
+  outputMode: "chat",
+  targetChars: { min: 280, max: 520 },
+  maxDialogues: 2,
+  validationSensitivity: {
+    brokenDialogueQuotes: "repairable",
+    tooManyDialogues: "repairable",
+    overPhysical: "hard",
+    metaLeak: "hard",
+    internalTokenLeak: "hard",
+    foreignScriptLeak: "hard",
+    unpromptedHandFocus: "repairable",
+    objectiveUserStateAssertion: "hard",
+    userControlByNarration: "hard",
+    controlsUser: "hard",
+    contractClosureBias: "repairable",
+    futureClosure: "repairable",
+    responseMissedUserIntent: "repairable",
+    lowContentDensity: "repairable",
+    excessiveAbstractMood: "repairable",
+    characterVoiceWeak: "repairable",
+    tooLong: "soft",
+  },
+  repair: {
+    maxAttempts: 1,
+    acceptRepairableAfterAttempt: true,
+  },
+  fallback: {
+    providerOrder: ["same", "local"],
+    allowLocalFallback: false,
+  },
+}

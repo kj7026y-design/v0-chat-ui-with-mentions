@@ -1,0 +1,41 @@
+import type { RoleplayModelProfile } from "./types"
+
+export const commandRRpProfile: RoleplayModelProfile = {
+  id: "command-r-plus-rp",
+  provider: "openrouter",
+  modelName: process.env.OPENROUTER_UNSHAPED2_MODEL || "cohere/command-r-plus-08-2024",
+  temperature: 0.6,
+  topP: 0.9,
+  maxOutputTokens: 1200,
+  promptStyle: "korean-clean-direct",
+  outputMode: "chat",
+  targetChars: { min: 280, max: 560 },
+  maxDialogues: 2,
+  validationSensitivity: {
+    brokenDialogueQuotes: "repairable",
+    tooManyDialogues: "repairable",
+    overPhysical: "hard",
+    metaLeak: "hard",
+    internalTokenLeak: "hard",
+    foreignScriptLeak: "hard",
+    unpromptedHandFocus: "soft",
+    objectiveUserStateAssertion: "hard",
+    userControlByNarration: "hard",
+    controlsUser: "hard",
+    contractClosureBias: "repairable",
+    futureClosure: "repairable",
+    responseMissedUserIntent: "repairable",
+    lowContentDensity: "repairable",
+    excessiveAbstractMood: "repairable",
+    characterVoiceWeak: "repairable",
+    tooLong: "soft",
+  },
+  repair: {
+    maxAttempts: 1,
+    acceptRepairableAfterAttempt: true,
+  },
+  fallback: {
+    providerOrder: ["same", "local"],
+    allowLocalFallback: false,
+  },
+}

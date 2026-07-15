@@ -158,6 +158,8 @@ export function ChatSettingsDrawer({
     showStoryStatus: true,
     alwaysShowCommandSuggestions: false,
     selectedCommandIds: [],
+    testBypassRoleplayRules: false,
+    testRawRoleplayStream: false,
   })
   const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([])
   const [isMemoryMemoOpen, setIsMemoryMemoOpen] = useState(false)
@@ -449,6 +451,28 @@ export function ChatSettingsDrawer({
                   </div>
                 </div>
               </div>
+              {process.env.NODE_ENV !== "production" && (
+                <>
+                  <ToggleRow
+                    title="테스트: 검수/수리 우회"
+                    description="기본 문체는 유지하고 앱 검수만 건너뜁니다."
+                    checked={readingSettings.testBypassRoleplayRules}
+                    onClick={() => updateReadingSettings({
+                      ...readingSettings,
+                      testBypassRoleplayRules: !readingSettings.testBypassRoleplayRules,
+                    })}
+                  />
+                  <ToggleRow
+                    title="테스트: 검수 전 원문 로그"
+                    description="Gemini 생성 청크를 브라우저 콘솔에 실시간 기록합니다."
+                    checked={readingSettings.testRawRoleplayStream}
+                    onClick={() => updateReadingSettings({
+                      ...readingSettings,
+                      testRawRoleplayStream: !readingSettings.testRawRoleplayStream,
+                    })}
+                  />
+                </>
+              )}
             </div>
           </section>
 

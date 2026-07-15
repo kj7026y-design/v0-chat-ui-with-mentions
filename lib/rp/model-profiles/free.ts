@@ -1,0 +1,41 @@
+import type { RoleplayModelProfile } from "./types"
+
+export const freeRpProfile: RoleplayModelProfile = {
+  id: "free-rp",
+  provider: "free",
+  modelName: "openai",
+  temperature: 0.8,
+  topP: 0.9,
+  maxOutputTokens: 1200,
+  promptStyle: "immersive-controlled",
+  outputMode: "chat",
+  targetChars: { min: 280, max: 560 },
+  maxDialogues: 2,
+  validationSensitivity: {
+    brokenDialogueQuotes: "repairable",
+    tooManyDialogues: "repairable",
+    overPhysical: "hard",
+    metaLeak: "hard",
+    internalTokenLeak: "hard",
+    foreignScriptLeak: "hard",
+    unpromptedHandFocus: "repairable",
+    objectiveUserStateAssertion: "hard",
+    userControlByNarration: "hard",
+    controlsUser: "hard",
+    contractClosureBias: "repairable",
+    futureClosure: "repairable",
+    responseMissedUserIntent: "repairable",
+    lowContentDensity: "repairable",
+    excessiveAbstractMood: "repairable",
+    characterVoiceWeak: "repairable",
+    tooLong: "soft",
+  },
+  repair: {
+    maxAttempts: 1,
+    acceptRepairableAfterAttempt: true,
+  },
+  fallback: {
+    providerOrder: ["same", "local"],
+    allowLocalFallback: true,
+  },
+}
