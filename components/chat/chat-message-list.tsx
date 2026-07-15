@@ -965,7 +965,7 @@ function UserSegmentedMessage({
   const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg)
   const actionStyle = {
     color: themeTextPalette.mutedText,
-    fontSize: Math.max(12, textSize - 1),
+    fontSize: textSize,
     lineHeight: Math.max(1.45, lineHeight),
     "--mention-bg": narrationMentionStyle.bg,
     "--mention-text": narrationMentionStyle.text,
