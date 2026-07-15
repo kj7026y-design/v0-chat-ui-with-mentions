@@ -10,7 +10,7 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
   topP: 0.9,
   maxOutputTokens: 1600,
   promptStyle: "immersive-controlled",
-  outputMode: "chat",
+  outputMode: "novel",
   targetChars: { min: 320, max: 700 },
   maxDialogues: 2,
   validationSensitivity: {

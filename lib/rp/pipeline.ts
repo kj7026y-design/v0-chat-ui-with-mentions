@@ -13,7 +13,7 @@ import {
 import { buildModelBackground } from "@/lib/model-background"
 import { parseRoleplayInputParts } from "@/lib/rp-input-parser"
 import { getRoleplayModelProfile, type RoleplayModelProfile } from "@/lib/rp/model-profiles"
-import { buildGeminiAdultFictionInstruction } from "@/lib/rp/prompt/gemini-adult-fiction"
+import { buildAdultFictionInstruction } from "@/lib/rp/prompt/adult-fiction"
 import {
   buildGeminiRoleplayConfig,
   buildOpenAIRoleplayRequest,
@@ -2096,7 +2096,7 @@ export function generateDynamicPrompt({
   const compiledSection = buildCompiledRoleplaySection(compiledContext)
   const profileInstructions = buildProfilePromptInstructions(profile)
   const adultFictionInstruction = adultFictionMode
-    ? buildGeminiAdultFictionInstruction(characterName)
+    ? buildAdultFictionInstruction(characterName)
     : ""
 
   return `너는 역할극 채팅에서 오직 "${characterName}" 한 명만 연기한다.
@@ -2728,7 +2728,7 @@ async function handleRoleplayChatFromNormalized(
     currentScene: currentSceneForPrompt,
     compiledContext,
     profile,
-    adultFictionMode: model.id === "gemini-3-flash-rp",
+    adultFictionMode: model.id === "gemini-3-flash-rp" || model.id === "cohere/command-r-plus-08-2024",
   })
   const finalMessages = buildRoleplayMessages(
     messages,
@@ -3258,7 +3258,7 @@ async function streamGeminiRoleplay({
     currentScene: currentSceneForPrompt,
     compiledContext,
     profile,
-    adultFictionMode: model.id === "gemini-3-flash-rp",
+    adultFictionMode: model.id === "gemini-3-flash-rp" || model.id === "cohere/command-r-plus-08-2024",
   })
   const finalMessages = buildRoleplayMessages(messages, systemPromptText, userName, compiledContext)
   const { systemPrompt, contents } = splitGeminiRoleplayMessages(finalMessages)

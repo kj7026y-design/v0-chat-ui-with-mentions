@@ -8,7 +8,7 @@ export const commandRRpProfile: RoleplayModelProfile = {
   topP: 0.9,
   maxOutputTokens: 1200,
   promptStyle: "korean-clean-direct",
-  outputMode: "chat",
+  outputMode: "novel",
   targetChars: { min: 280, max: 560 },
   maxDialogues: 2,
   validationSensitivity: {

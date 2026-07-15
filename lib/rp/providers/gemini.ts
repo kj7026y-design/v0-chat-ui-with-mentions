@@ -1,3 +1,4 @@
+import { ThinkingLevel } from "@google/genai"
 import type { RoleplayModelProfile } from "@/lib/rp/model-profiles"
 
 type GeminiSafetySettings = Array<Record<string, unknown>>
@@ -5,6 +6,10 @@ type GeminiSafetySettings = Array<Record<string, unknown>>
 function allowsThinkingDisabled(modelName: string) {
   const normalized = modelName.toLowerCase()
   return normalized.startsWith("gemini-2.5-flash")
+}
+
+function usesThinkingLevel(modelName: string) {
+  return modelName.toLowerCase().startsWith("gemini-3")
 }
 
 export function buildGeminiRoleplayConfig({
@@ -18,7 +23,9 @@ export function buildGeminiRoleplayConfig({
 }) {
   const thinkingConfig = allowsThinkingDisabled(profile.modelName)
     ? { thinkingBudget: 0 }
-    : undefined
+    : usesThinkingLevel(profile.modelName)
+      ? { thinkingLevel: ThinkingLevel.MINIMAL, includeThoughts: false }
+      : undefined
 
   return {
     systemInstruction: systemPrompt,

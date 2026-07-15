@@ -71,7 +71,7 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     creditCostPerReply: UNSHAPED_REPLY_CREDIT_COST,
     minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
     maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
-    maxTokens: 3200,
+    maxTokens: 6000,
     badge: "Gemini RP",
   },
   {
@@ -83,7 +83,7 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     creditCostPerReply: UNSHAPED_REPLY_CREDIT_COST,
     minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
     maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
-    maxTokens: 3200,
+    maxTokens: 4000,
     badge: "언셰이프2",
     openRouterModel: "cohere/command-r-plus-08-2024",
   },
