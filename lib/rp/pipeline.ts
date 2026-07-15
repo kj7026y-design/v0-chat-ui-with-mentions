@@ -83,9 +83,9 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v5"
+const PROMPT_VERSION = "rp-pipeline-v6"
 const NORMALIZER_VERSION = "rp-normalizer-v1"
-const VALIDATOR_VERSION = "rp-validator-v5"
+const VALIDATOR_VERSION = "rp-validator-v6"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
@@ -170,6 +170,7 @@ interface ParsedUserInput {
   action?: string
   intent: string
   physicalContactRequested: boolean
+  physicalContactPermitted: boolean
   proximityRequested: boolean
   asksOtherToAct: boolean
   contactLevel: NormalizedContactLevel
@@ -411,6 +412,18 @@ function extractQuotedDialogue(text: string) {
   return text.match(/["“'‘]([^"”'’]{1,300})["”'’]/)?.[1]?.trim()
 }
 
+function grantsCharacterInitiatedContact(source: string) {
+  const normalized = source.replace(/\s+/gu, " ").trim()
+  if (!normalized) return false
+  if (
+    /(?:손대|만지|안아|안기|키스|입맞|붙잡|잡|다가오|가까이\s*오|닿|밀착)[^.?!\n]{0,8}(?:지\s*마|하지\s*마|면\s*안\s*돼)|(?:멈춰|그만해|싫어)(?:$|[\s,.!?])/u.test(normalized)
+  ) {
+    return false
+  }
+
+  return /(?:^|[\s"'‘“])(?:하고\s*싶은\s*대로|원하는\s*대로|마음대로|네가\s*먼저|뭐든|전부|다)\s*(?:해|해도\s*돼|해\s*봐|하라고|해도\s*괜찮|허락)|(?:허락할게|허락해|허락한다|상관없어)|(?:안아|키스해|입맞춰|만져|손대|붙잡아|잡아|다가와)\s*(?:줘|봐|보라고|도\s*돼|도\s*괜찮)?/u.test(normalized)
+}
+
 function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
   const text = raw.trim()
   const parts = parseRoleplayInputParts(text)
@@ -424,6 +437,7 @@ function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
   const physicalContactRequested =
     !asksOtherToAct &&
     /(손목을\s*잡|손을\s*잡|붙잡(?:는다|았다|고|으)|끌어당|안아|안긴|껴안|입맞|키스|만지|닿|밀착|품에|허리[^.?!\n]{0,12}잡|넥타이[^.?!\n]{0,16}(?:잡|당기|끌))/u.test(textForParsing)
+  const physicalContactPermitted = grantsCharacterInitiatedContact(text)
   const proximityRequested =
     !asksOtherToAct &&
     /(다가간|다가가|가까이|거리를\s*좁|앞으로\s*선|곁으로|밀착|몸을\s*붙)/u.test(textForParsing)
@@ -442,7 +456,7 @@ function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
         : quoted
           ? "dialogue"
           : "dialogue"
-  const sceneEscalation: SceneEscalation = physicalContactRequested
+  const sceneEscalation: SceneEscalation = physicalContactRequested || physicalContactPermitted
     ? "physical"
     : proximityRequested
       ? "romantic"
@@ -451,7 +465,7 @@ function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
         : /유혹|플러팅|끌려|긴장|밀당|좋아/u.test(textForParsing)
           ? "romantic"
           : "verbal"
-  const flirtChannel: FlirtChannel = physicalContactRequested
+  const flirtChannel: FlirtChannel = physicalContactRequested || physicalContactPermitted
     ? "touch"
     : proximityRequested
       ? "proximity"
@@ -475,6 +489,7 @@ function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
     action,
     intent,
     physicalContactRequested,
+    physicalContactPermitted,
     proximityRequested,
     asksOtherToAct,
     contactLevel,
@@ -578,6 +593,10 @@ function isUnderNormalizedUserInput(raw: string, normalized: NormalizedUserInput
   return false
 }
 
+function asksDirectQuestion(source: string) {
+  return /(?:묻|물어|질문|대답(?:해|하|을)|답해|답을|허락을\s*(?:구|요청)|가능(?:한지|해|할까)|(?:아|어|해)도\s*(?:돼|되는지)|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(source)
+}
+
 function normalizeUserInputFallback(
   raw: string,
   userName = "사용자",
@@ -612,7 +631,7 @@ function normalizeUserInputFallback(
       ? "near"
       : "none"
   const isProvocativePrompt = /도발|시험|먼저|붙잡|잡아보/u.test(actionText)
-  const isQuestionSummary = /(?:묻|물어|질문|대답|답해|답을|허락|가능|해도\s*돼|먹어도\s*돼|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(actionText)
+  const isQuestionSummary = asksDirectQuestion(actionText)
   const summaryAction = isQuestionSummary
     ? null
     : actionText && inputType === "summary"
@@ -649,16 +668,22 @@ function buildParsedInputFromNormalized(
   normalized: NormalizedUserInput,
 ): ParsedUserInput {
   const physicalContactRequested = normalized.contactLevel === "touch"
+  const physicalContactPermitted = grantsCharacterInitiatedContact([
+    raw,
+    normalized.dialogue,
+    normalized.action,
+    normalized.intent,
+  ].filter(Boolean).join(" "))
   const proximityRequested = normalized.contactLevel === "near"
   const asksOtherToAct = /도발|시험|먼저|움직|증명|받아치|주도권/u.test(`${normalized.intent} ${normalized.tone}`)
-  const sceneEscalation: SceneEscalation = physicalContactRequested
+  const sceneEscalation: SceneEscalation = physicalContactRequested || physicalContactPermitted
     ? "physical"
     : proximityRequested
       ? "romantic"
       : /romantic|flirt|sensual|유혹|플러팅|긴장|밀당/u.test(`${normalized.tone} ${normalized.intent}`)
         ? "romantic"
         : "verbal"
-  const flirtChannel: FlirtChannel = physicalContactRequested
+  const flirtChannel: FlirtChannel = physicalContactRequested || physicalContactPermitted
     ? "touch"
     : proximityRequested
       ? "proximity"
@@ -683,6 +708,7 @@ function buildParsedInputFromNormalized(
     action: normalized.action || undefined,
     intent: normalized.intent,
     physicalContactRequested,
+    physicalContactPermitted,
     proximityRequested,
     asksOtherToAct,
     contactLevel: normalized.contactLevel,
@@ -692,10 +718,12 @@ function buildParsedInputFromNormalized(
 }
 
 function compileTurnPolicy(input: ParsedUserInput): TurnPolicy {
-  const allowPhysicalContact = input.physicalContactRequested
+  const allowPhysicalContact = input.physicalContactRequested || input.physicalContactPermitted
   const maxChars = allowPhysicalContact ? 700 : input.flirtChannel === "power_play" ? 550 : MAX_OPENROUTER_RESPONSE_CHARS
   const allowedActions = allowPhysicalContact
-    ? ["사용자가 만든 접촉에 대한 반응", "짧은 대사", "표정 변화", "기존 소품 사용", "아주 작은 거리 변화"]
+    ? input.physicalContactPermitted && !input.physicalContactRequested
+      ? ["사용자가 허락한 범위의 캐릭터 주도 신체 접촉 한 단계", "짧은 대사", "표정 변화", "기존 소품 사용", "거리 변화"]
+      : ["사용자가 만든 접촉에 대한 반응", "짧은 대사", "표정 변화", "기존 소품 사용", "아주 작은 거리 변화"]
     : input.proximityRequested
       ? ["짧은 대사", "표정 변화", "거리 유지 또는 아주 작은 거리 변화", "조건 제시", "기존 소품 사용"]
       : ["짧은 대사", "표정 변화", "심리적 압박", "조건 제시", "침묵", "기존 소품 사용"]
@@ -731,14 +759,14 @@ function buildToneRules(background = "", characterSetting = "") {
       "- 성인 로맨스 톤은 허용한다.",
       "- 긴장감은 명확한 대사, 거리감, 심리전으로 표현한다.",
       "- 노골적인 플러팅은 비유적 장황함이 아니라 짧고 직접적인 대사와 주도권 싸움으로 처리한다.",
-      "- 사용자가 명시하지 않은 신체 접촉을 매 턴 새로 만들지 않는다.",
+      "- 신체 접촉을 매 턴 자동 반복하지 않는다. 사용자가 접촉을 허락하거나 현재 턴에서 시작한 경우에는 맥락에 맞게 한 단계 진행할 수 있다.",
     )
   }
 
   if (/끌어당|붙잡|다가오면|주도권/u.test(source)) {
     rules.push(
       "- '끌어당긴다'는 기본적으로 심리적 주도권, 조건 제시, 거리 조절을 뜻한다.",
-      "- 물리적으로 끌어당기는 행동은 직전 사용자 입력에 접촉/근접이 명시된 경우에만 사용한다.",
+      "- 물리적으로 끌어당기는 행동은 직전 사용자 입력에 접촉/근접 또는 캐릭터가 먼저 행동해도 된다는 허락이 있는 경우 사용할 수 있다.",
     )
   }
 
@@ -754,7 +782,7 @@ function buildToneRules(background = "", characterSetting = "") {
 
 function buildResponseGoal(characterName: string, userName: string, input: ParsedUserInput, policy: TurnPolicy) {
   const inputMeaning = [input.raw, input.action, input.dialogue, input.intent].filter(Boolean).join(" ")
-  const requestsDirectAnswer = /(?:묻|물어|질문|대답|답해|답을|허락|가능|해도\s*돼|먹어도\s*돼|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(inputMeaning)
+  const requestsDirectAnswer = asksDirectQuestion(inputMeaning)
   if (requestsDirectAnswer) {
     return `${characterName}은 ${userName}이 물은 구체적인 대상에 캐릭터다운 답, 허락, 거절, 이유 중 하나를 먼저 제시한다. 질문을 되풀이하거나 왜 궁금한지 되묻지 않는다.`
   }
@@ -764,6 +792,9 @@ function buildResponseGoal(characterName: string, userName: string, input: Parse
   }
 
   if (policy.flirtChannel === "touch") {
+    if (input.physicalContactPermitted && !input.physicalContactRequested) {
+      return `${characterName}은 ${userName}이 명시적으로 허락한 범위에서 캐릭터다운 신체 접촉을 한 단계 먼저 시작할 수 있으며, ${userName}의 반응은 대신 쓰지 않는다.`
+    }
     return `${characterName}은 ${userName}이 이미 만든 접촉에만 반응하고, ${userName}의 다음 행동은 쓰지 않는다.`
   }
 
@@ -991,6 +1022,7 @@ export async function normalizeUserInputWithAI({
 - 오직 사용자 페르소나 "${userName}"의 최신 입력만 구체화한다.
 - 사용자가 쓴 의도를 반대로 바꾸지 않는다.
 - 사용자가 직접 접촉을 명시하지 않았다면 접촉을 만들지 않는다.
+- "하고 싶은 대로 해", "마음대로 해", "네가 먼저 해"처럼 캐릭터가 먼저 행동해도 된다는 허락은 실제 사용자 접촉으로 바꾸지 말고 intent에 명확히 보존한다.
 - 새 장소와 새 소품을 발명하지 않는다.
 - 과하게 장황하게 만들지 않는다.
 - "묻는다", "질문한다", "허락을 구한다", "이유를 묻는다" 같은 요약형 발화는 일반 자세나 표정으로 바꾸지 않는다. 질문 대상과 요구된 답을 intent에 보존하고, 자연스러우면 dialogue로 구체화한다.
@@ -1506,7 +1538,11 @@ function hasHandAsTensionCenter(sentence: string) {
 }
 
 function hasUnpromptedHandFocus(output: string, ctx: CompiledRoleplayContext) {
-  if (ctx.latestInput.contactLevel === "touch" || latestInputMentionsHand(ctx.latestInput)) return false
+  if (
+    ctx.latestInput.contactLevel === "touch" ||
+    ctx.latestInput.physicalContactPermitted ||
+    latestInputMentionsHand(ctx.latestInput)
+  ) return false
 
   const handSentences = splitIntoSentences(stripQuotedDialogue(output)).filter(hasHandMention)
   if (handSentences.length === 0) return false
@@ -2110,7 +2146,10 @@ ${compiledContext.toneRules.join("\n")}
 - 허용: ${turnPolicy.allowedActions.join(", ")}
 - 금지: ${turnPolicy.bannedActions.join(", ")}
 - 기존 소품: ${compiledContext.allowedProps.length > 0 ? compiledContext.allowedProps.join(", ") : "없음"}
-- 사용자가 명시하지 않은 접촉/소품/장소를 새로 만들지 않는다.
+${turnPolicy.allowPhysicalContact
+    ? "- 사용자가 허락한 범위에서 캐릭터가 신체 접촉을 한 단계 시작하거나 이어갈 수 있다. 접촉 뒤 사용자의 반응은 대신 쓰지 않는다."
+    : "- 사용자가 허락하지 않은 신체 접촉을 새로 만들지 않는다."}
+- 사용자가 명시하지 않은 소품이나 장소를 새로 만들지 않는다.
 - 기존 소품 목록에 없는 물건을 새로 등장시키지 않는다.
 - 사용자의 말을 그대로 되풀이하지 말고 의미에 반응한다.
 
