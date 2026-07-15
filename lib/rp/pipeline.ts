@@ -116,6 +116,7 @@ type DynamicPromptContext = Pick<
 >
 
 type RoleplayValidationStatus = "passed" | "accepted_with_warnings" | "repaired" | "fallback" | "failed"
+type RoleplayContentLogStage = "original" | "repaired" | "fallback" | "final"
 type RoleplayValidationAttempt = {
   stage: "initial" | "repair" | "fallback" | "final"
   status: RoleplayValidationStatus
@@ -124,6 +125,27 @@ type RoleplayValidationAttempt = {
   repairableFailures: string[]
   softFailures: string[]
 }
+
+function debugRoleplayContent({
+  stage,
+  requestId,
+  model,
+  content,
+}: {
+  stage: RoleplayContentLogStage
+  requestId?: string
+  model: string
+  content: string
+}) {
+  if (process.env.NODE_ENV === "production") return
+  console.debug(`[RP ${stage} message]`, {
+    requestId: requestId || "untracked",
+    model,
+    contentLength: content.length,
+    content: content || "(empty)",
+  })
+}
+
 type UserInputKind = "dialogue" | "action" | "dialogue_action" | "intent_summary" | "ooc_instruction"
 type SceneEscalation = "none" | "verbal" | "romantic" | "physical"
 type FlirtChannel = "dialogue" | "power_play" | "proximity" | "touch"
@@ -2638,6 +2660,7 @@ async function callModelProviderRoleplay(
 async function handleRoleplayRulesBypassChat(
   normalizedBody: ReturnType<typeof normalizeBody>,
   model: ChatModelConfig,
+  requestId = "untracked",
 ) {
   const messages = normalizedBody.messages.some((message) => message.role === "system")
     ? normalizedBody.messages
@@ -2667,7 +2690,14 @@ async function handleRoleplayRulesBypassChat(
   )
   const attemptedModel = getProviderModelName(model)
   const result = normalizeOpenRouterOutput(completion.content)
+  debugRoleplayContent({
+    stage: "original",
+    requestId,
+    model: completion.model,
+    content: completion.content,
+  })
   if (!result) throw new ChatApiError("Provider returned empty content", 502)
+  debugRoleplayContent({ stage: "final", requestId, model: completion.model, content: result })
 
   return NextResponse.json({
     result,
@@ -2727,7 +2757,7 @@ async function handleRoleplayChatFromNormalized(
 ) {
   const { mode, messages, promptContext } = normalizedBody
   if (normalizedBody.bypassRoleplayRules) {
-    return handleRoleplayRulesBypassChat(normalizedBody, model)
+    return handleRoleplayRulesBypassChat(normalizedBody, model, requestId)
   }
 
   const profile = getRoleplayModelProfile(model)
@@ -2823,6 +2853,12 @@ async function handleRoleplayChatFromNormalized(
   const initialCompletion = await requestCompletion(finalMessages)
   let outputModel = initialCompletion.model
   let result = normalizeOpenRouterOutput(initialCompletion.content)
+  debugRoleplayContent({
+    stage: "original",
+    requestId,
+    model: initialCompletion.model,
+    content: initialCompletion.content,
+  })
   let repairAttempted = false
   let fallbackUsed = outputModel !== attemptedModel
   let validation: RoleplayValidationErrors
@@ -2849,6 +2885,7 @@ async function handleRoleplayChatFromNormalized(
     fallbackUsed = true
     outputModel = "local"
     result = buildSafeFallbackReply(compiledContext)
+    debugRoleplayContent({ stage: "fallback", requestId, model: outputModel, content: result })
     const validationResult = await validateRoleplayOutputWithJudge(result, compiledContext, profile)
     validation = validationResult.errors
     validationSeverityOverrides = validationResult.severityOverrides
@@ -2887,6 +2924,12 @@ async function handleRoleplayChatFromNormalized(
       ]
       const retryCompletion = await requestCompletion(retryMessages)
       const retryResult = normalizeOpenRouterOutput(retryCompletion.content)
+      debugRoleplayContent({
+        stage: "repaired",
+        requestId,
+        model: retryCompletion.model,
+        content: retryCompletion.content,
+      })
       const retryValidationResult = retryResult ? await validateRoleplayOutputWithJudge(retryResult, compiledContext, profile) : null
       const retryValidation = retryValidationResult?.errors ?? null
       const retrySeverityOverrides = retryValidationResult?.severityOverrides ?? {}
@@ -2935,6 +2978,7 @@ async function handleRoleplayChatFromNormalized(
         fallbackUsed = true
         outputModel = "local"
         result = buildSafeFallbackReply(compiledContext)
+        debugRoleplayContent({ stage: "fallback", requestId, model: outputModel, content: result })
         const fallbackValidationResult = await validateRoleplayOutputWithJudge(result, compiledContext, profile)
         validation = fallbackValidationResult.errors
         validationSeverityOverrides = fallbackValidationResult.severityOverrides
@@ -2971,6 +3015,7 @@ async function handleRoleplayChatFromNormalized(
   validation = finalValidation
   const finalClassifiedValidation = classify(finalValidation)
   validationAttempts.push(buildValidationAttempt("final", finalValidation, finalClassifiedValidation))
+  debugRoleplayContent({ stage: "final", requestId, model: outputModel, content: result })
 
   if (finalClassifiedValidation.hard.length > 0) {
     const failures = finalClassifiedValidation.hard
@@ -3343,6 +3388,8 @@ async function streamGeminiRoleplay({
 
   let ttftMs: number | undefined
   let rawGeminiContent = ""
+  let originalProviderContent = ""
+  let transientFallbackContent: { model: string; content: string } | undefined
   let outputModel = modelName
   let usedFallback = false
   let repairAttempted = false
@@ -3383,7 +3430,9 @@ async function streamGeminiRoleplay({
         })
       }
     }
+    originalProviderContent = rawGeminiContent
   } catch (error) {
+    originalProviderContent = rawGeminiContent
     if (!isGeminiTransientError(error)) throw error
     if (!allowsOpenRouterFallbackForGemini(model)) throw error
     const openRouterFallbackModel = buildOpenRouterFallbackModel()
@@ -3394,6 +3443,10 @@ async function streamGeminiRoleplay({
     const fallbackCompletion = await callOpenRouterRoleplay(finalMessages, openRouterFallbackModel, userName)
     rawGeminiContent = fallbackCompletion.content
     outputModel = fallbackCompletion.model
+    transientFallbackContent = {
+      model: fallbackCompletion.model,
+      content: fallbackCompletion.content,
+    }
     if (process.env.NODE_ENV !== "production") {
       console.debug("[Gemini RP stream transient fallback]", {
         requestId: runId,
@@ -3402,6 +3455,21 @@ async function streamGeminiRoleplay({
         error: error instanceof Error ? error.message : String(error),
       })
     }
+  }
+
+  debugRoleplayContent({
+    stage: "original",
+    requestId: runId,
+    model: modelName,
+    content: originalProviderContent,
+  })
+  if (transientFallbackContent) {
+    debugRoleplayContent({
+      stage: "fallback",
+      requestId: runId,
+      model: transientFallbackContent.model,
+      content: transientFallbackContent.content,
+    })
   }
 
   if (process.env.NODE_ENV !== "production") {
@@ -3446,6 +3514,12 @@ async function streamGeminiRoleplay({
       const fallbackCompletion = await callOpenRouterRoleplay(finalMessages, openRouterFallbackModel, userName)
       savedContent = normalizeOpenRouterOutput(fallbackCompletion.content)
       outputModel = fallbackCompletion.model
+      debugRoleplayContent({
+        stage: "fallback",
+        requestId: runId,
+        model: fallbackCompletion.model,
+        content: fallbackCompletion.content,
+      })
     } else {
       repairAttempted = true
       fallbackProvider = "gemini-retry-after-truncated"
@@ -3472,6 +3546,12 @@ ${userName}의 새 행동/감정/대사를 만들지 말고 ${characterName}의 
       const retryCompletion = await callGeminiRoleplay(retryMessages, model)
       savedContent = normalizeOpenRouterOutput(retryCompletion.content)
       outputModel = retryCompletion.model
+      debugRoleplayContent({
+        stage: "repaired",
+        requestId: runId,
+        model: retryCompletion.model,
+        content: retryCompletion.content,
+      })
       usedFallback = usedFallback || outputModel !== attemptedModel
     }
   } else if (!savedContent || isGeminiSafetyFinishReason(finishReason) || (initialClassifiedValidation && hasClassifiedFailures(initialClassifiedValidation))) {
@@ -3531,6 +3611,12 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
       ? await callOpenRouterRoleplay(repairMessages, repairFallbackModel, userName)
       : await callGeminiRoleplay(repairMessages, model)
     const repairedContent = normalizeOpenRouterOutput(repairedCompletion.content)
+    debugRoleplayContent({
+      stage: "repaired",
+      requestId: runId,
+      model: repairedCompletion.model,
+      content: repairedCompletion.content,
+    })
     const repairedValidationResult = repairedContent ? await validateRoleplayOutputWithJudge(repairedContent, compiledContext, profile) : null
     const repairedValidation = repairedValidationResult?.errors ?? null
     const repairedSeverityOverrides = repairedValidationResult?.severityOverrides ?? {}
@@ -3603,6 +3689,12 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
     ]
     const repairedCompletion = await callOpenRouterRoleplay(repairMessages, repairFallbackModel, userName)
     const repairedContent = normalizeOpenRouterOutput(repairedCompletion.content)
+    debugRoleplayContent({
+      stage: "repaired",
+      requestId: runId,
+      model: repairedCompletion.model,
+      content: repairedCompletion.content,
+    })
     const repairedValidationResult = repairedContent
       ? await validateRoleplayOutputWithJudge(repairedContent, compiledContext, profile)
       : finalValidation
@@ -3648,6 +3740,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
     outputModel = "local"
     sendPhase("fallback", "안전한 대체 응답을 준비하는 중...")
     savedContent = buildContextualFallbackReply(compiledContext, rawGeminiContent)
+    debugRoleplayContent({ stage: "fallback", requestId: runId, model: outputModel, content: savedContent })
     repairedFinalValidationResult = await validateRoleplayOutputWithJudge(savedContent, compiledContext, profile)
     repairedFinalValidation = repairedFinalValidationResult.errors
     repairedFinalSeverityOverrides = repairedFinalValidationResult.severityOverrides
@@ -3659,6 +3752,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
   if (repairedFinalValidation && repairedFinalClassifiedValidation) {
     validationAttempts.push(buildValidationAttempt("final", repairedFinalValidation, repairedFinalClassifiedValidation))
   }
+  debugRoleplayContent({ stage: "final", requestId: runId, model: outputModel, content: savedContent })
 
   if (!savedContent || (repairedFinalClassifiedValidation && repairedFinalClassifiedValidation.hard.length > 0)) {
     const failures = repairedFinalClassifiedValidation ? repairedFinalClassifiedValidation.hard : ["empty"]
