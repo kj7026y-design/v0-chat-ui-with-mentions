@@ -13,6 +13,22 @@ export interface ChatListItemData {
 
 export const defaultChats: ChatListItemData[] = [
   {
+    id: "w8",
+    characterName: "강태현",
+    characterEmoji: "🔥",
+    lastMessage: "야, 또 모르는 척 지나가게? 오늘은 솔직히 말해봐. 나 의식하고 있잖아.",
+    timestamp: new Date(Date.now() - 1000 * 60),
+    unreadCount: 0,
+  },
+  {
+    id: "w7",
+    characterName: "한민준",
+    characterEmoji: "🫧",
+    lastMessage: "...영화, 다시 틀까? 아니면... 조금 더 이대로 있을래?",
+    timestamp: new Date(Date.now() - 1000 * 60 * 2),
+    unreadCount: 0,
+  },
+  {
     id: "1",
     characterName: "이무기",
     characterEmoji: "🐉",
@@ -83,7 +99,7 @@ export function getChatList() {
       ...chat,
       timestamp: new Date(chat.timestamp),
     }))
-    return ensureDefaultChats(normalizedChats, ["6"])
+    return ensureDefaultChats(normalizedChats, ["6", "w7", "w8"])
   } catch {
     window.localStorage.removeItem(STORYCHAT_CHATS_KEY)
     saveChatList(defaultChats)
