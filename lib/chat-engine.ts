@@ -76,6 +76,8 @@ export type ChatStreamEvent = {
   saved_content?: string
   provider?: string
   model?: string
+  attempted_model?: string
+  output_model?: string | null
   prompt_version?: string
   normalizer_version?: string
   validator_version?: string
@@ -825,6 +827,8 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
         characterMessageId: event.message_id || options.characterMessageId,
         provider: event.provider || "unknown",
         model: event.model || "unknown",
+        attemptedModel: event.attempted_model || event.model || "unknown",
+        outputModel: event.output_model ?? undefined,
         promptVersion: event.prompt_version || "unknown",
         normalizerVersion: event.normalizer_version,
         validatorVersion: event.validator_version,
@@ -1023,6 +1027,8 @@ export async function generateAssistantReply(
     generationRunId: completedEvent?.run_id,
     provider: completedEvent?.provider,
     model: completedEvent?.model,
+    attemptedModel: completedEvent?.attempted_model,
+    outputModel: completedEvent?.output_model ?? undefined,
     validationStatus: completedEvent?.validation_status,
     validationFailures: completedEvent?.validation_failures,
     validationAttempts: completedEvent?.validation_attempts,

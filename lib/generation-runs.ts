@@ -16,6 +16,8 @@ export type GenerationRun = {
   characterMessageId?: string
   provider: string
   model: string
+  attemptedModel?: string
+  outputModel?: string
   promptVersion: string
   normalizerVersion?: string
   validatorVersion?: string

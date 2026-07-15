@@ -11,6 +11,8 @@ export interface ChatMessage {
   generationRunId?: string
   provider?: string
   model?: string
+  attemptedModel?: string
+  outputModel?: string
   validationStatus?: GenerationValidationStatus
   validationFailures?: string[]
   validationAttempts?: GenerationValidationAttempt[]
