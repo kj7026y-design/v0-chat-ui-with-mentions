@@ -1,4 +1,4 @@
-export type ChatModelId = "free" | "gemini-pro" | "gemini-3-flash-rp" | "openai" | "openrouter-euryale" | "cohere/command-r-plus-08-2024"
+export type ChatModelId = "free" | "gemini-pro" | "gemini-3-flash-rp" | "openai" | "cohere/command-r-plus-08-2024"
 
 export type ChatModelProvider = "gemini" | "openai" | "openrouter" | "pollinations"
 export type ChatModelMode = "normal" | "premium" | "nsfw"
@@ -75,22 +75,9 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     badge: "Gemini RP",
   },
   {
-    id: "openrouter-euryale",
-    label: "언셰이프",
-    description: "OpenRouter Euryale 70B · 제한을 낮춘 서사 답변",
-    provider: "openrouter",
-    mode: "nsfw",
-    creditCostPerReply: UNSHAPED_REPLY_CREDIT_COST,
-    minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
-    maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
-    maxTokens: 3200,
-    badge: "언셰이프",
-    openRouterModel: "sao10k/l3.1-euryale-70b",
-  },
-  {
     id: "cohere/command-r-plus-08-2024",
     label: "언셰이프2",
-    description: "OpenRouter Command R+ · 안정적인 언셰이프 답변",
+    description: "OpenRouter Command R+ · 제한을 낮춘 안정적인 서사 답변",
     provider: "openrouter",
     mode: "nsfw",
     creditCostPerReply: UNSHAPED_REPLY_CREDIT_COST,
@@ -106,7 +93,9 @@ export const DEFAULT_CHAT_MODEL_ID: ChatModelId = "free"
 export const CHAT_MODEL_SETTINGS_KEY = "storychat_chat_model_settings"
 
 export function normalizeChatModelId(value: unknown): ChatModelId | null {
-  if (value === "openrouter-stheno") return "openrouter-euryale"
+  if (value === "openrouter-stheno" || value === "openrouter-euryale") {
+    return "cohere/command-r-plus-08-2024"
+  }
   if (
     value === "openrouter-stheno-2" ||
     value === "openrouter-lunaris" ||
@@ -117,7 +106,6 @@ export function normalizeChatModelId(value: unknown): ChatModelId | null {
     value === "gemini-pro" ||
     value === "gemini-3-flash-rp" ||
     value === "openai" ||
-    value === "openrouter-euryale" ||
     value === "cohere/command-r-plus-08-2024"
   ) {
     return value

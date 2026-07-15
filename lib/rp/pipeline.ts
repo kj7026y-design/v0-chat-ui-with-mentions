@@ -78,7 +78,7 @@ const GEMINI_TIMEOUT_MS = 90_000
 const OPENROUTER_TIMEOUT_MS = 90_000
 const MIN_OPENROUTER_RESPONSE_CHARS = 300
 const MAX_OPENROUTER_RESPONSE_CHARS = 650
-const DEFAULT_OPENROUTER_UNSHAPED_MODEL = "sao10k/l3.1-euryale-70b"
+const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
@@ -265,7 +265,7 @@ function getProviderModelName(model: ChatModelConfig) {
   }
   if (model.provider === "gemini" && model.mode === "premium") return process.env.GEMINI_PREMIUM_MODEL || GEMINI_PREMIUM_MODELS[0]
   if (model.provider === "gemini") return process.env.GEMINI_NORMAL_MODEL || GEMINI_NORMAL_MODELS[0]
-  return model.provider === "openrouter" ? getOpenRouterUnshapedModel(model) : model.id
+  return model.provider === "openrouter" ? getOpenRouterModelName(model) : model.id
 }
 
 function encodeStreamEvent(payload: Record<string, unknown>) {
@@ -932,7 +932,10 @@ export async function normalizeUserInputWithAI({
   })
   const normalizerModel = openAIApiKey
     ? process.env.OPENAI_INPUT_NORMALIZER_MODEL || DEFAULT_OPENAI_CHAT_MODEL
-    : process.env.OPENROUTER_INPUT_NORMALIZER_MODEL || fallbackOpenRouterModel || DEFAULT_OPENROUTER_UNSHAPED_MODEL
+    : getSupportedOpenRouterModel(
+        process.env.OPENROUTER_INPUT_NORMALIZER_MODEL,
+        fallbackOpenRouterModel,
+      )
 
   try {
     const response = await withTimeout(openai.chat.completions.create({
@@ -1030,16 +1033,25 @@ function isGeminiTransientError(error: unknown) {
   return /503|UNAVAILABLE|high demand|overloaded|temporarily unavailable|try again later/i.test(message)
 }
 
-function getOpenRouterUnshapedModel(model?: ChatModelConfig) {
-  const envModel = model?.id === "cohere/command-r-plus-08-2024"
-    ? process.env.OPENROUTER_UNSHAPED2_MODEL
-    : process.env.OPENROUTER_UNSHAPED_MODEL || process.env.OPENROUTER_CHAT_MODEL
+function getSupportedOpenRouterModel(...candidates: Array<string | undefined>) {
+  for (const candidate of candidates) {
+    const modelName = candidate?.trim()
+    if (modelName && !/euryale/i.test(modelName)) return modelName
+  }
 
-  return envModel || model?.openRouterModel || DEFAULT_OPENROUTER_UNSHAPED_MODEL
+  return DEFAULT_OPENROUTER_MODEL
+}
+
+function getOpenRouterModelName(model?: ChatModelConfig) {
+  return getSupportedOpenRouterModel(
+    process.env.OPENROUTER_UNSHAPED2_MODEL,
+    model?.openRouterModel,
+    process.env.OPENROUTER_CHAT_MODEL,
+  )
 }
 
 function getOpenRouterGenerationParams(model: ChatModelConfig) {
-  const modelName = getOpenRouterUnshapedModel(model)
+  const modelName = getOpenRouterModelName(model)
 
   // Cohere Command R+ 전용 세팅 (페널티 제거, 텐션 최적화)
   if (modelName.includes("command-r-plus")) {
@@ -1562,7 +1574,10 @@ async function judgeRoleplayQuality({
         baseURL: "https://openrouter.ai/api/v1",
       })
       const response = await withTimeout(openrouter.chat.completions.create({
-        model: process.env.OPENROUTER_RP_JUDGE_MODEL || process.env.OPENROUTER_UNSHAPED2_MODEL || "cohere/command-r-plus-08-2024",
+        model: getSupportedOpenRouterModel(
+          process.env.OPENROUTER_RP_JUDGE_MODEL,
+          process.env.OPENROUTER_UNSHAPED2_MODEL,
+        ),
         messages: [
           { role: "system", content: "Return only valid JSON. Do not use markdown." },
           { role: "user", content: prompt },
@@ -2390,22 +2405,19 @@ function allowsOpenRouterFallbackForGemini(model: ChatModelConfig) {
 }
 
 function buildOpenRouterFallbackModel(): ChatModelConfig {
-  const fallbackId = process.env.OPENROUTER_RP_FALLBACK_MODEL?.includes("euryale")
-    ? "openrouter-euryale"
-    : "cohere/command-r-plus-08-2024"
+  const openRouterModel = getSupportedOpenRouterModel(
+    process.env.OPENROUTER_RP_FALLBACK_MODEL,
+    process.env.OPENROUTER_UNSHAPED2_MODEL,
+  )
 
   return {
-    id: fallbackId,
-    label: fallbackId === "openrouter-euryale" ? "언셰이프" : "언셰이프2",
+    id: "cohere/command-r-plus-08-2024",
+    label: "언셰이프2",
     description: "Gemini RP fallback",
     provider: "openrouter",
     mode: "nsfw",
     creditCostPerReply: 0,
-    openRouterModel: process.env.OPENROUTER_RP_FALLBACK_MODEL || (
-      fallbackId === "openrouter-euryale"
-        ? "sao10k/l3.1-euryale-70b"
-        : "cohere/command-r-plus-08-2024"
-    ),
+    openRouterModel,
   }
 }
 
@@ -2463,7 +2475,7 @@ async function callGeminiRoleplay(finalMessages: ChatMessages, model: ChatModelC
     if (process.env.NODE_ENV !== "production") {
       console.debug("[Gemini RP transient fallback]", {
         from: modelName,
-        to: getOpenRouterUnshapedModel(fallbackModel),
+        to: getOpenRouterModelName(fallbackModel),
         error: error instanceof Error ? error.message : String(error),
       })
     }
@@ -2500,7 +2512,7 @@ async function callGeminiRoleplay(finalMessages: ChatMessages, model: ChatModelC
   if (process.env.NODE_ENV !== "production") {
     console.debug("[Gemini RP fallback]", {
       from: modelName,
-      to: getOpenRouterUnshapedModel(fallbackModel),
+      to: getOpenRouterModelName(fallbackModel),
     })
   }
   return fallbackContent
@@ -2651,7 +2663,7 @@ async function handleRoleplayChatFromNormalized(
   const profile = getRoleplayModelProfile(model)
   assertRoleplayRequestAllowed(promptContext, messages)
   const latestRawInput = getLatestUserMessageContent(messages)
-  const normalizerOpenRouterModel = model.provider === "openrouter" ? getOpenRouterUnshapedModel(model) : undefined
+  const normalizerOpenRouterModel = model.provider === "openrouter" ? getOpenRouterModelName(model) : undefined
   const userName = promptContext.userName || "사용자"
   const characterName = promptContext.characterName || "캐릭터"
   let normalizedLatestInput = (await normalizeUserInputWithAI({
@@ -2785,7 +2797,7 @@ async function handleRoleplayChatFromNormalized(
         failures: getValidationFailureKeys(validation),
         hardFailures: classifiedValidation.hard,
         repairableFailures: classifiedValidation.repairable,
-        model: model.provider === "openrouter" ? getOpenRouterUnshapedModel(model) : model.id,
+        model: model.provider === "openrouter" ? getOpenRouterModelName(model) : model.id,
         contentPreview: result.slice(0, 300),
       })
       if (process.env.NODE_ENV !== "production") {
@@ -3290,7 +3302,7 @@ async function streamGeminiRoleplay({
     const openRouterFallbackModel = buildOpenRouterFallbackModel()
     usedFallback = true
     fallbackProvider = "openrouter-after-gemini-unavailable"
-    fallbackModel = getOpenRouterUnshapedModel(openRouterFallbackModel)
+    fallbackModel = getOpenRouterModelName(openRouterFallbackModel)
     sendPhase("fallback", "대체 응답을 준비하는 중...")
     rawGeminiContent = await callOpenRouterRoleplay(finalMessages, openRouterFallbackModel, userName)
     if (process.env.NODE_ENV !== "production") {
@@ -3332,7 +3344,7 @@ async function streamGeminiRoleplay({
       usedFallback = true
       const openRouterFallbackModel = buildOpenRouterFallbackModel()
       fallbackProvider = "openrouter-after-gemini-truncated"
-      fallbackModel = getOpenRouterUnshapedModel(openRouterFallbackModel)
+      fallbackModel = getOpenRouterModelName(openRouterFallbackModel)
       sendPhase("fallback", "끊긴 답변을 다시 준비하는 중...")
       if (process.env.NODE_ENV !== "production") {
         console.debug("[Gemini RP stream truncated fallback]", {
@@ -3383,7 +3395,7 @@ ${userName}의 새 행동/감정/대사를 만들지 말고 ${characterName}의 
     const repairFallbackModel = buildOpenRouterFallbackModel()
     const useOpenRouterRepair = fallbackProvider === "openrouter-after-gemini-unavailable"
     fallbackProvider = useOpenRouterRepair ? "openrouter-repair-after-gemini-unavailable" : "gemini-repair"
-    fallbackModel = useOpenRouterRepair ? getOpenRouterUnshapedModel(repairFallbackModel) : modelName
+    fallbackModel = useOpenRouterRepair ? getOpenRouterModelName(repairFallbackModel) : modelName
     sendPhase("repairing", "답변을 다듬는 중...")
     const repairInstruction = initialValidation
       ? `${buildRepairPrompt(initialValidation, compiledContext)}
@@ -3504,7 +3516,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
       savedContent = repairedContent
       validationSeverityOverrides = repairedSeverityOverrides
       fallbackProvider = `${fallbackProvider}+repair`
-      fallbackModel = getOpenRouterUnshapedModel(repairFallbackModel)
+      fallbackModel = getOpenRouterModelName(repairFallbackModel)
 
       if (repairedClassifiedValidation.repairable.length >= 2 && process.env.NODE_ENV !== "production") {
         console.debug("[Gemini RP fallback repair accepted with stacked warnings]", {

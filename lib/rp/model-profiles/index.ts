@@ -1,6 +1,5 @@
 import type { ChatModelConfig } from "@/lib/chat-models"
 import { commandRRpProfile } from "./command-r"
-import { euryaleRpProfile } from "./euryale"
 import { freeRpProfile } from "./free"
 import { geminiFlashRpProfile } from "./gemini"
 import { openaiRpProfile } from "./openai"
@@ -21,16 +20,9 @@ export function getRoleplayModelProfile(model: ChatModelConfig): RoleplayModelPr
     }
   }
   if (model.provider === "openrouter") {
-    if (model.id === "cohere/command-r-plus-08-2024") {
-      return {
-        ...commandRRpProfile,
-        modelName: process.env.OPENROUTER_UNSHAPED2_MODEL || model.openRouterModel || commandRRpProfile.modelName,
-      }
-    }
-
     return {
-      ...euryaleRpProfile,
-      modelName: process.env.OPENROUTER_UNSHAPED_MODEL || model.openRouterModel || euryaleRpProfile.modelName,
+      ...commandRRpProfile,
+      modelName: process.env.OPENROUTER_UNSHAPED2_MODEL || model.openRouterModel || commandRRpProfile.modelName,
     }
   }
 

@@ -97,7 +97,7 @@ export function ChatModelDrawer({
 
           {CHAT_MODELS.find((model) => model.id === selectedModelId)?.creditCostPerReply ? (
             <p className="px-1 pt-1 text-[11px] leading-relaxed text-muted-foreground">
-              프리미엄/언셰이프 모델은 답변 생성 성공 시 추가 크레딧을 사용합니다.
+              유료 모델은 답변 생성 성공 시 추가 크레딧을 사용합니다.
             </p>
           ) : null}
         </div>
