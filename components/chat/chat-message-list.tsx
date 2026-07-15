@@ -378,13 +378,8 @@ export function ChatMessageList({
         })()
       ))}
 
-      {/* Typing Indicator */}
-      {isTyping && (
-        typingVariant === "image" ? (
-          <BubbleImageGeneratingIndicator label={typingLabel ?? "이미지 생성중..."} themeConfig={themeConfig} />
-        ) : (
-          <BubbleTypingIndicator label={typingLabel} themeConfig={themeConfig} />
-        )
+      {isTyping && typingVariant === "image" && (
+        <BubbleImageGeneratingIndicator label={typingLabel ?? "이미지 생성중..."} themeConfig={themeConfig} />
       )}
       {/* Scroll anchor */}
       <div ref={messagesEndRef} />
@@ -586,7 +581,7 @@ function BubbleMessageBubble({
   const displayContent = normalizeMessageNewlines(message.content)
   const statusLabel =
     message.status === "streaming"
-      ? "응답 생성 중..."
+      ? "답변 생성 중..."
       : message.status === "failed"
         ? "생성 실패"
         : message.status === "repaired"
@@ -791,7 +786,7 @@ function BubbleMessageBubble({
               className="whitespace-pre-wrap break-words opacity-70 [word-break:keep-all]"
               style={{ fontSize: Math.max(12, textSize - 1), lineHeight }}
             >
-              응답 생성 중...
+              답변 생성 중...
             </p>
           )}
           {statusLabel && displayContent && (
@@ -1256,34 +1251,6 @@ function isDarkColor(hexColor: string) {
   const blue = Number.parseInt(hex.slice(4, 6), 16)
   const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255
   return luminance < 0.55
-}
-
-function BubbleTypingIndicator({ label, themeConfig }: { label?: string; themeConfig: ChatThemeConfig }) {
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
-
-  return (
-    <div className="flex justify-start">
-      <div
-        className="rounded-2xl border px-4 py-3"
-        style={{
-          backgroundColor: themeTextPalette.panelBg,
-          borderColor: themeTextPalette.panelBorder,
-          color: themeTextPalette.text,
-        }}
-      >
-        {label && (
-          <p className="mb-2 text-xs font-medium" style={{ color: themeTextPalette.mutedText }}>
-            {label}
-          </p>
-        )}
-        <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
-          <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
-          <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
-        </div>
-      </div>
-    </div>
-  )
 }
 
 function BubbleImageGeneratingIndicator({ label, themeConfig }: { label: string; themeConfig: ChatThemeConfig }) {
