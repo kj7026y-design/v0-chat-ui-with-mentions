@@ -8,6 +8,7 @@ export const DEFAULT_VALIDATION_SEVERITY: Partial<Record<ValidationFailureKey, V
   foreignScriptLeak: "hard",
   metaLeak: "hard",
   unpromptedHandFocus: "repairable",
+  narrationStyleMismatch: "repairable",
   objectiveUserStateAssertion: "hard",
   userControlByNarration: "hard",
   controlsUser: "hard",

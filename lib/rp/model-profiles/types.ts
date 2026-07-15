@@ -20,6 +20,7 @@ export type ValidationFailureKey =
   | "foreignScriptLeak"
   | "metaLeak"
   | "unpromptedHandFocus"
+  | "narrationStyleMismatch"
 
 export type ValidationSeverity = "hard" | "repairable" | "soft" | "off"
 
