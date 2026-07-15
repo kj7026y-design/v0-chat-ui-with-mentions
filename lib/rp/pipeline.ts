@@ -590,23 +590,28 @@ function normalizeUserInputFallback(
       ? "near"
       : "none"
   const isProvocativePrompt = /도발|시험|먼저|붙잡|잡아보/u.test(actionText)
-  const summaryAction = actionText && inputType === "summary"
-    ? isProvocativePrompt
-      ? `${userName}은 물러서지 않은 채 ${characterName}을 똑바로 봤다.`
-      : `${userName}은 말없이 자세를 고쳐 서고, 방금 마음먹은 일을 표정과 태도로 드러냈다.`
-    : actionText || null
-  const summaryDialogue = actionText && inputType === "summary" && isProvocativePrompt
+  const isQuestionSummary = /(?:묻|물어|질문|대답|답해|답을|허락|가능|해도\s*돼|먹어도\s*돼|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(actionText)
+  const summaryAction = isQuestionSummary
+    ? null
+    : actionText && inputType === "summary"
+      ? isProvocativePrompt
+        ? `${userName}은 물러서지 않은 채 ${characterName}을 똑바로 봤다.`
+        : `${userName}은 말없이 자세를 고쳐 서고, 방금 마음먹은 일을 표정과 태도로 드러냈다.`
+      : actionText || null
+  const summaryDialogue = actionText && inputType === "summary" && isProvocativePrompt && !isQuestionSummary
     ? "네가 먼저 붙잡아 봐."
     : null
   const fallbackIntent = latestUserIntent?.trim()
     || (actionText
-      ? isProvocativePrompt
-        ? `${userName}은 부탁하는 대신, 상대가 먼저 움직이는지 시험하며 도발했다.`
-        : `${userName}은 방금 입력한 의도를 장면 안에서 행동과 태도로 드러냈다.`
+      ? isQuestionSummary
+        ? `${userName}은 다음 질문의 구체적인 대상에 ${characterName}이 직접 답하기를 요구했다: ${actionText}`
+        : isProvocativePrompt
+          ? `${userName}은 부탁하는 대신, 상대가 먼저 움직이는지 시험하며 도발했다.`
+          : `${userName}은 방금 입력한 의도를 장면 안에서 행동과 태도로 드러냈다.`
       : `${userName}의 대사에 담긴 의미에 반응한다.`)
 
   return {
-    inputType,
+    inputType: isQuestionSummary ? "summary" : inputType,
     actor: userName,
     action: summaryAction,
     dialogue: dialogueText || summaryDialogue || (inputType === "dialogue" ? raw.trim().replace(/^["“'‘]+|["”'’]+$/g, "") : null),
@@ -726,6 +731,12 @@ function buildToneRules(background = "", characterSetting = "") {
 }
 
 function buildResponseGoal(characterName: string, userName: string, input: ParsedUserInput, policy: TurnPolicy) {
+  const inputMeaning = [input.raw, input.action, input.dialogue, input.intent].filter(Boolean).join(" ")
+  const requestsDirectAnswer = /(?:묻|물어|질문|대답|답해|답을|허락|가능|해도\s*돼|먹어도\s*돼|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(inputMeaning)
+  if (requestsDirectAnswer) {
+    return `${characterName}은 ${userName}이 물은 구체적인 대상에 캐릭터다운 답, 허락, 거절, 이유 중 하나를 먼저 제시한다. 질문을 되풀이하거나 왜 궁금한지 되묻지 않는다.`
+  }
+
   if (policy.flirtChannel === "power_play") {
     return `${characterName}은 ${userName}의 도발을 말과 조건 제시로 받아치되, 실제로 붙잡는 행동까지는 아직 가지 않는다.`
   }
@@ -960,6 +971,8 @@ export async function normalizeUserInputWithAI({
 - 사용자가 직접 접촉을 명시하지 않았다면 접촉을 만들지 않는다.
 - 새 장소와 새 소품을 발명하지 않는다.
 - 과하게 장황하게 만들지 않는다.
+- "묻는다", "질문한다", "허락을 구한다", "이유를 묻는다" 같은 요약형 발화는 일반 자세나 표정으로 바꾸지 않는다. 질문 대상과 요구된 답을 intent에 보존하고, 자연스러우면 dialogue로 구체화한다.
+- 질문을 "궁금해한다"라는 감정 상태로만 축약하지 않는다. 캐릭터가 무엇에 답해야 하는지 명확히 남긴다.
 - JSON 객체만 출력한다.
 
 입력 형식:
@@ -1526,6 +1539,9 @@ async function judgeRoleplayQuality({
     latestUserInput: ctx.latestInput.raw,
     userIntent: ctx.latestInput.intent,
     currentScene: ctx.responseGoal,
+    worldSetting: ctx.worldBrief,
+    characterSetting: ctx.characterBrief,
+    userSetting: ctx.userBrief,
     profile,
   })
 
@@ -1818,6 +1834,7 @@ ${errors.objectiveUserStateAssertion || errors.userControlByNarration || errors.
 ${ctx.characterName}이 그렇게 읽거나 의심하거나 오해하는 방식은 가능하지만, 서술자가 ${ctx.userName}의 감정/욕망/의도/행동을 확정하지 마라.` : ""}
 ${errors.objectiveUserStateAssertion || errors.userControlByNarration || errors.controlsUser ? `${ctx.characterName} 자신의 1인칭 감정, 긴장, 욕망, 판단은 실패가 아니므로 억지로 지우지 마라.
 따옴표 안에서 ${ctx.userName}에게 선택하라, 답하라, 멈추라처럼 요구하는 대사는 userControlByNarration이 아니다.
+따옴표 안에서 ${ctx.characterName}이 ${ctx.userName}의 속내를 자신 있게 추측하거나 놀리거나 단정적으로 말하는 것도 객관 서술이 아니다.
 실패를 고칠 때는 ${ctx.userName}의 내면이나 행동을 확정하는 서술만 제거하고, ${ctx.characterName}의 관찰/추측/기대/대사는 유지하라.
 ${ctx.userName}가 눈을 떼지 않았다, 시선이 따라왔다, 대답하지 않았다, 침묵했다, 움직이지 않았다 같은 ${ctx.userName}의 실제 반응을 쓰지 마라.
 ${ctx.characterName}의 주관적 예상은 허용되지만, ${ctx.userName}의 실제 행동은 확정하지 마라.` : ""}
@@ -1826,10 +1843,10 @@ ${errors.contractClosureBias || errors.futureClosure ? `방금 답변은 계약 
 지문에서 관계도 끝이었다, 마지막이 될 수도 있었다, 모든 것이 결정될 것이다처럼 결말을 닫지 마라.
 캐릭터의 협박이나 조건 대사는 가능하지만, 서술자가 미래 전개를 확정하지 마라.` : ""}
 ${errors.responseMissedUserIntent || errors.lowContentDensity || errors.excessiveAbstractMood || errors.characterVoiceWeak ? `방금 답변은 최신 입력에 대한 구체적인 캐릭터 반응이 약해서 실패했다.
-넓은 질문이나 분위기 해설을 반복하지 말고, 현재 장면의 갈등을 구체적으로 찔러라.
-${ctx.userName}가 계약을 끝내려는 건지, 유예하려는 건지, 붙잡히고 싶다는 말을 도발로 숨기는 건지 중 하나를 직접 겨냥하라.
-${ctx.characterName}의 대사는 한 번만 쓰고, 그 대사에 새 정보가 있어야 한다.
-구체적인 조건 제시, ${ctx.userName}의 말에 숨은 모순 지적, 기존 소품을 이용한 압박, 관계 방향을 묻는 구체 질문, 분명한 거절 또는 수락 중 하나를 반드시 포함하라.
+최신 입력이 질문이면 질문 이유를 되묻지 말고 질문의 대상에 대한 직접적인 답, 허락, 거절, 이유, 조건 중 하나를 먼저 제시하라.
+캐릭터 설정과 세계관 설정에 있는 사실은 유지하고, 그 설정에 맞는 말투와 판단으로 답하라.
+설정과 충돌하지 않는 가벼운 관찰은 캐릭터 대사로 보완할 수 있지만, 근거 없는 범죄, 위해 의도, 고정 취향, 비밀 지식, 과거 사실은 발명하지 마라.
+${ctx.characterName}의 대사에는 최신 입력에 대한 새 정보나 분명한 태도가 있어야 한다.
 300~500자.` : ""}
 ${errors.unpromptedHandFocus ? `방금 답변은 손 묘사가 접촉/관능/회피/긴장 표현의 중심이 되어서 실패했다.
 문, 계약서, 펜, 컵, 난간처럼 기존 소품을 자연스럽게 다루는 손동작은 문제 삼지 않는다.
@@ -2127,6 +2144,8 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 
 [진행]
 - 최근 사용자 메시지에서 바로 이어간다.
+- 사용자가 구체적인 대상, 이유, 허락, 가능 여부를 물으면 그 대상에 대한 캐릭터다운 답을 먼저 제시한다.
+- 질문을 그대로 되풀이하거나 "왜 궁금한데", "그게 왜 궁금해"처럼 질문 이유만 되묻고 끝내지 않는다.
 - 장면은 "${characterName}"의 반응만으로 한 단계만 진행한다.
 - "${userName}"이 다음에 무엇을 말하거나 행동할지는 비워둔다.
 - 감정 묘사 후에는 실제 행동, 거절, 질문, 고백, 회피 중 하나로 넘어간다.
@@ -2148,6 +2167,15 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 구조화 문구, 입력 항목명, 내부 해석을 답변에 출력하지 않는다.
 - 이번 턴의 의도가 배경이나 과거 히스토리와 충돌하면 이번 턴을 우선한다.
 
+[설정 및 사실 우선순위]
+- 최신 사용자 입력의 명시적 행동과 대사가 가장 우선한다.
+- 현재 장면의 확정 상태, 캐릭터 설정, 사용자 설정, 세계관 설정에 적힌 사실은 정식 설정으로 유지한다.
+- 일반적인 문체 규칙 때문에 캐릭터의 고유한 말투, 성격, 직업상 판단, 세계관의 자연스러운 관습을 지우지 않는다.
+- 캐릭터는 대사에서 자신감 있게 추측하거나 놀리거나 단정적으로 말할 수 있다. 이것은 서술자의 객관적 사실 확정이 아니다.
+- 장면에 자연스럽고 설정과 충돌하지 않는 가벼운 관찰이나 일상적 세부는 대사와 캐릭터 관찰로 보완할 수 있다.
+- 설정과 대화에 근거가 없는 범죄, 위해 의도, 고정된 취향, 비밀 지식, 과거 약속처럼 장면을 뒤집는 중대한 사실은 새로 확정하지 않는다.
+- 정식 설정과 일반 규칙이 충돌하면 최신 사용자 입력을 침범하지 않는 범위에서 정식 설정과 캐릭터성을 우선한다.
+
 [메타 설명 금지]
 - 답변 작성 규칙, 검수 기준, 장면 진행 원칙을 본문에 쓰지 않는다.
 - 답변 작성 원칙을 설명하는 문장을 본문에 쓰지 않는다.
@@ -2160,12 +2188,12 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 같은 기능의 질문을 한 답변 안에서 두 번 하지 않는다.
 - 대상 없는 욕구 질문, 지시어뿐인 질문, 방법을 되묻는 넓은 질문은 단독으로 쓰지 않는다.
 - 질문은 반드시 현재 갈등의 구체 대상에 붙인다.
-- 좋은 질문 예: "계약을 끝내러 온 건지, 유예하러 온 건지 지금 말해.", "붙잡아달라는 말이면 도발 말고 조건을 말해.", "끝낼 생각이면 라이터 내려놓고 서명부터 해."
+- 사용자가 질문했다면 새 질문으로 회피하기 전에 허락, 거절, 이유, 조건, 사실 중 하나로 먼저 답한다.
 - "상대"가 어색하게 반복되면 "${userName}" 이름을 직접 쓴다.
 
 [내용 밀도]
-- 최종 답변은 반드시 구체적인 갈등 지점 하나를 찌른다.
-- 아래 중 하나를 반드시 포함한다: 구체적인 조건 제시, ${userName}의 말에 숨은 모순 지적, 기존 소품을 이용한 압박, 관계의 방향을 묻는 구체 질문, ${characterName}의 분명한 거절 또는 수락.
+- 최종 답변은 최신 입력의 구체적인 대상 하나에 실질적으로 반응한다.
+- 아래 중 장면에 맞는 하나를 포함한다: 직접적인 답, 허락 또는 거절, 이유, 조건, 정식 설정에 근거한 정보, 기존 소품을 이용한 행동, 구체적인 다음 반응.
 - "잠시 멈췄다", "다시 말을 이었다", "시선을 마주했다", "${userName}을 바라봤다", "미소를 지었다" 같은 빈 지문은 단독으로 쓰지 않는다.
 - 빈 지문을 썼다면 바로 뒤에 실제 행동, 소품 사용, 조건, 거절, 수락, 구체 대사 중 하나를 붙인다.
 

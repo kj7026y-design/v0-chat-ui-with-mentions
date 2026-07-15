@@ -88,9 +88,32 @@ function isEvidenceInNarration(evidence: string, output: string) {
   return normalizeEvidenceText(stripDialogue(output)).includes(normalizedEvidence)
 }
 
+function isEvidenceInCharacterDialogue(evidence: string, output: string, characterName: string) {
+  const normalizedEvidence = normalizeEvidenceText(evidence)
+  if (!normalizedEvidence) return false
+
+  const dialogueBlocks = [
+    ...Array.from(output.matchAll(/"([^"\n]{1,500})"/gu), (match) => match[1] || ""),
+    ...Array.from(output.matchAll(/“([^”\n]{1,500})”/gu), (match) => match[1] || ""),
+    ...Array.from(output.matchAll(/「([^」\n]{1,500})」/gu), (match) => match[1] || ""),
+    ...Array.from(output.matchAll(/『([^』\n]{1,500})』/gu), (match) => match[1] || ""),
+  ].map(normalizeEvidenceText)
+  if (dialogueBlocks.some((dialogue) => dialogue.includes(normalizedEvidence))) return true
+
+  const escapedEvidence = escapeRegExp(normalizedEvidence)
+  const escapedCharacterName = escapeRegExp(characterName.trim())
+  return (
+    new RegExp(`(?:^|\\n)\\s*["“'‘][^\\n]{0,80}${escapedEvidence}`, "u").test(output) ||
+    Boolean(escapedCharacterName && new RegExp(`${escapedCharacterName}\\s*[:：][^\\n]{0,80}${escapedEvidence}`, "u").test(output))
+  )
+}
+
 function hasUserReference(text: string, userName: string) {
   const name = userName.trim()
-  return Boolean(name && text.includes(name)) || /(?:그|그녀|상대|사용자|유저)(?:는|가|의|를|에게|한테|도|와|과)?/.test(text)
+  return (
+    Boolean(name && text.includes(name)) ||
+    /(?:너|네|그|그녀|상대|사용자|유저)(?:는|가|의|를|에게|한테|도|와|과)?/.test(text)
+  )
 }
 
 function hasFirstPersonMarker(text: string) {
@@ -110,6 +133,7 @@ function hasCharacterInterpretationFrame(text: string) {
 }
 
 function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudgeSanitizeContext) {
+  if (isEvidenceInCharacterDialogue(evidence, ctx.output, ctx.characterName)) return false
   if (!isEvidenceInNarration(evidence, ctx.output)) return false
   if (!hasUserReference(evidence, ctx.userName)) return false
   if (!hasExplicitUserStatePredicate(evidence)) return false
@@ -120,6 +144,7 @@ function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudg
 }
 
 function isClearUserControlByNarration(evidence: string, ctx: AiQualityJudgeSanitizeContext) {
+  if (isEvidenceInCharacterDialogue(evidence, ctx.output, ctx.characterName)) return false
   if (!isEvidenceInNarration(evidence, ctx.output)) return false
   if (!hasUserReference(evidence, ctx.userName)) return false
   if (hasCharacterInterpretationFrame(evidence)) return false
@@ -174,6 +199,9 @@ export function buildAiQualityJudgePrompt({
   latestUserInput,
   userIntent,
   currentScene,
+  worldSetting,
+  characterSetting,
+  userSetting,
   profile,
 }: {
   output: string
@@ -182,6 +210,9 @@ export function buildAiQualityJudgePrompt({
   latestUserInput: string
   userIntent: string
   currentScene: string
+  worldSetting: string
+  characterSetting: string
+  userSetting: string
   profile: RoleplayModelProfile
 }) {
   return `You are a strict JSON-only quality judge for Korean roleplay output.
@@ -190,15 +221,21 @@ Return ONLY a JSON object. No markdown. No explanation outside JSON.
 Judge only context-sensitive quality issues. Do not judge quote balance, length, scripts, token leaks, or physical contact; those are rule-based checks.
 
 Definitions:
-- objectiveUserStateAssertion fails when narration states the user's emotions, desire, intent, or mental state as objective fact.
+- objectiveUserStateAssertion fails only when non-dialogue narration states the user's emotions, desire, intent, or mental state as omniscient objective fact.
+- Never fail objectiveUserStateAssertion for claims, teasing, accusations, confidence, guesses, or mind-reading language spoken by ${characterName} in dialogue. Assertive dialogue such as saying that ${userName} does not dislike the situation is character voice, not objective narration.
 - objectiveUserStateAssertion is allowed when ${characterName} reads, guesses, expects, misunderstands, or judges ${userName}'s state as the character's own interpretation.
 - Do not fail objectiveUserStateAssertion for ${characterName}'s own first-person state, reaction, tension, curiosity, desire, or decision. Korean first-person narration using "나", "내", or "나는" is the character's state unless it explicitly says ${userName} feels/thinks/wants/intends something.
 - Do not fail objectiveUserStateAssertion for observable or interpretive descriptions of ${userName}'s speech, expression, look, tone, posture, or response when framed as what ${characterName} sees or infers.
 - responseMissedUserIntent fails when the response ignores or reverses the latest user input or intent.
+- When ${userName} asks about a concrete subject, requests permission, or asks for a reason, the response should answer that subject first in character. Merely asking why ${userName} is curious, restating the question, or switching to a generic relationship question misses the intent unless the character/world canon explicitly requires evasiveness.
+- Low-stakes, scene-plausible embellishment in character dialogue is allowed when it supports the direct answer and does not contradict context. Do not fail just because every minor observation was not explicitly written in prior messages.
+- An unsupported high-impact claim that contradicts or derails the scene can fail responseMissedUserIntent as repairable. This includes invented crime, poisoning, theft intent, fixed preference, secret knowledge, or prior history absent from the supplied settings/history.
+- Facts explicitly present in character, user, or world settings are canonical and allowed even if the latest user message does not repeat them.
 - lowContentDensity fails when the response adds no concrete action, condition, conflict point, rejection, acceptance, or specific question.
 - excessiveAbstractMood fails when abstract atmosphere or relationship commentary dominates over concrete scene action/dialogue.
 - characterVoiceWeak fails when ${characterName}'s voice is generic and not a distinct in-character reaction.
 - userControlByNarration fails when the response narrates new user action, speech, decision, or emotion.
+- A character's spoken claim about what ${userName} did, felt, wanted, or seemed to do is not narration control by itself. Judge implausible or contradictory dialogue claims under responseMissedUserIntent instead.
 - Do not fail userControlByNarration for commands, requests, threats, questions, or pressure spoken by ${characterName} inside dialogue. A quoted line telling ${userName} to choose, answer, move, stop, or decide is character dialogue, not narration control.
 - Do not fail userControlByNarration for ${characterName} waiting for, watching for, expecting, or wondering about ${userName}'s reaction.
 
@@ -211,6 +248,8 @@ Severity:
 - hard: unsafe to show as-is because it controls the user or asserts user state/objective intent.
 - repairable: quality issue that can be repaired once.
 - soft: minor warning.
+- responseMissedUserIntent is normally repairable. It may be hard only when the response directly contradicts supplied canonical settings or invents a major criminal, dangerous, or history-changing fact about ${userName} as settled truth.
+- characterVoiceWeak should compare the response against the supplied characterSetting instead of enforcing a generic neutral voice.
 
 Required JSON shape:
 {
@@ -233,6 +272,9 @@ Context:
 - currentScene: ${currentScene || "(none)"}
 - latestUserInput: ${latestUserInput || "(none)"}
 - userIntent: ${userIntent || "(none)"}
+- worldSetting: ${worldSetting || "(none)"}
+- characterSetting: ${characterSetting || "(none)"}
+- userSetting: ${userSetting || "(none)"}
 
 Output to judge:
 ${output}`
