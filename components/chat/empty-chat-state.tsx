@@ -275,15 +275,13 @@ function ChatIntroPreview({
           {intro.scene && <p className="mt-2" style={{ color: pagePalette.mutedText, fontSize: textSize, lineHeight }}>{intro.scene}</p>}
         </div>
         {intro.firstMessage && (
-          <button
-            type="button"
-            onClick={() => onOptionClick(intro.firstMessage ?? "")}
-            className="w-full rounded-2xl border px-3 py-3 text-left transition-colors"
+          <div
+            className="w-full rounded-2xl border px-3 py-3 text-left"
             style={optionStyle}
           >
             <p className="font-medium" style={{ color: optionPalette.mutedText, fontSize: Math.max(11, textSize - 4), lineHeight }}>첫 메시지</p>
             <p className="mt-1" style={{ color: optionPalette.text, fontSize: textSize, lineHeight }}>{intro.firstMessage}</p>
-          </button>
+          </div>
         )}
         {(intro.options?.length ?? 0) > 0 && (
           <div className="space-y-2">

@@ -559,6 +559,31 @@ export default function ChatPage() {
       turnId,
       status: "completed" as const,
     }
+    const openingMessageId = selectedIntroScenario
+      ? `intro-${chatId}-${selectedIntroScenario.id}`
+      : ""
+    const openingContent = messages.length === 0
+      ? selectedIntroScenario?.firstMessage?.trim()
+      : ""
+    const openingMessage: ChatMessage | null = openingContent
+      ? {
+          id: openingMessageId,
+          type: "ai",
+          content: openingContent,
+          timestamp: new Date(),
+          status: "completed",
+          speakerId: currentCharacter?.id,
+          speakerName: characterName,
+        }
+      : null
+    const historyBeforeUser = openingMessage ? [openingMessage] : messages
+    const generationHistory = [...historyBeforeUser, userMessage]
+    const openingIsInHistory = Boolean(
+      openingMessageId && historyBeforeUser.some((message) => message.id === openingMessageId),
+    )
+    const generationIntro = openingIsInHistory && selectedIntroScenario
+      ? { ...selectedIntroScenario, firstMessage: undefined }
+      : selectedIntroScenario
     const characterMessageId = `assistant-${turnId}`
     const streamingMessage: ChatMessage = {
       id: characterMessageId,
@@ -625,7 +650,11 @@ export default function ChatPage() {
         }),
       )
     }
-    setMessages((prev) => [...prev, userMessage, streamingMessage])
+    setMessages((prev) => [
+      ...(prev.length === 0 && openingMessage ? [openingMessage] : prev),
+      userMessage,
+      streamingMessage,
+    ])
     setIsTyping(true)
     setTypingLabel(undefined)
     setTypingVariant("text")
@@ -633,10 +662,10 @@ export default function ChatPage() {
     try {
       const reply = {
         ...(await generateAssistantReply(
-          [...messages, userMessage],
+          generationHistory,
           modelContent,
-          selectedIntroScenario,
-          buildImageCommandContext([...messages, userMessage]),
+          generationIntro,
+          buildImageCommandContext(generationHistory),
           selectedModelId,
           {
             roomId: chatId,
@@ -667,11 +696,11 @@ export default function ChatPage() {
       const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
       const autoCommandMessages = await buildAutoCommandMessages({
         turnId,
-        contextMessages: [...messages, userMessage, reply],
+        contextMessages: [...generationHistory, reply],
         statusOverride: nextChatStoryStatus,
         commandIds: autoCommandIds,
       })
-      const contextMessages = [...messages, userMessage, reply, ...autoCommandMessages]
+      const contextMessages = [...generationHistory, reply, ...autoCommandMessages]
       const shouldGenerateAutoImage = shouldAutoGenerateImage(chatId, displayContent, reply.content, nextChatStoryStatus)
       let autoImageMessage: ChatMessage | null = null
       if (shouldGenerateAutoImage) {
