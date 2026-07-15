@@ -112,7 +112,42 @@ function hasUserReference(text: string, userName: string) {
   const name = userName.trim()
   return (
     Boolean(name && text.includes(name)) ||
-    /(?:너|네|그|그녀|상대|사용자|유저)(?:는|가|의|를|에게|한테|도|와|과)?/.test(text)
+    /(?:너|네|상대|사용자|유저)(?:는|가|의|를|에게|한테|도|와|과)?/.test(text)
+  )
+}
+
+function hasExplicitUserStateOwner(text: string, userName: string) {
+  const name = userName.trim()
+  const namedSubject = name
+    ? new RegExp(`${escapeRegExp(name)}(?:은|는|이|가|도|만)(?=$|[\\s,])`, "u").test(text)
+    : false
+  if (namedSubject || /(?:너는|너도|너만|네가|상대는|상대가|사용자는|사용자가|유저는|유저가)(?=$|[\s,])/u.test(text)) {
+    return true
+  }
+
+  const mentalState = "감정|마음|욕망|의도|속내|심리|생각|결심|확신|긴장|흥분|불안|두려움|기분"
+  const possessiveOwners = [
+    name ? `${escapeRegExp(name)}의` : "",
+    "너의",
+    "네",
+    "상대의",
+    "사용자의",
+    "유저의",
+  ].filter(Boolean).join("|")
+  if (possessiveOwners && new RegExp(`(?:${possessiveOwners})\\s*(?:${mentalState})(?:은|는|이|가)`, "u").test(text)) {
+    return true
+  }
+
+  const indirectOwners = [
+    name ? escapeRegExp(name) : "",
+    "너",
+    "상대",
+    "사용자",
+    "유저",
+  ].filter(Boolean).join("|")
+  return Boolean(
+    indirectOwners &&
+    new RegExp(`(?:${indirectOwners})에게(?:는|도)?\\s*[^.?!\\n]{0,20}(?:${mentalState})(?:이|가)`, "u").test(text),
   )
 }
 
@@ -121,7 +156,7 @@ function hasFirstPersonMarker(text: string) {
 }
 
 function hasExplicitUserStatePredicate(text: string) {
-  return /(느끼|생각하|여기|원하|바라|싶어|욕망|의도|속내|심리|마음|확신|결심|작정|기대하|두려|불안|긴장|흥분|당황|초조|기뻐|슬퍼|화가|후회|망설|끌리|질투|부끄러|수치|안도|만족|싫어|좋아|사랑|미워)/.test(text)
+  return /(느끼|느꼈|느낀|느껴|생각하|생각했|생각한|여기|여겼|원하|원했|원한|바라|싶어|싶었|욕망|의도|속내|심리|마음|확신|결심|작정|기대하|두려|불안|긴장|흥분|당황|초조|기뻐|슬퍼|화가|후회|망설|끌리|질투|부끄러|수치|안도|만족|싫어|좋아|사랑|미워)/.test(text)
 }
 
 function hasObservableUserSurface(text: string) {
@@ -136,6 +171,7 @@ function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudg
   if (isEvidenceInCharacterDialogue(evidence, ctx.output, ctx.characterName)) return false
   if (!isEvidenceInNarration(evidence, ctx.output)) return false
   if (!hasUserReference(evidence, ctx.userName)) return false
+  if (!hasExplicitUserStateOwner(evidence, ctx.userName)) return false
   if (!hasExplicitUserStatePredicate(evidence)) return false
   const escapedUserName = escapeRegExp(ctx.userName.trim())
   if (hasFirstPersonMarker(evidence) && (!escapedUserName || !new RegExp(`${escapedUserName}(?:은|는|이|가)`).test(evidence))) return false
@@ -222,6 +258,8 @@ Judge only context-sensitive quality issues. Do not judge quote balance, length,
 
 Definitions:
 - objectiveUserStateAssertion fails only when non-dialogue narration states the user's emotions, desire, intent, or mental state as omniscient objective fact.
+- Identify the grammatical owner of the emotion or mental-state predicate. A mere mention of ${userName} as the cause, target, object, or possessive modifier of an observable action does not make the state belong to ${userName}.
+- If narration says ${characterName} felt tension, surprise, desire, breathlessness, or another reaction because of ${userName}'s movement, voice, expression, or presence, the state belongs to ${characterName} and must pass objectiveUserStateAssertion.
 - Never fail objectiveUserStateAssertion for claims, teasing, accusations, confidence, guesses, or mind-reading language spoken by ${characterName} in dialogue. Assertive dialogue such as saying that ${userName} does not dislike the situation is character voice, not objective narration.
 - objectiveUserStateAssertion is allowed when ${characterName} reads, guesses, expects, misunderstands, or judges ${userName}'s state as the character's own interpretation.
 - Do not fail objectiveUserStateAssertion merely because a sentence describes ${characterName}'s own state, reaction, tension, curiosity, desire, or decision. First-person character narration may separately violate the rule-based narrationStyleMismatch check, but it is not an objective assertion about ${userName}.

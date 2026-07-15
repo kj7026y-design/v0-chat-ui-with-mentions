@@ -83,9 +83,9 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v4"
+const PROMPT_VERSION = "rp-pipeline-v5"
 const NORMALIZER_VERSION = "rp-normalizer-v1"
-const VALIDATOR_VERSION = "rp-validator-v3"
+const VALIDATOR_VERSION = "rp-validator-v4"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
