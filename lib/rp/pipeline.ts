@@ -85,7 +85,7 @@ const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
 const PROMPT_VERSION = "rp-pipeline-v5"
 const NORMALIZER_VERSION = "rp-normalizer-v1"
-const VALIDATOR_VERSION = "rp-validator-v4"
+const VALIDATOR_VERSION = "rp-validator-v5"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
@@ -1245,7 +1245,13 @@ function escapesIntoUserControl(content: string, userName?: string) {
 }
 
 function detectsPhysicalEscalation(content: string) {
-  return /(손목[^.?!\n]{0,16}잡|손등[^.?!\n]{0,16}(?:건드|만지|쓸)|손을[^.?!\n]{0,16}(?:잡|건드|만지|쓸)|허리[^.?!\n]{0,16}(?:감|잡)|끌어당겼|끌어당긴|끌어안|껴안|입맞|키스|입술[^.?!\n]{0,20}(?:닿|대|가져가|문지|맞)|몸[^.?!\n]{0,16}닿|밀착|품에[^.?!\n]{0,16}(?:안|끌)|(?:손|잔|유리잔)[^.?!\n]{0,20}(?:입술|손등|손)[^.?!\n]{0,20}(?:대|올려|건드|만지))/u.test(content)
+  const narration = stripQuotedDialogue(content)
+  const actualContactNarration = narration.replace(
+    /(?:입술|손끝|손|몸)[^.?!\n]{0,40}(?:닿을\s*(?:듯(?:\s*말\s*듯)?|만큼)|닿기\s*직전|닿지\s*않|대지\s*않|건드리지\s*않)/gu,
+    " ",
+  )
+
+  return /(손목[^.?!\n]{0,16}잡|손등[^.?!\n]{0,16}(?:건드|만지|쓸)|손을[^.?!\n]{0,16}(?:잡|건드|만지|쓸)|허리[^.?!\n]{0,16}(?:감|잡)|끌어당겼|끌어당긴|끌어안|껴안|입맞|키스|입술[^.?!\n]{0,20}(?:닿|대|가져가|문지|맞)|몸[^.?!\n]{0,16}닿|밀착|품에[^.?!\n]{0,16}(?:안|끌)|(?:손|잔|유리잔)[^.?!\n]{0,20}(?:입술|손등|손)[^.?!\n]{0,20}(?:대|올려|건드|만지))/u.test(actualContactNarration)
 }
 
 function detectsInventedProps(content: string, ctx: CompiledRoleplayContext) {
@@ -1504,6 +1510,12 @@ function hasUnpromptedHandFocus(output: string, ctx: CompiledRoleplayContext) {
 
   const handSentences = splitIntoSentences(stripQuotedDialogue(output)).filter(hasHandMention)
   if (handSentences.length === 0) return false
+  if (
+    handSentences.length === 1 &&
+    /손을\s*(?:대지|닿게\s*하지|건드리지|잡지)\s*않(?:았|은)/u.test(handSentences[0])
+  ) {
+    return false
+  }
 
   const focusedHandSentences = handSentences.filter((sentence) => !hasNaturalPropHandAction(sentence, ctx))
   return (
