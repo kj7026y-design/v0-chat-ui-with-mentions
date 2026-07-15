@@ -10,6 +10,47 @@ export type StoryBackground = {
   progressionRule?: string
 }
 
+const LOCATION_MARKER_PATTERN = /라운지|카페|회사|학교|서점|방|집|거리|골목|테라스|호텔|바|클럽|사무실|아파트|건물|빌딩|오피스텔|복도|농장|과수원|서울|부산|인천|대구|대전|광주|울산|제주|\d+\s*층/u
+const TIME_OF_DAY_PATTERN = /(?:늦은\s*밤|깊은\s*밤|한밤중|이른\s*새벽|새벽|이른\s*아침|아침|오전|정오|오후|해질녘|저녁|밤|낮)(?![가-힣])/u
+const DATE_OR_ERA_PATTERN = /(?:\d{4}년(?:\s*\d{1,2}월(?:\s*\d{1,2}일)?)?|봄|여름|가을|겨울|시대)(?![가-힣])/u
+const FLOOR_PATTERN = /(?:지하\s*)?\d+\s*층/u
+const BUILDING_PATTERN = /아파트|건물|빌딩|오피스텔|호텔|회사|학교|병원|상가/u
+
+function extractStoryTime(parts: string[]) {
+  const timePart = parts.find((part) => TIME_OF_DAY_PATTERN.test(part) || DATE_OR_ERA_PATTERN.test(part))
+  if (!timePart) return undefined
+  if (!LOCATION_MARKER_PATTERN.test(timePart)) return timePart
+
+  const dateOrEra = timePart.match(DATE_OR_ERA_PATTERN)?.[0]
+  const timeOfDay = timePart.match(TIME_OF_DAY_PATTERN)?.[0]
+  return [dateOrEra, timeOfDay].filter(Boolean).join(" ") || undefined
+}
+
+function extractStoryLocation(parts: string[], source: string) {
+  const locationPart = parts.find((part) => LOCATION_MARKER_PATTERN.test(part))
+  if (!locationPart) return undefined
+
+  const location = locationPart
+    .replace(new RegExp(TIME_OF_DAY_PATTERN.source, "gu"), " ")
+    .replace(new RegExp(DATE_OR_ERA_PATTERN.source, "gu"), " ")
+    .replace(/^현대\s+/u, "")
+    .replace(/\s+/gu, " ")
+    .replace(/\s*의\s*$/u, "")
+    .trim()
+  if (!location) return undefined
+
+  const floor = location.match(FLOOR_PATTERN)?.[0].replace(/\s+/gu, "")
+  if (!floor || BUILDING_PATTERN.test(location)) return location
+
+  const baseLocation = location
+    .replace(FLOOR_PATTERN, " ")
+    .replace(/\s+/gu, " ")
+    .replace(/\s*의\s*$/u, "")
+    .trim()
+  const unknownBuilding = /아파트/u.test(source) ? "어느 아파트" : "어느 건물"
+  return baseLocation ? `${baseLocation}의 ${unknownBuilding} ${floor}` : `${unknownBuilding} ${floor}`
+}
+
 export function parseStoryBackground(background = "", characterName = "캐릭터", userName = "사용자"): StoryBackground {
   const displayText = background.trim()
   const parts = displayText
@@ -17,9 +58,9 @@ export function parseStoryBackground(background = "", characterName = "캐릭터
     .map((part) => part.trim())
     .filter(Boolean)
   const source = parts.join(" / ")
-  const location = parts.find((part) => /라운지|카페|회사|학교|서점|방|집|거리|골목|테라스|호텔|바|클럽|사무실|서울/u.test(part))
+  const location = extractStoryLocation(parts, source)
   const genre = parts.find((part) => /로맨스|판타지|현대|성인|스릴러|드라마|일상|느와르|미스터리/u.test(part))
-  const time = parts.find((part) => /\d{4}년|밤|새벽|아침|오후|저녁|낮|시대|계절/u.test(part))
+  const time = extractStoryTime(parts)
   const relationshipPremise =
     parts.find((part) => /관계|파트너|친구|연인|동료|계약|얽힌|인연|상대/u.test(part)) ||
     `${characterName}과 ${userName}의 관계는 작품 설정을 따른다.`
