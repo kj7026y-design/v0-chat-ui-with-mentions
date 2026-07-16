@@ -19,6 +19,18 @@ function getAdminPassword() {
   return process.env.ADMIN_PASSWORD || "12345"
 }
 
+function canUseDevelopmentAdminSession() {
+  if (process.env.NODE_ENV !== "development") return false
+  if (process.env.DISABLE_LOCAL_ADMIN_SESSION === "true") return false
+
+  return Boolean(
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL_UNPOOLED ||
+    process.env.POSTGRES_URL_NON_POOLING,
+  )
+}
+
 function getSessionSecret() {
   return (
     process.env.ADMIN_SESSION_SECRET ||
@@ -72,7 +84,17 @@ function parseAdminSessionToken(token: string | undefined): AdminSessionPayload 
 
 export async function getAdminSession() {
   const cookieStore = await cookies()
-  return parseAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
+  const session = parseAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
+  if (session) return session
+
+  if (canUseDevelopmentAdminSession()) {
+    return {
+      username: getAdminUsername(),
+      expiresAt: Date.now() + ADMIN_SESSION_MAX_AGE * 1000,
+    }
+  }
+
+  return null
 }
 
 export function getAdminSessionCookieOptions() {

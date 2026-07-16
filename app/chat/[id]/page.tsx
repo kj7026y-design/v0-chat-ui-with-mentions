@@ -275,6 +275,7 @@ export default function ChatPage() {
   const isLoadingOlderHistoryRef = useRef(false)
   const latestMessageIdRef = useRef<string | null>(null)
   const persistedMessageFingerprintsRef = useRef<Map<string, string>>(new Map())
+  const pendingMessageFingerprintsRef = useRef<Map<string, string>>(new Map())
   const historyOperationQueueRef = useRef<Promise<void>>(Promise.resolve())
   const historyErrorShownRef = useRef(false)
   const characterName = chatMeta?.characterName ?? CHARACTER_NAME
@@ -521,6 +522,7 @@ export default function ChatPage() {
     isLoadingOlderHistoryRef.current = false
     latestMessageIdRef.current = null
     persistedMessageFingerprintsRef.current.clear()
+    pendingMessageFingerprintsRef.current.clear()
     historyErrorShownRef.current = false
 
     const restoreHistory = async () => {
@@ -556,7 +558,11 @@ export default function ChatPage() {
 
     const changedMessages = messages.filter((message) => {
       if (!isPersistableChatMessage(message)) return false
-      return persistedMessageFingerprintsRef.current.get(message.id) !== getChatMessageFingerprint(message)
+      const fingerprint = getChatMessageFingerprint(message)
+      return (
+        persistedMessageFingerprintsRef.current.get(message.id) !== fingerprint &&
+        pendingMessageFingerprintsRef.current.get(message.id) !== fingerprint
+      )
     })
     if (changedMessages.length === 0) return
 
@@ -565,10 +571,24 @@ export default function ChatPage() {
       fingerprint: getChatMessageFingerprint(message),
     }))
     for (const { message, fingerprint } of snapshots) {
-      persistedMessageFingerprintsRef.current.set(message.id, fingerprint)
+      pendingMessageFingerprintsRef.current.set(message.id, fingerprint)
     }
     enqueueHistoryOperation(async () => {
-      await saveChatMessages(chatId, snapshots.map(({ message }) => message))
+      try {
+        await saveChatMessages(chatId, snapshots.map(({ message }) => message))
+        for (const { message, fingerprint } of snapshots) {
+          if (pendingMessageFingerprintsRef.current.get(message.id) !== fingerprint) continue
+          persistedMessageFingerprintsRef.current.set(message.id, fingerprint)
+          pendingMessageFingerprintsRef.current.delete(message.id)
+        }
+      } catch (error) {
+        for (const { message, fingerprint } of snapshots) {
+          if (pendingMessageFingerprintsRef.current.get(message.id) === fingerprint) {
+            pendingMessageFingerprintsRef.current.delete(message.id)
+          }
+        }
+        throw error
+      }
     })
   }, [chatId, isHistoryLoading, isHistoryPersistenceEnabled, messages])
 
