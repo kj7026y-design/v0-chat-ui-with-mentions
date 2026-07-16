@@ -1,21 +1,47 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Compass, Home, MessageCircle, PlusCircle, User } from "lucide-react"
+import { Compass, MessageCircle, PlusCircle, ShieldCheck, User } from "lucide-react"
+import { getAdminSessionState } from "@/lib/chat-history-client"
 import { cn } from "@/lib/utils"
 
-const navItems = [
-  { icon: Home, label: "홈", href: "/" },
+const defaultNavItems = [
   { icon: Compass, label: "탐색", href: "/explore" },
   { icon: MessageCircle, label: "채팅", href: "/chats" },
   { icon: PlusCircle, label: "만들기", href: "/create" },
   { icon: User, label: "마이페이지", href: "/mypage" },
 ]
 
+const adminNavItem = { icon: ShieldCheck, label: "어드민", href: "/admin/members" }
+
 export function BottomNavBar() {
   const pathname = usePathname()
+  const [canManageMembers, setCanManageMembers] = useState(false)
   const isChatRoom = /^\/chat\/[^/]+$/.test(pathname ?? "")
+  const navItems = canManageMembers ? [adminNavItem, ...defaultNavItems] : defaultNavItems
+
+  useEffect(() => {
+    let cancelled = false
+
+    void getAdminSessionState()
+      .then((session) => {
+        if (cancelled) return
+        setCanManageMembers(
+          session.authenticated &&
+          session.accountType === "staff" &&
+          (session.role === "administrator" || session.role === "developer" || session.role === "operator"),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setCanManageMembers(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [pathname])
 
   if (isChatRoom) return null
 
@@ -24,7 +50,8 @@ export function BottomNavBar() {
       <div className="flex items-center justify-around py-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href || 
-            (item.href === "/chats" && pathname?.startsWith("/chat"))
+            (item.href === "/chats" && pathname?.startsWith("/chat")) ||
+            (item.href === "/admin/members" && pathname?.startsWith("/admin"))
 
           return (
             <Link
