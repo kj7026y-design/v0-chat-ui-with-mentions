@@ -110,8 +110,9 @@ export default function MemberAdminPage() {
     const initialize = async () => {
       try {
         const session = await getAdminSessionState()
+        if (cancelled) return
         if (
-          cancelled || !session.authenticated || session.accountType !== "staff" ||
+          !session.authenticated || session.accountType !== "staff" ||
           !session.role || !STAFF_ROLES.has(session.role)
         ) {
           router.replace("/chats")
