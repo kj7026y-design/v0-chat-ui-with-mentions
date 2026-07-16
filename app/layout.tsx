@@ -39,8 +39,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko" className="bg-background" suppressHydrationWarning>
-      <body className="font-sans antialiased">
+    <html lang="ko" className="h-full w-full overflow-hidden bg-background" suppressHydrationWarning>
+      <body className="h-full w-full max-w-full overflow-hidden font-sans antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
@@ -49,7 +49,7 @@ export default function RootLayout({
         >
           <CreditHydrator />
           {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}
-          <div className="flex flex-col h-[100dvh] overflow-hidden">
+          <div className="flex h-[100dvh] w-full min-w-0 max-w-full flex-col overflow-hidden">
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
               {children}
             </div>
