@@ -1,4 +1,5 @@
 import type { RoleplayModelProfile } from "./types"
+import { DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS } from "@/lib/chat-models"
 
 const geminiSafetyThreshold = (process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE") as NonNullable<RoleplayModelProfile["safety"]>["geminiSafetyThreshold"]
 
@@ -8,10 +9,10 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
   modelName: process.env.GEMINI_RP_MODEL || "gemini-3-flash-preview",
   temperature: 0.72,
   topP: 0.9,
-  maxOutputTokens: 1600,
+  maxOutputTokens: 6000,
   promptStyle: "immersive-controlled",
   outputMode: "novel",
-  targetChars: { min: 320, max: 700 },
+  targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
   maxDialogues: 2,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
@@ -30,6 +31,7 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
     lowContentDensity: "repairable",
     excessiveAbstractMood: "repairable",
     characterVoiceWeak: "repairable",
+    tooShort: "repairable",
     tooLong: "soft",
   },
   repair: {

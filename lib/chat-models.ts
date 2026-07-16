@@ -35,7 +35,7 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     creditCostPerReply: FREE_REPLY_CREDIT_COST,
     minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
     maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
-    maxTokens: 1400,
+    maxTokens: 4000,
     badge: "일반",
   },
   {
@@ -47,7 +47,7 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     creditCostPerReply: PREMIUM_REPLY_CREDIT_COST,
     minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
     maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
-    maxTokens: 3200,
+    maxTokens: 6000,
     badge: "프리미엄",
   },
   {
@@ -58,7 +58,7 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     creditCostPerReply: OPENAI_REPLY_CREDIT_COST,
     minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
     maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
-    maxTokens: 3200,
+    maxTokens: 4000,
     badge: "OpenAI",
   },
   {

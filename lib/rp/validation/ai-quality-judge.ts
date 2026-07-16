@@ -49,6 +49,10 @@ function normalizeEvidenceText(value: string) {
   return value.replace(/\s+/g, " ").trim()
 }
 
+function normalizeDialogueEvidenceText(value: string) {
+  return normalizeEvidenceText(value).replace(/[^\p{L}\p{N}]/gu, "")
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -91,6 +95,7 @@ function isEvidenceInNarration(evidence: string, output: string) {
 function isEvidenceInCharacterDialogue(evidence: string, output: string, characterName: string) {
   const normalizedEvidence = normalizeEvidenceText(evidence)
   if (!normalizedEvidence) return false
+  const compactEvidence = normalizeDialogueEvidenceText(normalizedEvidence)
 
   const dialogueBlocks = [
     ...Array.from(output.matchAll(/"([^"\n]{1,500})"/gu), (match) => match[1] || ""),
@@ -98,7 +103,12 @@ function isEvidenceInCharacterDialogue(evidence: string, output: string, charact
     ...Array.from(output.matchAll(/「([^」\n]{1,500})」/gu), (match) => match[1] || ""),
     ...Array.from(output.matchAll(/『([^』\n]{1,500})』/gu), (match) => match[1] || ""),
   ].map(normalizeEvidenceText)
-  if (dialogueBlocks.some((dialogue) => dialogue.includes(normalizedEvidence))) return true
+  if (dialogueBlocks.some((dialogue) => {
+    if (dialogue.includes(normalizedEvidence)) return true
+    const compactDialogue = normalizeDialogueEvidenceText(dialogue)
+    if (compactDialogue.length < 4 || compactEvidence.length < 4) return false
+    return compactDialogue.includes(compactEvidence) || compactEvidence.includes(compactDialogue)
+  })) return true
 
   const escapedEvidence = escapeRegExp(normalizedEvidence)
   const escapedCharacterName = escapeRegExp(characterName.trim())
@@ -261,6 +271,8 @@ Definitions:
 - Identify the grammatical owner of the emotion or mental-state predicate. A mere mention of ${userName} as the cause, target, object, or possessive modifier of an observable action does not make the state belong to ${userName}.
 - If narration says ${characterName} felt tension, surprise, desire, breathlessness, or another reaction because of ${userName}'s movement, voice, expression, or presence, the state belongs to ${characterName} and must pass objectiveUserStateAssertion.
 - Never fail objectiveUserStateAssertion for claims, teasing, accusations, confidence, guesses, or mind-reading language spoken by ${characterName} in dialogue. Assertive dialogue such as saying that ${userName} does not dislike the situation is character voice, not objective narration.
+- Spoken observations such as "지금도 봐, 심장 터질 것 같아 보이는데" are ${characterName}'s provocative interpretation of visible behavior and must pass, even when the line confidently mentions ${userName}'s apparent emotion or physical state.
+- Apply the supplied characterSetting: a confident, teasing, provocative, or dominant character may state an interpretation bluntly in dialogue without turning it into omniscient narration.
 - objectiveUserStateAssertion is allowed when ${characterName} reads, guesses, expects, misunderstands, or judges ${userName}'s state as the character's own interpretation.
 - Do not fail objectiveUserStateAssertion merely because a sentence describes ${characterName}'s own state, reaction, tension, curiosity, desire, or decision. First-person character narration may separately violate the rule-based narrationStyleMismatch check, but it is not an objective assertion about ${userName}.
 - Do not fail objectiveUserStateAssertion for observable or interpretive descriptions of ${userName}'s speech, expression, look, tone, posture, or response when framed as what ${characterName} sees or infers.

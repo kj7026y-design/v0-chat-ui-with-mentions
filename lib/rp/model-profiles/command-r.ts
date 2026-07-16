@@ -1,4 +1,5 @@
 import type { RoleplayModelProfile } from "./types"
+import { DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS } from "@/lib/chat-models"
 
 export const commandRRpProfile: RoleplayModelProfile = {
   id: "command-r-plus-rp",
@@ -6,10 +7,10 @@ export const commandRRpProfile: RoleplayModelProfile = {
   modelName: process.env.OPENROUTER_UNSHAPED2_MODEL || "cohere/command-r-plus-08-2024",
   temperature: 0.6,
   topP: 0.9,
-  maxOutputTokens: 1200,
+  maxOutputTokens: 4000,
   promptStyle: "korean-clean-direct",
   outputMode: "novel",
-  targetChars: { min: 280, max: 560 },
+  targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
   maxDialogues: 2,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
@@ -28,6 +29,7 @@ export const commandRRpProfile: RoleplayModelProfile = {
     lowContentDensity: "repairable",
     excessiveAbstractMood: "repairable",
     characterVoiceWeak: "repairable",
+    tooShort: "repairable",
     tooLong: "soft",
   },
   repair: {

@@ -1,4 +1,5 @@
 import type { RoleplayModelProfile } from "./types"
+import { DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS } from "@/lib/chat-models"
 
 export const freeRpProfile: RoleplayModelProfile = {
   id: "free-rp",
@@ -6,10 +7,10 @@ export const freeRpProfile: RoleplayModelProfile = {
   modelName: "openai",
   temperature: 0.8,
   topP: 0.9,
-  maxOutputTokens: 1200,
+  maxOutputTokens: 4000,
   promptStyle: "immersive-controlled",
   outputMode: "chat",
-  targetChars: { min: 280, max: 560 },
+  targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
   maxDialogues: 2,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
@@ -28,6 +29,7 @@ export const freeRpProfile: RoleplayModelProfile = {
     lowContentDensity: "repairable",
     excessiveAbstractMood: "repairable",
     characterVoiceWeak: "repairable",
+    tooShort: "repairable",
     tooLong: "soft",
   },
   repair: {

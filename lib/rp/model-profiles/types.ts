@@ -16,6 +16,7 @@ export type ValidationFailureKey =
   | "futureClosure"
   | "internalTokenLeak"
   | "overPhysical"
+  | "tooShort"
   | "tooLong"
   | "foreignScriptLeak"
   | "metaLeak"

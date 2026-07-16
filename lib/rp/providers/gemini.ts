@@ -12,6 +12,10 @@ function usesThinkingLevel(modelName: string) {
   return modelName.toLowerCase().startsWith("gemini-3")
 }
 
+function requiresThinkingBudget(modelName: string) {
+  return modelName.toLowerCase().startsWith("gemini-2.5-pro")
+}
+
 export function buildGeminiRoleplayConfig({
   profile,
   systemPrompt,
@@ -22,10 +26,12 @@ export function buildGeminiRoleplayConfig({
   safetySettings: GeminiSafetySettings
 }) {
   const thinkingConfig = allowsThinkingDisabled(profile.modelName)
-    ? { thinkingBudget: 0 }
+    ? { thinkingBudget: 0, includeThoughts: false }
     : usesThinkingLevel(profile.modelName)
       ? { thinkingLevel: ThinkingLevel.MINIMAL, includeThoughts: false }
-      : undefined
+      : requiresThinkingBudget(profile.modelName)
+        ? { thinkingBudget: 128, includeThoughts: false }
+        : undefined
 
   return {
     systemInstruction: systemPrompt,
