@@ -169,6 +169,16 @@ function hasExplicitUserStatePredicate(text: string) {
   return /(느끼|느꼈|느낀|느껴|생각하|생각했|생각한|여기|여겼|원하|원했|원한|바라|싶어|싶었|욕망|의도|속내|심리|마음|확신|결심|작정|기대하|두려|불안|긴장|흥분|당황|초조|기뻐|슬퍼|화가|후회|망설|끌리|질투|부끄러|수치|안도|만족|싫어|좋아|사랑|미워)/.test(text)
 }
 
+function hasCharacterStateOwner(text: string, characterName: string) {
+  const name = characterName.trim()
+  const stateSurface = "표정|눈빛|감정|마음|욕망|의도|속내|심리|생각|결심|확신|긴장|흥분|불안|두려움|기분|반응"
+  const namedOwner = name
+    ? new RegExp(`(?:${escapeRegExp(name)}의|${escapeRegExp(name)}(?:은|는|이|가))\\s*[^.?!\\n]{0,24}(?:${stateSurface})`, "u").test(text)
+    : false
+  const characterPronounOwner = new RegExp(`(?:그|그녀)의\\s*(?:${stateSurface})`, "u").test(text)
+  return namedOwner || characterPronounOwner
+}
+
 function hasObservableUserSurface(text: string) {
   return /(대답|말|어조|목소리|표정|눈빛|시선|태도|반응|미소|침묵|몸짓|고개)/.test(text)
 }
@@ -180,6 +190,7 @@ function hasCharacterInterpretationFrame(text: string) {
 function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudgeSanitizeContext) {
   if (isEvidenceInCharacterDialogue(evidence, ctx.output, ctx.characterName)) return false
   if (!isEvidenceInNarration(evidence, ctx.output)) return false
+  if (hasCharacterStateOwner(evidence, ctx.characterName)) return false
   if (!hasUserReference(evidence, ctx.userName)) return false
   if (!hasExplicitUserStateOwner(evidence, ctx.userName)) return false
   if (!hasExplicitUserStatePredicate(evidence)) return false
@@ -215,6 +226,7 @@ export function sanitizeAiQualityJudgeResult(
     next.objectiveUserStateAssertion = {
       ...next.objectiveUserStateAssertion,
       failed: false,
+      reason: "",
       severity: "soft",
     }
   }
@@ -227,6 +239,7 @@ export function sanitizeAiQualityJudgeResult(
     next.userControlByNarration = {
       ...next.userControlByNarration,
       failed: false,
+      reason: "",
       severity: "soft",
     }
   }
@@ -275,6 +288,7 @@ Definitions:
 - Apply the supplied characterSetting: a confident, teasing, provocative, or dominant character may state an interpretation bluntly in dialogue without turning it into omniscient narration.
 - objectiveUserStateAssertion is allowed when ${characterName} reads, guesses, expects, misunderstands, or judges ${userName}'s state as the character's own interpretation.
 - Do not fail objectiveUserStateAssertion merely because a sentence describes ${characterName}'s own state, reaction, tension, curiosity, desire, or decision. First-person character narration may separately violate the rule-based narrationStyleMismatch check, but it is not an objective assertion about ${userName}.
+- In character-centered third-person narration, "그", "그녀", "그의", and "그녀의" refer to ${characterName} unless the sentence explicitly establishes ${userName} as their referent. A phrase such as "그의 표정에는 확신과 욕망이 뒤섞여 있었다" describes ${characterName}'s expression and must pass objectiveUserStateAssertion.
 - Do not fail objectiveUserStateAssertion for observable or interpretive descriptions of ${userName}'s speech, expression, look, tone, posture, or response when framed as what ${characterName} sees or infers.
 - responseMissedUserIntent fails when the response ignores or reverses the latest user input or intent.
 - If the latest input explicitly begins or permits consensual physical intimacy, a response that resets the scene to distance, generic consent checking, abstract conditions, unexplained stillness, or waiting for ${userName} to speak first misses the intent unless the supplied characterSetting requires restraint.

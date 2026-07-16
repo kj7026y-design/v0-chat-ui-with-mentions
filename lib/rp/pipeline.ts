@@ -93,7 +93,7 @@ const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
 const PROMPT_VERSION = "rp-pipeline-v8"
 const NORMALIZER_VERSION = "rp-normalizer-v2"
-const VALIDATOR_VERSION = "rp-validator-v8"
+const VALIDATOR_VERSION = "rp-validator-v9"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
