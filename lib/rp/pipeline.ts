@@ -83,9 +83,9 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v6"
-const NORMALIZER_VERSION = "rp-normalizer-v1"
-const VALIDATOR_VERSION = "rp-validator-v6"
+const PROMPT_VERSION = "rp-pipeline-v7"
+const NORMALIZER_VERSION = "rp-normalizer-v2"
+const VALIDATOR_VERSION = "rp-validator-v7"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
@@ -436,7 +436,7 @@ function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
   const asksOtherToAct = /(해\s*보라고|해\s*봐|하라고|보여\s*달라고|보여\s*줘|말해\s*보라고|말해\s*봐|증명해\s*보라고|증명해\s*봐)/u.test(textForParsing)
   const physicalContactRequested =
     !asksOtherToAct &&
-    /(손목을\s*잡|손을\s*잡|붙잡(?:는다|았다|고|으)|끌어당|안아|안긴|껴안|입맞|키스|만지|닿|밀착|품에|허리[^.?!\n]{0,12}잡|넥타이[^.?!\n]{0,16}(?:잡|당기|끌))/u.test(textForParsing)
+    /(손목을\s*잡|손을\s*잡|붙잡(?:는다|았다|고|으)|끌어당|안아|안긴|껴안|입맞|키스|만지|닿|밀착|품에|삽입|박(?:아|았|는|고)|허리[^.?!\n]{0,12}잡|넥타이[^.?!\n]{0,16}(?:잡|당기|끌))/u.test(textForParsing)
   const physicalContactPermitted = grantsCharacterInitiatedContact(text)
   const proximityRequested =
     !asksOtherToAct &&
@@ -623,7 +623,7 @@ function normalizeUserInputFallback(
     /(붙잡아\s*보라고|잡아\s*보라고|해\s*보라고|해\s*봐|하라고|말해\s*보라고|증명해\s*보라고)/u.test(actionText)
   const explicitTouch =
     !asksOtherToAct &&
-    /(손목을\s*잡|손을\s*잡|붙잡(?:았다|는다|고\s*잡았)|끌어당|안아|껴안|입맞|키스|만지|닿|밀착|품에)/u.test(actionText)
+    /(손목을\s*잡|손을\s*잡|붙잡(?:았다|는다|고\s*잡았)|끌어당|안아|껴안|입맞|키스|만지|닿|밀착|품에|삽입|박(?:아|았|는|고))/u.test(actionText)
   const proximityRequested = /(다가|가까이|거리를\s*좁|곁으로)/u.test(actionText)
   const contactLevel: NormalizedContactLevel = explicitTouch
     ? "touch"
@@ -723,7 +723,7 @@ function compileTurnPolicy(input: ParsedUserInput): TurnPolicy {
   const allowedActions = allowPhysicalContact
     ? input.physicalContactPermitted && !input.physicalContactRequested
       ? ["사용자가 허락한 범위의 캐릭터 주도 신체 접촉 한 단계", "짧은 대사", "표정 변화", "기존 소품 사용", "거리 변화"]
-      : ["사용자가 만든 접촉에 대한 반응", "짧은 대사", "표정 변화", "기존 소품 사용", "아주 작은 거리 변화"]
+      : ["사용자가 만든 접촉에 대한 캐릭터다운 적극적 반응", "이미 시작된 접촉을 한 단계 이어가는 행동", "짧고 직접적인 대사", "표정과 신체 반응", "기존 소품 사용"]
     : input.proximityRequested
       ? ["짧은 대사", "표정 변화", "거리 유지 또는 아주 작은 거리 변화", "조건 제시", "기존 소품 사용"]
       : ["짧은 대사", "표정 변화", "심리적 압박", "조건 제시", "침묵", "기존 소품 사용"]
@@ -757,9 +757,17 @@ function buildToneRules(background = "", characterSetting = "") {
   if (/성인|선정|노골|플러팅|유혹|로맨스|밀당/u.test(source)) {
     rules.push(
       "- 성인 로맨스 톤은 허용한다.",
-      "- 긴장감은 명확한 대사, 거리감, 심리전으로 표현한다.",
+      "- 긴장감은 현재 장면의 수위에 맞는 명확한 대사와 구체적인 행동으로 표현한다.",
       "- 노골적인 플러팅은 비유적 장황함이 아니라 짧고 직접적인 대사와 주도권 싸움으로 처리한다.",
+      "- 이미 합의된 성인 접촉이 진행 중이면 거리감이나 심리전으로 후퇴시키지 않고 캐릭터 설정에 맞는 직접적인 반응을 허용한다.",
       "- 신체 접촉을 매 턴 자동 반복하지 않는다. 사용자가 접촉을 허락하거나 현재 턴에서 시작한 경우에는 맥락에 맞게 한 단계 진행할 수 있다.",
+    )
+  }
+
+  if (/적극|대담|먼저\s*유혹|주도적|직설적|노골적인\s*농담|dirty\s*talk/iu.test(source)) {
+    rules.push(
+      "- 적극성과 주도성은 캐릭터의 핵심 설정이다. 이유 없는 망설임, 기다림, 반응 보류로 바꾸지 않는다.",
+      "- 캐릭터 설정에 있는 짧고 직설적인 농담과 유혹을 실제 대사에 반영한다.",
     )
   }
 
@@ -795,7 +803,7 @@ function buildResponseGoal(characterName: string, userName: string, input: Parse
     if (input.physicalContactPermitted && !input.physicalContactRequested) {
       return `${characterName}은 ${userName}이 명시적으로 허락한 범위에서 캐릭터다운 신체 접촉을 한 단계 먼저 시작할 수 있으며, ${userName}의 반응은 대신 쓰지 않는다.`
     }
-    return `${characterName}은 ${userName}이 이미 만든 접촉에만 반응하고, ${userName}의 다음 행동은 쓰지 않는다.`
+    return `${characterName}은 ${userName}이 이미 만든 접촉과 현재 수위를 그대로 이어받아 캐릭터다운 적극적 반응과 행동을 한 단계 진행한다. 망설임이나 거리 확인으로 장면을 후퇴시키지 않되, ${userName}의 다음 반응은 대신 쓰지 않는다.`
   }
 
   if (policy.flirtChannel === "proximity") {
@@ -1256,7 +1264,7 @@ function hasRoleplayQualityIssue(content: string) {
   return isBadRoleplayOutput(content) || hasSemanticRepetition(content)
 }
 
-function isKnownLocalFallbackContent(content: string) {
+function isLegacyLocalFallbackContent(content: string) {
   return /떠나고\s*싶은\s*거야,\s*붙잡히고\s*싶은\s*거야|끝내러\s*온\s*사람이\s*붙잡아보라고|도발을\s*웃음으로\s*넘기지\s*않았다|농담으로\s*빠져나갈\s*틈|계약을\s*끝낼\s*건지,\s*아직\s*유예할\s*건지/u.test(content)
 }
 
@@ -1283,7 +1291,7 @@ function detectsPhysicalEscalation(content: string) {
     " ",
   )
 
-  return /(손목[^.?!\n]{0,16}잡|손등[^.?!\n]{0,16}(?:건드|만지|쓸)|손을[^.?!\n]{0,16}(?:잡|건드|만지|쓸)|허리[^.?!\n]{0,16}(?:감|잡)|끌어당겼|끌어당긴|끌어안|껴안|입맞|키스|입술[^.?!\n]{0,20}(?:닿|대|가져가|문지|맞)|몸[^.?!\n]{0,16}닿|밀착|품에[^.?!\n]{0,16}(?:안|끌)|(?:손|잔|유리잔)[^.?!\n]{0,20}(?:입술|손등|손)[^.?!\n]{0,20}(?:대|올려|건드|만지))/u.test(actualContactNarration)
+  return /(손목[^.?!\n]{0,16}잡|손등[^.?!\n]{0,16}(?:건드|만지|쓸)|손을[^.?!\n]{0,16}(?:잡|건드|만지|쓸)|허리[^.?!\n]{0,16}(?:감|잡)|끌어당겼|끌어당긴|끌어안|껴안|입맞|키스|입술[^.?!\n]{0,20}(?:닿|대|가져가|문지|맞)|몸[^.?!\n]{0,16}닿|밀착|품에[^.?!\n]{0,16}(?:안|끌)|삽입|박(?:아|았|는|고)|(?:손|잔|유리잔)[^.?!\n]{0,20}(?:입술|손등|손)[^.?!\n]{0,20}(?:대|올려|건드|만지))/u.test(actualContactNarration)
 }
 
 function detectsInventedProps(content: string, ctx: CompiledRoleplayContext) {
@@ -1930,6 +1938,8 @@ ${errors.responseMissedUserIntent || errors.lowContentDensity || errors.excessiv
 설정과 충돌하지 않는 가벼운 관찰은 캐릭터 대사로 보완할 수 있지만, 근거 없는 범죄, 위해 의도, 고정 취향, 비밀 지식, 과거 사실은 발명하지 마라.
 ${ctx.characterName}의 대사에는 최신 입력에 대한 새 정보나 분명한 태도가 있어야 한다.
 300~500자.` : ""}
+${errors.responseMissedUserIntent && ctx.turnPolicy.allowPhysicalContact ? `사용자가 이미 접촉을 시작했거나 ${ctx.characterName}이 먼저 행동하도록 허락했다. 장면을 거리 확인, 일반적인 조건 제시, 망설임으로 되돌리지 말고 현재 접촉과 수위에 직접 반응하라.` : ""}
+${errors.characterVoiceWeak ? `${ctx.characterName}의 설정에 적극성, 먼저 유혹함, 주도성, 직설적인 농담이 있다면 이를 실제 행동과 짧은 대사로 드러내라. 상대가 먼저 말하게 하려고 가만히 있는다는 식의 근거 없는 수동적 동기를 만들지 마라.` : ""}
 ${errors.unpromptedHandFocus ? `방금 답변은 손 묘사가 접촉/관능/회피/긴장 표현의 중심이 되어서 실패했다.
 문, 계약서, 펜, 컵, 난간처럼 기존 소품을 자연스럽게 다루는 손동작은 문제 삼지 않는다.
 손목을 잡았다, 손을 잡았다, 손끝이 떨렸다, 손을 뻗지 않았다 같은 손 중심 묘사는 제거하라.` : ""}
@@ -1956,8 +1966,8 @@ export function buildSafeFallbackReply(ctx: CompiledRoleplayContext) {
   return buildContextualFallbackReply(ctx)
 }
 
-function buildContextualFallbackReply(ctx: CompiledRoleplayContext, streamedDraft = "") {
-  const { characterName, userName } = ctx
+function buildContextualFallbackReply(ctx: CompiledRoleplayContext, _streamedDraft = "") {
+  const { characterName } = ctx
   const latestText = [
     ctx.latestInput.raw,
     ctx.latestInput.action,
@@ -1966,27 +1976,47 @@ function buildContextualFallbackReply(ctx: CompiledRoleplayContext, streamedDraf
   ]
     .filter(Boolean)
     .join("\n")
-  const isProvocation = /(도발|붙잡아\s*보라고|잡아\s*보라고|해\s*보라고|해\s*봐|하라고|시험|떠나|끝내)/u.test(latestText)
-  const streamedNoEscape = /도망칠\s*생각|도망치려|도망칠/u.test(streamedDraft)
+  const isActiveCharacter = /적극|대담|먼저\s*유혹|주도적|직설적|노골적인\s*농담|dirty\s*talk/iu.test(ctx.characterBrief)
+  const isProvocation = /(도발|붙잡아\s*보라고|잡아\s*보라고|해\s*보라고|해\s*봐|하라고|시험)/u.test(latestText)
+  const isDirectQuestion = asksDirectQuestion(latestText)
   const propBeat = ctx.allowedProps.includes("계약서")
     ? `${characterName}은 계약서가 놓인 쪽으로 시선을 짧게 내렸다.`
     : ctx.allowedProps.includes("라이터")
       ? "라이터 불빛이 짧게 꺼졌다."
       : `${characterName}은 한 박자 늦게 숨을 골랐다.`
 
-  if (streamedNoEscape || isProvocation || ctx.latestInput.asksOtherToAct) {
-    return `${characterName}은 ${userName}의 도발을 웃음으로 넘기지 않았다. ${propBeat}
+  if (ctx.turnPolicy.allowPhysicalContact) {
+    const line = isActiveCharacter
+      ? "이제 와서 내가 얌전히 기다릴 거라고 생각했어? 허락한 만큼은 내가 먼저 할게."
+      : "허락한 범위는 알아. 여기서 망설이거나 물러서진 않을게."
+    return `${characterName}은 이미 시작된 흐름을 망설임으로 끊지 않았다. ${propBeat}
 
-"끝내러 온 사람이 붙잡아보라고 말하는 건 모순이야. 떠날 건지, 내가 널 멈추길 바라는 건지 지금 분명히 해."
+"${line}"
 
-${characterName}의 말은 낮고 짧았다. 더 다가가지는 않았지만, 농담으로 빠져나갈 틈도 남기지 않았다.`
+${characterName}은 말과 함께 자신이 선택한 움직임을 분명히 이어 갔다. 짧은 농담 뒤에도 주도권을 놓치지 않았다.`
   }
 
-  return `${characterName}은 대답을 서두르지 않았다. ${propBeat}
+  if (isActiveCharacter || isProvocation || ctx.latestInput.asksOtherToAct) {
+    return `${characterName}은 반응을 보류한 채 기다리지 않았다. ${propBeat}
 
-"계약을 끝낼 거면 지금 선을 그어. 남길 바라는 게 있으면 도발 말고 조건을 말해."
+"그렇게 대놓고 떠보면 내가 얌전히 넘어갈 줄 알았어? 이번엔 내가 먼저 할게."
 
-말은 한 번으로 끝났다. ${characterName}은 그 자리에서 ${userName}의 반응을 봤다.`
+짧은 농담이 끝나자 ${characterName}은 최신 입력에 대한 자신의 태도를 행동으로 분명히 보였다.`
+  }
+
+  if (isDirectQuestion) {
+    return `${characterName}은 질문을 다른 화제로 돌리지 않았다. ${propBeat}
+
+"왜 물었는지 되묻지는 않을게. 네가 물은 것부터 똑바로 답하지."
+
+${characterName}은 불필요한 해설 없이 자신의 답과 태도를 분명히 밝혔다.`
+  }
+
+  return `${characterName}은 최신 입력을 망설임이나 침묵으로 흘려보내지 않았다. ${propBeat}
+
+"돌려 말하지 않을게. 방금 네가 한 말에 맞춰서 바로 반응할 거야."
+
+${characterName}은 같은 질문을 되풀이하지 않고 자신의 다음 행동을 분명히 선택했다.`
 }
 
 const FOREIGN_SCRIPT_LEAK_PATTERN =
@@ -2233,15 +2263,15 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 캐릭터다운 반말, 질문, 감탄은 큰따옴표 안의 대사에서만 사용한다.
 - 제목, 이름표, 구간명, 설명용 라벨을 붙이지 않는다.
 - 사용자의 마지막 말/행동에 대한 "${characterName}"의 즉각 반응을 먼저 쓴다.
-- "${characterName}"의 새 행동은 한 가지 이하로 제한한다.
-- 마지막은 "${characterName}"이 실제 동작을 멈춘 지점에서 끝낸다.
+- "${characterName}"의 새 행동은 서로 이어지는 1~2개의 구체적인 동작으로 제한한다.
+- 마지막을 억지로 멈춤, 기다림, 반응 확인으로 끝내지 않는다. 캐릭터 설정에 맞는 행동이나 짧은 대사로 자연스럽게 턴을 맺는다.
 - 같은 역할의 문단을 두 번 쓰지 않는다.
 
 [진행]
 - 최근 사용자 메시지에서 바로 이어간다.
 - 사용자가 구체적인 대상, 이유, 허락, 가능 여부를 물으면 그 대상에 대한 캐릭터다운 답을 먼저 제시한다.
 - 질문을 그대로 되풀이하거나 "왜 궁금한데", "그게 왜 궁금해"처럼 질문 이유만 되묻고 끝내지 않는다.
-- 장면은 "${characterName}"의 반응만으로 한 단계만 진행한다.
+- 장면은 "${characterName}"의 반응만으로 한 번의 의미 있는 행동 흐름만 진행한다. 이미 시작된 합의된 접촉은 현재 수위에서 구체적으로 이어갈 수 있다.
 - "${userName}"이 다음에 무엇을 말하거나 행동할지는 비워둔다.
 - 감정 묘사 후에는 실제 행동, 거절, 질문, 고백, 회피 중 하나로 넘어간다.
 - 의미 없는 장황한 분위기 묘사로 분량을 채우지 않는다.
@@ -2266,6 +2296,9 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 최신 사용자 입력의 명시적 행동과 대사가 가장 우선한다.
 - 현재 장면의 확정 상태, 캐릭터 설정, 사용자 설정, 세계관 설정에 적힌 사실은 정식 설정으로 유지한다.
 - 일반적인 문체 규칙 때문에 캐릭터의 고유한 말투, 성격, 직업상 판단, 세계관의 자연스러운 관습을 지우지 않는다.
+- 캐릭터 설정의 "적극적", "먼저 유혹", "주도적", "직설적", "짧고 노골적인 농담"은 선택 가능한 분위기가 아니라 반드시 반영할 행동·말투 규칙이다.
+- 적극적인 캐릭터를 근거 없이 가만히 기다리게 하거나, 상대가 먼저 말하게 만들기 위해 일부러 반응을 보류하는 수동적 인물로 바꾸지 않는다.
+- 사용자가 이미 합의된 성인 접촉을 구체적으로 시작했다면 플러팅 이전 단계, 거리 확인, 일반적인 조건 제시로 되돌아가지 말고 현재 장면의 강도에 맞춰 반응한다.
 - 캐릭터는 대사에서 자신감 있게 추측하거나 놀리거나 단정적으로 말할 수 있다. 이것은 서술자의 객관적 사실 확정이 아니다.
 - 장면에 자연스럽고 설정과 충돌하지 않는 가벼운 관찰이나 일상적 세부는 대사와 캐릭터 관찰로 보완할 수 있다.
 - 설정과 대화에 근거가 없는 범죄, 위해 의도, 고정된 취향, 비밀 지식, 과거 약속처럼 장면을 뒤집는 중대한 사실은 새로 확정하지 않는다.
@@ -2374,7 +2407,7 @@ function buildOpenRouterMessages(
       }
 
       if (isSystemLikeAssistantContent(content)) return []
-      if (isKnownLocalFallbackContent(content)) return []
+      if (isLegacyLocalFallbackContent(content)) return []
       if (escapesIntoUserControl(content, userName) || hasRoleplayQualityIssue(content)) return []
 
       const repeatKey = normalizeRepeatedParagraphKey(content)
@@ -2645,7 +2678,7 @@ async function callGeminiRoleplay(finalMessages: ChatMessages, model: ChatModelC
       content: `방금 Gemini 응답이 비었거나 safety finish로 중단됐다.
 허용 가능한 성인 창작 RP 범위 안에서만 작성하라.
 미성년자 성적 내용, 비동의/강압 미화, 착취/불법 성적 내용, 실존 인물 성적화, 자해/위험행위 조장은 쓰지 않는다.
-노골적 행위 묘사 대신 현재 장면의 갈등, 대사, 거리감, 조건 제시에 집중해 300~600자로 다시 작성하라.`,
+합의된 성인 장면은 캐릭터 설정과 현재 수위를 유지하고, 최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 300~600자로 다시 작성하라.`,
     },
   ]
   result = await generate(retryMessages)
@@ -2917,6 +2950,12 @@ async function handleRoleplayChatFromNormalized(
     console.debug("[RP promptStyle]", profile.promptStyle)
     console.debug("[RP outputMode]", profile.outputMode)
     console.debug("[RP normalizedInput]", normalizedLatestInput)
+    console.debug("[RP contact policy]", {
+      physicalContactRequested: compiledContext.latestInput.physicalContactRequested,
+      physicalContactPermitted: compiledContext.latestInput.physicalContactPermitted,
+      allowPhysicalContact: compiledContext.turnPolicy.allowPhysicalContact,
+      flirtChannel: compiledContext.turnPolicy.flirtChannel,
+    })
     console.debug("[RP modelBackground]", modelBackground)
     console.debug("[RP final system prompt preview]", systemPromptText.slice(0, 1200))
     console.debug("[RP finalMessages]", finalMessages)
@@ -3551,6 +3590,12 @@ async function streamGeminiRoleplay({
     console.debug("[Gemini RP finish reason]", finishReason)
     console.debug("[Gemini RP safety ratings]", safetyRatings)
     console.debug("[RP normalizedInput]", normalizedLatestInput)
+    console.debug("[RP contact policy]", {
+      physicalContactRequested: compiledContext.latestInput.physicalContactRequested,
+      physicalContactPermitted: compiledContext.latestInput.physicalContactPermitted,
+      allowPhysicalContact: compiledContext.turnPolicy.allowPhysicalContact,
+      flirtChannel: compiledContext.turnPolicy.flirtChannel,
+    })
     console.debug("[RP modelBackground]", modelBackground)
     console.debug("[RP final system prompt preview]", systemPromptText.slice(0, 1200))
   }
@@ -3656,7 +3701,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
       : `방금 Gemini 응답이 비었거나 safety finish로 중단됐다.
 허용 가능한 성인 창작 RP 범위 안에서만 작성하라.
 미성년자 성적 내용, 비동의/강압 미화, 착취/불법 성적 내용, 실존 인물 성적화, 자해/위험행위 조장은 쓰지 않는다.
-현재 장면의 갈등, 대사, 거리감, 조건 제시에 집중해 300~600자로 다시 작성하라.
+합의된 성인 장면은 캐릭터 설정과 현재 수위를 유지하고, 최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 300~600자로 다시 작성하라.
 
 [끊긴 Gemini stream 초안]
 ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
@@ -3798,6 +3843,77 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
   let repairedFinalValidation = repairedFinalValidationResult?.errors ?? null
   let repairedFinalSeverityOverrides = repairedFinalValidationResult?.severityOverrides ?? {}
   let repairedFinalClassifiedValidation = repairedFinalValidation ? classify(repairedFinalValidation, repairedFinalSeverityOverrides) : null
+  if (
+    (!savedContent || (repairedFinalClassifiedValidation && repairedFinalClassifiedValidation.hard.length > 0)) &&
+    process.env.OPENROUTER_API_KEY &&
+    allowsOpenRouterFallbackForGemini(model) &&
+    !fallbackProvider?.includes("openrouter")
+  ) {
+    const providerFallbackConfig = buildOpenRouterFallbackModel()
+    const providerFallbackModelName = getOpenRouterModelName(providerFallbackConfig)
+    usedFallback = true
+    fallbackProvider = "openrouter-after-gemini-validation"
+    fallbackModel = providerFallbackModelName
+    sendPhase("fallback", "대체 모델로 답변을 준비하는 중...")
+
+    try {
+      const providerFallbackMessages = [
+        ...finalMessages,
+        {
+          role: "user" as const,
+          content: `이전 모델 응답은 hard validation을 통과하지 못했다. 이전 초안을 복사하지 말고 같은 최신 입력에 새로 답하라.
+캐릭터 설정의 성격, 적극성, 주도성, 말투, 농담 방식을 반드시 반영하라.
+이미 합의된 성인 장면이 진행 중이면 현재 수위와 접촉을 유지하고 일반적인 플러팅이나 거리 확인으로 후퇴하지 마라.
+${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characterName}의 반응만 완성하라.`,
+        },
+      ]
+      const providerFallbackCompletion = await callOpenRouterRoleplay(
+        providerFallbackMessages,
+        providerFallbackConfig,
+        userName,
+      )
+      const providerFallbackContent = normalizeOpenRouterOutput(providerFallbackCompletion.content)
+      debugRoleplayContent({
+        stage: "fallback",
+        requestId: runId,
+        model: providerFallbackCompletion.model,
+        content: providerFallbackCompletion.content,
+      })
+      const providerFallbackValidationResult = providerFallbackContent
+        ? await validateRoleplayOutputWithJudge(providerFallbackContent, compiledContext, profile)
+        : null
+      const providerFallbackValidation = providerFallbackValidationResult?.errors ?? null
+      const providerFallbackSeverityOverrides = providerFallbackValidationResult?.severityOverrides ?? {}
+      const providerFallbackClassifiedValidation = providerFallbackValidation
+        ? classify(providerFallbackValidation, providerFallbackSeverityOverrides)
+        : null
+
+      if (providerFallbackValidation && providerFallbackClassifiedValidation) {
+        validationAttempts.push(buildValidationAttempt("fallback", providerFallbackValidation, providerFallbackClassifiedValidation))
+      } else {
+        validationAttempts.push(buildSyntheticValidationAttempt("fallback", ["empty-provider-fallback"]))
+      }
+
+      if (providerFallbackContent && providerFallbackClassifiedValidation?.hard.length === 0) {
+        savedContent = providerFallbackContent
+        outputModel = providerFallbackCompletion.model
+        repairedFinalValidationResult = providerFallbackValidationResult
+        repairedFinalValidation = providerFallbackValidation
+        repairedFinalSeverityOverrides = providerFallbackSeverityOverrides
+        validationSeverityOverrides = providerFallbackSeverityOverrides
+        repairedFinalClassifiedValidation = providerFallbackClassifiedValidation
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[Gemini RP provider fallback failed; trying local fallback]", {
+          requestId: runId,
+          model: providerFallbackModelName,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
   if (!savedContent || (repairedFinalClassifiedValidation && repairedFinalClassifiedValidation.hard.length > 0)) {
     if (!profile.fallback.allowLocalFallback) {
       const failures = repairedFinalClassifiedValidation?.hard ?? ["empty"]

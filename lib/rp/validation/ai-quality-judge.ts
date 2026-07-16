@@ -265,6 +265,7 @@ Definitions:
 - Do not fail objectiveUserStateAssertion merely because a sentence describes ${characterName}'s own state, reaction, tension, curiosity, desire, or decision. First-person character narration may separately violate the rule-based narrationStyleMismatch check, but it is not an objective assertion about ${userName}.
 - Do not fail objectiveUserStateAssertion for observable or interpretive descriptions of ${userName}'s speech, expression, look, tone, posture, or response when framed as what ${characterName} sees or infers.
 - responseMissedUserIntent fails when the response ignores or reverses the latest user input or intent.
+- If the latest input explicitly begins or permits consensual physical intimacy, a response that resets the scene to distance, generic consent checking, abstract conditions, unexplained stillness, or waiting for ${userName} to speak first misses the intent unless the supplied characterSetting requires restraint.
 - When ${userName} asks about a concrete subject, requests permission, or asks for a reason, the response should answer that subject first in character. Merely asking why ${userName} is curious, restating the question, or switching to a generic relationship question misses the intent unless the character/world canon explicitly requires evasiveness.
 - Low-stakes, scene-plausible embellishment in character dialogue is allowed when it supports the direct answer and does not contradict context. Do not fail just because every minor observation was not explicitly written in prior messages.
 - An unsupported high-impact claim that contradicts or derails the scene can fail responseMissedUserIntent as repairable. This includes invented crime, poisoning, theft intent, fixed preference, secret knowledge, or prior history absent from the supplied settings/history.
@@ -272,6 +273,7 @@ Definitions:
 - lowContentDensity fails when the response adds no concrete action, condition, conflict point, rejection, acceptance, or specific question.
 - excessiveAbstractMood fails when abstract atmosphere or relationship commentary dominates over concrete scene action/dialogue.
 - characterVoiceWeak fails when ${characterName}'s voice is generic and not a distinct in-character reaction.
+- Treat explicit characterSetting traits such as proactive, initiates seduction, leads, direct, playful, short explicit jokes, or dirty talk as required behavior and voice. A passive withholding motive invented for such a character is characterVoiceWeak and may also be responseMissedUserIntent.
 - userControlByNarration fails when the response narrates new user action, speech, decision, or emotion.
 - A character's spoken claim about what ${userName} did, felt, wanted, or seemed to do is not narration control by itself. Judge implausible or contradictory dialogue claims under responseMissedUserIntent instead.
 - Do not fail userControlByNarration for commands, requests, threats, questions, or pressure spoken by ${characterName} inside dialogue. A quoted line telling ${userName} to choose, answer, move, stop, or decide is character dialogue, not narration control.
@@ -288,6 +290,7 @@ Severity:
 - soft: minor warning.
 - responseMissedUserIntent is normally repairable. It may be hard only when the response directly contradicts supplied canonical settings or invents a major criminal, dangerous, or history-changing fact about ${userName} as settled truth.
 - characterVoiceWeak should compare the response against the supplied characterSetting instead of enforcing a generic neutral voice.
+- Do not lower an already established consensual adult scene to generic flirting merely to make the response safer-sounding; judge whether it matches the supplied settings and latest input.
 
 Required JSON shape:
 {
