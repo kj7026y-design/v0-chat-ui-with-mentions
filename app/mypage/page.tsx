@@ -196,9 +196,11 @@ export default function MyPage() {
     toast("프로필을 수정했어요.")
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST" }).catch(() => undefined)
     toast("로그아웃했어요.")
     router.push("/landing")
+    router.refresh()
   }
 
   const handleAccountDelete = () => {

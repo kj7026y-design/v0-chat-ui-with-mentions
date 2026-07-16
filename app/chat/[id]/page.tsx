@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { LoaderCircle } from "lucide-react"
 import { toast } from "sonner"
 import { useTheme } from "@/components/theme-provider"
 import { ChatHeader } from "@/components/chat/chat-header"
@@ -25,6 +26,13 @@ import {
   runCommand,
 } from "@/lib/chat-engine"
 import { getChatMemoryMemo } from "@/lib/chat-memory-storage"
+import {
+  clearChatHistory,
+  deleteChatMessages as deleteStoredChatMessages,
+  getAdminSessionState,
+  loadChatHistoryPage,
+  saveChatMessages,
+} from "@/lib/chat-history-client"
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
 import { defaultChats, getChatList, type ChatListItemData } from "@/lib/chat-list-storage"
 import { defaultChatReadingSettings, getChatReadingSettings, type ChatReadingSettings } from "@/lib/chat-settings-storage"
@@ -95,6 +103,15 @@ function getStatusLocation(statusBarText?: string) {
 
 function makeTurnId() {
   return `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function isPersistableChatMessage(message: ChatMessage) {
+  if (message.status === "streaming" || message.status === "pending") return false
+  return Boolean(message.content.trim() || message.imageUrl || message.eventImage)
+}
+
+function getChatMessageFingerprint(message: ChatMessage) {
+  return JSON.stringify(message)
 }
 
 function inferEmotion(text: string, fallback = "차분함") {
@@ -248,7 +265,18 @@ export default function ChatPage() {
   const [chatMeta, setChatMeta] = useState<ChatListItemData | null>(
     defaultChats.find((chat) => chat.id === chatId) ?? null,
   )
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true)
+  const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false)
+  const [isHistoryPersistenceEnabled, setIsHistoryPersistenceEnabled] = useState(false)
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null)
+  const [hasOlderHistory, setHasOlderHistory] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLElement>(null)
+  const isLoadingOlderHistoryRef = useRef(false)
+  const latestMessageIdRef = useRef<string | null>(null)
+  const persistedMessageFingerprintsRef = useRef<Map<string, string>>(new Map())
+  const historyOperationQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const historyErrorShownRef = useRef(false)
   const characterName = chatMeta?.characterName ?? CHARACTER_NAME
   const characterEmoji = chatMeta?.characterEmoji ?? CHARACTER_EMOJI
   const currentWork =
@@ -376,8 +404,25 @@ export default function ChatPage() {
     getCompactCharacterState(chatStoryStatus),
   ].filter(Boolean).join(" · ")
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
+  }
+
+  const reportHistoryError = (error: unknown) => {
+    console.error("[chat history sync failed]", error)
+    setIsHistoryPersistenceEnabled(false)
+    if (historyErrorShownRef.current) return
+    historyErrorShownRef.current = true
+    toast.error(error instanceof Error ? error.message : "채팅 내역을 DB와 동기화하지 못했어요.")
+  }
+
+  const enqueueHistoryOperation = (operation: () => Promise<unknown>) => {
+    historyOperationQueueRef.current = historyOperationQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        await operation()
+      })
+      .catch(reportHistoryError)
   }
 
   const buildImageCommandContext = (
@@ -465,7 +510,115 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    scrollToBottom()
+    let cancelled = false
+
+    setMessages([])
+    setIsHistoryLoading(true)
+    setIsLoadingOlderHistory(false)
+    setIsHistoryPersistenceEnabled(false)
+    setHistoryCursor(null)
+    setHasOlderHistory(false)
+    isLoadingOlderHistoryRef.current = false
+    latestMessageIdRef.current = null
+    persistedMessageFingerprintsRef.current.clear()
+    historyErrorShownRef.current = false
+
+    const restoreHistory = async () => {
+      try {
+        const session = await getAdminSessionState()
+        if (cancelled || !session.authenticated) return
+
+        const page = await loadChatHistoryPage(chatId)
+        if (cancelled) return
+
+        for (const message of page.messages) {
+          persistedMessageFingerprintsRef.current.set(message.id, getChatMessageFingerprint(message))
+        }
+        setMessages(page.messages)
+        setHistoryCursor(page.nextCursor)
+        setHasOlderHistory(page.hasMore)
+        setIsHistoryPersistenceEnabled(true)
+      } catch (error) {
+        if (!cancelled) reportHistoryError(error)
+      } finally {
+        if (!cancelled) setIsHistoryLoading(false)
+      }
+    }
+
+    void restoreHistory()
+    return () => {
+      cancelled = true
+    }
+  }, [chatId])
+
+  useEffect(() => {
+    if (!isHistoryPersistenceEnabled || isHistoryLoading) return
+
+    const changedMessages = messages.filter((message) => {
+      if (!isPersistableChatMessage(message)) return false
+      return persistedMessageFingerprintsRef.current.get(message.id) !== getChatMessageFingerprint(message)
+    })
+    if (changedMessages.length === 0) return
+
+    const snapshots = changedMessages.map((message) => ({
+      message,
+      fingerprint: getChatMessageFingerprint(message),
+    }))
+    for (const { message, fingerprint } of snapshots) {
+      persistedMessageFingerprintsRef.current.set(message.id, fingerprint)
+    }
+    enqueueHistoryOperation(async () => {
+      await saveChatMessages(chatId, snapshots.map(({ message }) => message))
+    })
+  }, [chatId, isHistoryLoading, isHistoryPersistenceEnabled, messages])
+
+  const loadOlderHistory = async () => {
+    if (
+      !isHistoryPersistenceEnabled ||
+      !hasOlderHistory ||
+      !historyCursor ||
+      isLoadingOlderHistoryRef.current
+    ) return
+
+    const container = scrollContainerRef.current
+    const previousScrollHeight = container?.scrollHeight ?? 0
+    const previousScrollTop = container?.scrollTop ?? 0
+    isLoadingOlderHistoryRef.current = true
+    setIsLoadingOlderHistory(true)
+
+    try {
+      const page = await loadChatHistoryPage(chatId, historyCursor)
+      for (const message of page.messages) {
+        persistedMessageFingerprintsRef.current.set(message.id, getChatMessageFingerprint(message))
+      }
+      setMessages((current) => {
+        const existingIds = new Set(current.map((message) => message.id))
+        const olderMessages = page.messages.filter((message) => !existingIds.has(message.id))
+        return [...olderMessages, ...current]
+      })
+      setHistoryCursor(page.nextCursor)
+      setHasOlderHistory(page.hasMore)
+
+      window.requestAnimationFrame(() => {
+        const nextContainer = scrollContainerRef.current
+        if (!nextContainer) return
+        nextContainer.scrollTop = previousScrollTop + (nextContainer.scrollHeight - previousScrollHeight)
+      })
+    } catch (error) {
+      reportHistoryError(error)
+    } finally {
+      isLoadingOlderHistoryRef.current = false
+      setIsLoadingOlderHistory(false)
+    }
+  }
+
+  useEffect(() => {
+    const latestMessageId = messages.at(-1)?.id ?? null
+    const hasNewLatestMessage = latestMessageId !== latestMessageIdRef.current
+    if ((isTyping || hasNewLatestMessage) && !isLoadingOlderHistoryRef.current) {
+      scrollToBottom(latestMessageIdRef.current ? "smooth" : "auto")
+    }
+    latestMessageIdRef.current = latestMessageId
   }, [messages, isTyping])
 
   useEffect(() => {
@@ -1165,6 +1318,10 @@ export default function ChatPage() {
 
   const handleDeleteMessage = (messageId: string) => {
     setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+    persistedMessageFingerprintsRef.current.delete(messageId)
+    if (isHistoryPersistenceEnabled) {
+      enqueueHistoryOperation(() => deleteStoredChatMessages(chatId, [messageId]))
+    }
     toast.success("메시지를 삭제했어요.")
   }
 
@@ -1291,6 +1448,12 @@ export default function ChatPage() {
         onConfirm={() => {
           setMessages([])
           setEditedMessageIds(new Set())
+          setHistoryCursor(null)
+          setHasOlderHistory(false)
+          persistedMessageFingerprintsRef.current.clear()
+          if (isHistoryPersistenceEnabled) {
+            enqueueHistoryOperation(() => clearChatHistory(chatId))
+          }
           setIsSettingsOpen(false)
           toast.success("대화를 초기화했어요.")
         }}
@@ -1303,11 +1466,24 @@ export default function ChatPage() {
       />
 
       {/* Chat Area - Scrollable */}
+      {isLoadingOlderHistory && (
+        <div className="pointer-events-none absolute left-1/2 top-16 z-30 -translate-x-1/2 rounded-full border border-border bg-background/90 p-2 shadow-sm backdrop-blur">
+          <LoaderCircle className="h-4 w-4 animate-spin text-muted-foreground" aria-label="과거 대화 불러오는 중" />
+        </div>
+      )}
       <main
+        ref={scrollContainerRef}
+        onScroll={(event) => {
+          if (event.currentTarget.scrollTop <= 120) void loadOlderHistory()
+        }}
         className="min-h-0 flex-1 overflow-y-auto pb-[calc(9.5rem+env(safe-area-inset-bottom))] pt-11 transition-colors duration-200"
         style={{ backgroundColor: chatBackgroundColor }}
       >
-        {hasMessages || isTyping ? (
+        {isHistoryLoading ? (
+          <div className="flex min-h-full items-center justify-center" role="status" aria-label="채팅 내역 불러오는 중">
+            <LoaderCircle className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : hasMessages || isTyping ? (
           <ChatMessageList
             messages={messages}
             isTyping={isTyping}
@@ -1325,7 +1501,7 @@ export default function ChatPage() {
             textSize={readingSettings.textSize}
             lineHeight={readingSettings.lineHeight}
             characters={chatInputCharacters}
-            disabled={isTyping}
+            disabled={isTyping || isHistoryLoading}
           />
         ) : (
           <div className="min-h-full">
@@ -1351,7 +1527,7 @@ export default function ChatPage() {
           onSendMessage={handleSendMessage}
           onCommand={handleCommand}
           characters={chatInputCharacters}
-          disabled={isTyping}
+          disabled={isTyping || isHistoryLoading}
           insertTextRequest={insertTextRequest}
         />
       </div>

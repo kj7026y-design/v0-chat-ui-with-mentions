@@ -6,6 +6,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { ConfirmModal, PromptModal } from "@/components/ui/app-modal"
 import { cn } from "@/lib/utils"
+import { clearChatHistory } from "@/lib/chat-history-client"
 import {
   createChatId,
   defaultChats,
@@ -146,6 +147,7 @@ export default function ChatsPage() {
         }}
         onConfirm={() => {
           if (!deleteTargetId) return
+          void clearChatHistory(deleteTargetId).catch(() => undefined)
           persistChats(chats.filter((chat) => chat.id !== deleteTargetId))
           setDeleteTargetId(null)
           toast("채팅방을 삭제했어요.")
