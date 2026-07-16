@@ -993,7 +993,9 @@ export function normalizeBody(body: ChatRequestBody | null) {
       minChars,
       maxChars,
       dialogueAssistChars,
-      totalMaxChars: MAX_TURN_CONTENT_CHARS,
+      totalMaxChars: dialogueAssistChars > 0
+        ? MAX_TURN_CONTENT_CHARS
+        : DEFAULT_MAX_ANSWER_CHARS,
     },
     promptContext: {
       characterName: body?.characterName?.trim(),

@@ -179,9 +179,12 @@ export interface AssistantReplyLengthBudget {
 
 export function getAssistantReplyLengthBudget(dialogueAssistChars: number): AssistantReplyLengthBudget {
   const normalizedAssistChars = Math.max(0, Math.floor(dialogueAssistChars))
+  const totalMaxChars = normalizedAssistChars > 0
+    ? MAX_TURN_CONTENT_CHARS
+    : DEFAULT_MAX_ANSWER_CHARS
   const maxChars = Math.max(
     1,
-    Math.min(DEFAULT_MAX_ANSWER_CHARS, MAX_TURN_CONTENT_CHARS - normalizedAssistChars),
+    Math.min(DEFAULT_MAX_ANSWER_CHARS, totalMaxChars - normalizedAssistChars),
   )
   const minChars = Math.min(DEFAULT_MIN_ANSWER_CHARS, Math.max(300, maxChars - 400), maxChars)
 
@@ -189,7 +192,7 @@ export function getAssistantReplyLengthBudget(dialogueAssistChars: number): Assi
     minChars,
     maxChars,
     dialogueAssistChars: normalizedAssistChars,
-    totalMaxChars: MAX_TURN_CONTENT_CHARS,
+    totalMaxChars,
   }
 }
 
