@@ -19,7 +19,7 @@ export const DEFAULT_VALIDATION_SEVERITY: Partial<Record<ValidationFailureKey, V
   excessiveAbstractMood: "repairable",
   characterVoiceWeak: "repairable",
   tooShort: "repairable",
-  tooLong: "soft",
+  tooLong: "repairable",
 }
 
 export type ClassifiedValidationFailures = {

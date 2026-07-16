@@ -1,5 +1,12 @@
-import { type ChatMessage } from "@/lib/chat-types"
-import { DEFAULT_CHAT_MODEL_ID, DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS, getChatModelConfig, type ChatModelId } from "@/lib/chat-models"
+import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, type ChatMessage } from "@/lib/chat-types"
+import {
+  DEFAULT_CHAT_MODEL_ID,
+  DEFAULT_MAX_ANSWER_CHARS,
+  DEFAULT_MIN_ANSWER_CHARS,
+  MAX_TURN_CONTENT_CHARS,
+  getChatModelConfig,
+  type ChatModelId,
+} from "@/lib/chat-models"
 import { saveGenerationRun, type GenerationValidationAttempt, type GenerationValidationStatus } from "@/lib/generation-runs"
 import { buildModelBackground } from "@/lib/model-background"
 import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser"
@@ -102,6 +109,7 @@ export type GenerateAssistantReplyOptions = {
   characterMessageId?: string
   bypassRoleplayRules?: boolean
   debugRawRoleplayStream?: boolean
+  answerLength?: AssistantReplyLengthBudget
   onStreamEvent?: (event: ChatStreamEvent) => void
 }
 
@@ -132,25 +140,57 @@ function clip(value: string, maxLength: number) {
   return value.length > maxLength ? `${value.slice(0, maxLength).trim()}...` : value
 }
 
+function countTextChars(content: string) {
+  return Array.from(content).length
+}
+
+function sliceTextChars(content: string, maxChars: number) {
+  return Array.from(content).slice(0, maxChars).join("")
+}
+
 function trimAnswerToMaxChars(content: string, maxChars: number) {
   const trimmed = content.trim()
-  if (trimmed.length <= maxChars) return trimmed
+  if (countTextChars(trimmed) <= maxChars) return trimmed
 
-  const sliced = trimmed.slice(0, maxChars)
-  const sentenceMatch = [...sliced.matchAll(/[.!?。！？]|다\.|요\.|["”]/g)].at(-1)
+  const sliced = sliceTextChars(trimmed, maxChars)
+  const sentenceMatch = [...sliced.matchAll(/[.!?。！？](?:["'”’」』)]*)/gu)].at(-1)
   const sentenceEnd = sentenceMatch ? sentenceMatch.index + sentenceMatch[0].length : -1
 
-  if (sentenceEnd > Math.floor(maxChars * 0.65)) {
+  if (sentenceEnd > 0) {
     return sliced.slice(0, sentenceEnd).trim()
   }
 
   const lineEnd = sliced.lastIndexOf("\n")
-  if (lineEnd > Math.floor(maxChars * 0.65)) {
+  if (lineEnd > 0) {
     return sliced.slice(0, lineEnd).trim()
   }
 
   const spaceEnd = sliced.lastIndexOf(" ")
-  return sliced.slice(0, spaceEnd > Math.floor(maxChars * 0.65) ? spaceEnd : maxChars).trim()
+  const naturalEnd = spaceEnd > 0 ? spaceEnd : sliced.length
+  return `${sliced.slice(0, naturalEnd).replace(/[,，;；:\s]+$/u, "").trim()}.`
+}
+
+export interface AssistantReplyLengthBudget {
+  minChars: number
+  maxChars: number
+  dialogueAssistChars: number
+  totalMaxChars: number
+}
+
+export function getAssistantReplyLengthBudget(dialogueAssistChars: number): AssistantReplyLengthBudget {
+  const normalizedAssistChars = Math.max(0, Math.floor(dialogueAssistChars))
+  const maxChars = Math.max(
+    1,
+    Math.min(DEFAULT_MAX_ANSWER_CHARS, MAX_TURN_CONTENT_CHARS - normalizedAssistChars),
+  )
+  const minChars = Math.min(DEFAULT_MIN_ANSWER_CHARS, Math.max(300, maxChars - 400), maxChars)
+
+  return {
+    minChars,
+    maxChars,
+    dialogueAssistChars: normalizedAssistChars,
+    totalMaxChars: MAX_TURN_CONTENT_CHARS,
+  }
 }
 
 function formatRecentMessages(messages: ChatMessage[] = []) {
@@ -508,6 +548,39 @@ export function formatIntroForAIContext(intro?: ChatIntroContext | null) {
     "The user sent their first response immediately after this opening scene.",
     "Do not repeat the opening scene. Continue naturally from the user's latest message.",
   ].filter(Boolean).join("\n")
+}
+
+function buildAutoCommandContent(
+  commandId: string,
+  characterName: string,
+  context?: ImageCommandContext,
+) {
+  if (commandId === "phone") return buildPhoneCommandContent(characterName, context)
+  if (commandId === "sns") return buildSnsCommandContent(characterName, context)
+  if (commandId === "status") return buildStatusBar(characterName, context)
+  return ""
+}
+
+export function getDialogueAssistCharCount(
+  commandIds: string[],
+  characterName: string,
+  context?: ImageCommandContext,
+) {
+  return commandIds
+    .filter((commandId) => AUTO_COMMAND_IDS.includes(commandId))
+    .slice(0, MAX_COMMAND_SUGGESTIONS)
+    .reduce((total, commandId) => {
+      return total + countTextChars(buildAutoCommandContent(commandId, characterName, context))
+    }, 0)
+}
+
+export function getMessageContentCharCount(messages: ChatMessage[]) {
+  return messages.reduce((total, message) => total + countTextChars(message.content), 0)
+}
+
+export function fitAssistantReplyToTurnBudget(content: string, dialogueAssistChars: number) {
+  const budget = getAssistantReplyLengthBudget(dialogueAssistChars)
+  return trimAnswerToMaxChars(content, budget.maxChars)
 }
 
 export async function sendMessage(text: string, currentMode: string, chatHistory: any[]) {
@@ -908,7 +981,8 @@ async function generatePollinationsReply(
   options: GenerateAssistantReplyOptions = {},
 ) {
   const model = getChatModelConfig(modelId)
-  const maxAnswerChars = model.maxAnswerChars ?? DEFAULT_MAX_ANSWER_CHARS
+  const modelMaxAnswerChars = model.maxAnswerChars ?? DEFAULT_MAX_ANSWER_CHARS
+  const maxAnswerChars = Math.min(modelMaxAnswerChars, options.answerLength?.maxChars ?? modelMaxAnswerChars)
   const messages = cleanChatHistory(buildAssistantMessages(history, userContent, introContext, context, modelId))
   const bypassRoleplayRules = process.env.NODE_ENV !== "production" && options.bypassRoleplayRules === true
   const debugRawRoleplayStream = process.env.NODE_ENV !== "production" && options.debugRawRoleplayStream === true
@@ -931,6 +1005,7 @@ async function generatePollinationsReply(
     messages: outboundMessages,
     bypassRoleplayRules,
     debugRawRoleplayStream,
+    answerLength: options.answerLength,
     ...promptContext,
     ...(model.provider === "pollinations" ? { systemPrompt, fallbackPrompt } : {}),
   }

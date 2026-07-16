@@ -19,7 +19,11 @@ import { AlertModal, ConfirmModal } from "@/components/ui/app-modal"
 import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
 import {
   buildUserMessage,
+  fitAssistantReplyToTurnBudget,
   generateAssistantReply,
+  getAssistantReplyLengthBudget,
+  getDialogueAssistCharCount,
+  getMessageContentCharCount,
   type ChatStreamEvent,
   type ImageCommandContext,
   parseChatInput,
@@ -833,6 +837,13 @@ export default function ChatPage() {
     setIsTyping(true)
     setTypingLabel(undefined)
     setTypingVariant("text")
+    const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
+    const plannedDialogueAssistChars = getDialogueAssistCharCount(
+      autoCommandIds,
+      characterName,
+      buildImageCommandContext(generationHistory),
+    )
+    const answerLength = getAssistantReplyLengthBudget(plannedDialogueAssistChars)
 
     try {
       const reply = {
@@ -848,6 +859,7 @@ export default function ChatPage() {
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
+            answerLength,
             onStreamEvent: handleStreamEvent,
           },
         )),
@@ -868,14 +880,20 @@ export default function ChatPage() {
       }
       setRuntimeStoryStatus(nextRuntimeStatus)
 
-      const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
       const autoCommandMessages = await buildAutoCommandMessages({
         turnId,
         contextMessages: [...generationHistory, reply],
         statusOverride: nextChatStoryStatus,
         commandIds: autoCommandIds,
       })
-      const contextMessages = [...generationHistory, reply, ...autoCommandMessages]
+      const fittedReplyContent = fitAssistantReplyToTurnBudget(
+        reply.content,
+        getMessageContentCharCount(autoCommandMessages),
+      )
+      const finalReply = fittedReplyContent === reply.content
+        ? reply
+        : { ...reply, content: fittedReplyContent, savedContent: fittedReplyContent }
+      const contextMessages = [...generationHistory, finalReply, ...autoCommandMessages]
       const shouldGenerateAutoImage = shouldAutoGenerateImage(chatId, displayContent, reply.content, nextChatStoryStatus)
       let autoImageMessage: ChatMessage | null = null
       if (shouldGenerateAutoImage) {
@@ -891,7 +909,7 @@ export default function ChatPage() {
       }
 
       setMessages((prev) => [
-        ...prev.map((message) => message.id === characterMessageId ? reply : message),
+        ...prev.map((message) => message.id === characterMessageId ? finalReply : message),
         ...autoCommandMessages,
         ...(autoImageMessage ? [autoImageMessage] : []),
       ])
@@ -996,6 +1014,13 @@ export default function ChatPage() {
     setIsTyping(true)
     setTypingLabel(undefined)
     setTypingVariant("text")
+    const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
+    const plannedDialogueAssistChars = getDialogueAssistCharCount(
+      autoCommandIds,
+      characterName,
+      buildImageCommandContext(retryMessages),
+    )
+    const answerLength = getAssistantReplyLengthBudget(plannedDialogueAssistChars)
 
     try {
       const retryCreditCost = selectedModel.creditCostPerReply
@@ -1018,6 +1043,7 @@ export default function ChatPage() {
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
+            answerLength,
             onStreamEvent: handleStreamEvent,
           },
         )),
@@ -1038,14 +1064,20 @@ export default function ChatPage() {
       }
       setRuntimeStoryStatus(nextRuntimeStatus)
 
-      const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
       const autoCommandMessages = await buildAutoCommandMessages({
         turnId: retryTurnId,
         contextMessages: [...retryMessages, reply],
         statusOverride: nextChatStoryStatus,
         commandIds: autoCommandIds,
       })
-      const contextMessages = [...retryMessages, reply, ...autoCommandMessages]
+      const fittedReplyContent = fitAssistantReplyToTurnBudget(
+        reply.content,
+        getMessageContentCharCount(autoCommandMessages),
+      )
+      const finalReply = fittedReplyContent === reply.content
+        ? reply
+        : { ...reply, content: fittedReplyContent, savedContent: fittedReplyContent }
+      const contextMessages = [...retryMessages, finalReply, ...autoCommandMessages]
       const shouldGenerateAutoImage = shouldAutoGenerateImage(
         chatId,
         retryPayload.content,
@@ -1066,7 +1098,7 @@ export default function ChatPage() {
       }
 
       setMessages((prev) => [
-        ...prev.map((message) => message.id === characterMessageId ? reply : message),
+        ...prev.map((message) => message.id === characterMessageId ? finalReply : message),
         ...autoCommandMessages,
         ...(autoImageMessage ? [autoImageMessage] : []),
       ])

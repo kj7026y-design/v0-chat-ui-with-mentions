@@ -6,6 +6,7 @@ import {
   DEFAULT_CHAT_MODEL_ID,
   DEFAULT_MAX_ANSWER_CHARS,
   DEFAULT_MIN_ANSWER_CHARS,
+  MAX_TURN_CONTENT_CHARS,
   getChatModelConfig,
   normalizeChatModelId,
   type ChatModelMode,
@@ -42,6 +43,12 @@ export interface ChatRequestBody {
   characterMessageId?: string
   bypassRoleplayRules?: boolean
   debugRawRoleplayStream?: boolean
+  answerLength?: {
+    minChars?: number
+    maxChars?: number
+    dialogueAssistChars?: number
+    totalMaxChars?: number
+  }
   firstMessage?: string
   messages?: Array<{
     role: "system" | "user" | "assistant"
@@ -84,9 +91,9 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v7"
+const PROMPT_VERSION = "rp-pipeline-v8"
 const NORMALIZER_VERSION = "rp-normalizer-v2"
-const VALIDATOR_VERSION = "rp-validator-v7"
+const VALIDATOR_VERSION = "rp-validator-v8"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
@@ -719,7 +726,13 @@ function buildParsedInputFromNormalized(
   }
 }
 
-function compileTurnPolicy(input: ParsedUserInput): TurnPolicy {
+function compileTurnPolicy(
+  input: ParsedUserInput,
+  answerLength: { minChars: number; maxChars: number } = {
+    minChars: DEFAULT_MIN_ANSWER_CHARS,
+    maxChars: DEFAULT_MAX_ANSWER_CHARS,
+  },
+): TurnPolicy {
   const allowPhysicalContact = input.physicalContactRequested || input.physicalContactPermitted
   const allowedActions = allowPhysicalContact
     ? input.physicalContactPermitted && !input.physicalContactRequested
@@ -742,9 +755,9 @@ function compileTurnPolicy(input: ParsedUserInput): TurnPolicy {
     flirtChannel: input.flirtChannel,
     allowPhysicalContact,
     allowNewProps: false,
-    minChars: DEFAULT_MIN_ANSWER_CHARS,
-    maxChars: DEFAULT_MAX_ANSWER_CHARS,
-    paragraphCount: "4~6문단",
+    minChars: answerLength.minChars,
+    maxChars: answerLength.maxChars,
+    paragraphCount: answerLength.maxChars < 800 ? "2~4문단" : "3~5문단",
     allowedActions,
     bannedActions,
   }
@@ -916,6 +929,7 @@ export function compileRoleplayContext(
   promptContext: DynamicPromptContext,
   messages: NonNullable<ChatRequestBody["messages"]>,
   normalizedLatestInput?: NormalizedUserInput | null,
+  answerLength?: { minChars: number; maxChars: number },
 ): CompiledRoleplayContext {
   const characterName = promptContext.characterName || "캐릭터"
   const userName = promptContext.userName || "사용자"
@@ -923,7 +937,7 @@ export function compileRoleplayContext(
   const latestInput = normalizedLatestInput
     ? buildParsedInputFromNormalized(latestRawInput, userName, normalizedLatestInput)
     : parseUserInput(latestRawInput, userName)
-  const turnPolicy = compileTurnPolicy(latestInput)
+  const turnPolicy = compileTurnPolicy(latestInput, answerLength)
   const allowedProps = buildAllowedProps(promptContext, messages, latestInput)
   const bannedThisTurn = buildBannedMeaningsForTurn(messages)
 
@@ -954,6 +968,18 @@ export function normalizeBody(body: ChatRequestBody | null) {
   const modelId = normalizedModelId ?? DEFAULT_CHAT_MODEL_ID
   const model = getChatModelConfig(modelId)
   const mode = hasModelId ? model.mode ?? normalizeMode(body?.mode) : normalizeMode(body?.mode) ?? model.mode
+  const requestedMaxChars = Number(body?.answerLength?.maxChars)
+  const maxChars = Number.isFinite(requestedMaxChars)
+    ? Math.min(DEFAULT_MAX_ANSWER_CHARS, Math.max(1, Math.floor(requestedMaxChars)))
+    : DEFAULT_MAX_ANSWER_CHARS
+  const requestedMinChars = Number(body?.answerLength?.minChars)
+  const minChars = Number.isFinite(requestedMinChars)
+    ? Math.min(maxChars, Math.max(1, Math.floor(requestedMinChars)))
+    : Math.min(DEFAULT_MIN_ANSWER_CHARS, maxChars)
+  const requestedAssistChars = Number(body?.answerLength?.dialogueAssistChars)
+  const dialogueAssistChars = Number.isFinite(requestedAssistChars)
+    ? Math.max(0, Math.floor(requestedAssistChars))
+    : 0
 
   return {
     mode,
@@ -963,6 +989,12 @@ export function normalizeBody(body: ChatRequestBody | null) {
     fallbackPrompt,
     bypassRoleplayRules: isDevRoleplayRulesBypass(body),
     debugRawRoleplayStream: isDevRawRoleplayStreamEnabled(body),
+    answerLength: {
+      minChars,
+      maxChars,
+      dialogueAssistChars,
+      totalMaxChars: MAX_TURN_CONTENT_CHARS,
+    },
     promptContext: {
       characterName: body?.characterName?.trim(),
       userName: body?.userName?.trim(),
@@ -1592,7 +1624,7 @@ export function validateRoleplayOutput(text: string, ctx: CompiledRoleplayContex
     foreignScriptLeak: isLatinWordSaladOutput(text) || hasForeignScriptLeak(knownScriptReplaced),
     metaLeak: hasMetaLeak(text),
     tooShort: Array.from(text).length < ctx.turnPolicy.minChars,
-    tooLong: Array.from(text).length > ctx.turnPolicy.maxChars + 150,
+    tooLong: Array.from(text).length > ctx.turnPolicy.maxChars,
     unpromptedHandFocus: hasUnpromptedHandFocus(text, ctx),
     narrationStyleMismatch: hasNarrationStyleMismatch(text),
     controlsUser: hasControlsUserAction(text, ctx),
@@ -2235,8 +2267,9 @@ export function generateDynamicPrompt({
   profile?: RoleplayModelProfile
   adultFictionMode?: boolean
 }) {
-  const responseMaxChars = profile?.targetChars.max ?? compiledContext?.turnPolicy.maxChars ?? MAX_OPENROUTER_RESPONSE_CHARS
-  const responseMinChars = profile?.targetChars.min ?? DEFAULT_MIN_ANSWER_CHARS
+  const responseMaxChars = compiledContext?.turnPolicy.maxChars ?? profile?.targetChars.max ?? MAX_OPENROUTER_RESPONSE_CHARS
+  const responseMinChars = compiledContext?.turnPolicy.minChars ?? profile?.targetChars.min ?? DEFAULT_MIN_ANSWER_CHARS
+  const paragraphCount = compiledContext?.turnPolicy.paragraphCount ?? "3~5문단"
   const maxDialogues = profile?.maxDialogues ?? 1
   const compiledSection = buildCompiledRoleplaySection(compiledContext)
   const profileInstructions = buildProfilePromptInstructions(profile)
@@ -2260,7 +2293,7 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 [출력 형식]
 - 한국어로만 쓴다.
 - ${responseMinChars}~${responseMaxChars}자.
-- 4~6문단으로 쓴다.
+- ${paragraphCount}으로 쓴다.
 - 대사는 최대 ${maxDialogues}개만 쓴다.
 - 대사는 큰따옴표 안에 쓴다.
 - 대사와 서술은 줄바꿈으로 분리한다.
@@ -2915,7 +2948,12 @@ async function handleRoleplayChatFromNormalized(
     })
   }
 
-  const compiledContext = compileRoleplayContext(promptContext, messages, normalizedLatestInput)
+  const compiledContext = compileRoleplayContext(
+    promptContext,
+    messages,
+    normalizedLatestInput,
+    normalizedBody.answerLength,
+  )
   const currentSceneForPrompt = buildTurnCurrentSceneForPrompt(
     promptContext.currentScene,
     compiledContext.latestInput,
@@ -3215,6 +3253,12 @@ async function handleOpenRouterNsfwChat(
       .join("\n\n"),
     bypassRoleplayRules: false,
     debugRawRoleplayStream: false,
+    answerLength: {
+      minChars: DEFAULT_MIN_ANSWER_CHARS,
+      maxChars: DEFAULT_MAX_ANSWER_CHARS,
+      dialogueAssistChars: 0,
+      totalMaxChars: MAX_TURN_CONTENT_CHARS,
+    },
     promptContext: {
       characterName: promptContext.characterName,
       userName: promptContext.userName,
@@ -3479,7 +3523,12 @@ async function streamGeminiRoleplay({
     })) ?? normalizeUserInputFallback(latestRawInput, userName, promptContext.latestUserIntent, characterName)
   }
 
-  const compiledContext = compileRoleplayContext(promptContext, messages, normalizedLatestInput)
+  const compiledContext = compileRoleplayContext(
+    promptContext,
+    messages,
+    normalizedLatestInput,
+    normalizedBody.answerLength,
+  )
   const currentSceneForPrompt = buildTurnCurrentSceneForPrompt(
     promptContext.currentScene,
     compiledContext.latestInput,

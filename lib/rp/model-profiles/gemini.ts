@@ -32,7 +32,7 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
     excessiveAbstractMood: "repairable",
     characterVoiceWeak: "repairable",
     tooShort: "repairable",
-    tooLong: "soft",
+    tooLong: "repairable",
   },
   repair: {
     maxAttempts: 1,

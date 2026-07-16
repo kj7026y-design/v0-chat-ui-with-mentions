@@ -22,8 +22,9 @@ export const PREMIUM_REPLY_CREDIT_COST = 2
 export const OPENAI_REPLY_CREDIT_COST = 2
 export const UNSHAPED_REPLY_CREDIT_COST = 3
 export const FREE_REPLY_CREDIT_COST = 0
-export const DEFAULT_MIN_ANSWER_CHARS = 1100
-export const DEFAULT_MAX_ANSWER_CHARS = 1500
+export const DEFAULT_MIN_ANSWER_CHARS = 700
+export const DEFAULT_MAX_ANSWER_CHARS = 1100
+export const MAX_TURN_CONTENT_CHARS = 1500
 
 export const CHAT_MODELS: ChatModelConfig[] = [
   {
