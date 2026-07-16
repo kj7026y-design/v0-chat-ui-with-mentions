@@ -204,7 +204,7 @@ export default function MemberAdminPage() {
   }
 
   return (
-    <main className="min-h-full bg-background pb-8">
+    <main className="min-h-full min-w-0 max-w-full bg-background pb-8">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-3 px-4 sm:px-6">
           <button
@@ -391,7 +391,7 @@ export default function MemberAdminPage() {
         </section>
 
         <section className="overflow-hidden border border-border bg-card">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-hidden overscroll-x-contain">
             <table className="w-full min-w-[1120px] border-collapse text-left">
               <thead className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
                 <tr>
