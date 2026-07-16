@@ -1,8 +1,7 @@
 import "server-only"
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
-import { DatabaseNotConfiguredError } from "@/lib/server/chat-message-store"
+import { getNeonSql } from "@/lib/server/neon-database"
 
 export type AccountType = "staff" | "member"
 export type AccountRole = "administrator" | "developer" | "operator" | "member"
@@ -101,26 +100,7 @@ const SAMPLE_ACCOUNTS: SampleAccount[] = [
   },
 ]
 
-let sqlClient: NeonQueryFunction<false, false> | null = null
 let schemaReady: Promise<void> | null = null
-
-function getDatabaseUrl() {
-  return (
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL_UNPOOLED ||
-    process.env.POSTGRES_URL_NON_POOLING ||
-    ""
-  ).trim()
-}
-
-function getSql() {
-  if (sqlClient) return sqlClient
-  const databaseUrl = getDatabaseUrl()
-  if (!databaseUrl) throw new DatabaseNotConfiguredError()
-  sqlClient = neon(databaseUrl)
-  return sqlClient
-}
 
 function normalizeIdentifier(identifier: string) {
   return identifier.trim().toLowerCase()
@@ -146,7 +126,7 @@ function verifyPassword(password: string, encodedHash: string) {
 }
 
 async function seedSampleAccounts() {
-  const sql = getSql()
+  const sql = getNeonSql()
   const countRows = await sql.query(
     "SELECT COUNT(*)::int AS count FROM storychat_accounts",
   ) as unknown as Array<{ count: number }>
@@ -187,7 +167,7 @@ export async function ensureUserAccountSchema() {
   if (schemaReady) return schemaReady
 
   schemaReady = (async () => {
-    const sql = getSql()
+    const sql = getNeonSql()
     await sql`
       CREATE TABLE IF NOT EXISTS storychat_accounts (
         account_id TEXT PRIMARY KEY,
@@ -198,6 +178,8 @@ export async function ensureUserAccountSchema() {
         normalized_identifier TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         display_name TEXT NOT NULL,
+        credit INTEGER NOT NULL DEFAULT 50 CHECK (credit >= 0),
+        is_blocked BOOLEAN NOT NULL DEFAULT FALSE,
         status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'withdrawn')),
         last_login_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -208,6 +190,14 @@ export async function ensureUserAccountSchema() {
           (account_type = 'member' AND role = 'member' AND login_id IS NULL AND email IS NOT NULL)
         )
       )
+    `
+    await sql`
+      ALTER TABLE storychat_accounts
+      ADD COLUMN IF NOT EXISTS credit INTEGER NOT NULL DEFAULT 50 CHECK (credit >= 0)
+    `
+    await sql`
+      ALTER TABLE storychat_accounts
+      ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE
     `
     await sql`
       CREATE TABLE IF NOT EXISTS storychat_member_profiles (
@@ -246,7 +236,7 @@ export async function authenticateAccount({
   password: string
 }): Promise<AuthenticatedAccount | null> {
   await ensureUserAccountSchema()
-  const sql = getSql()
+  const sql = getNeonSql()
   const normalizedIdentifier = normalizeIdentifier(identifier)
   if (!normalizedIdentifier || !password) return null
 
@@ -266,6 +256,7 @@ export async function authenticateAccount({
      WHERE account.normalized_identifier = $1
        AND account.account_type = $2
        AND account.status = 'active'
+       AND account.is_blocked = FALSE
      LIMIT 1`,
     [normalizedIdentifier, accountType],
   ) as unknown as AccountRow[]

@@ -1,6 +1,9 @@
 import "server-only"
 
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
+import { getNeonSql } from "@/lib/server/neon-database"
+import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
+
+export { DatabaseNotConfiguredError } from "@/lib/server/neon-database"
 
 export interface StoredChatMessage {
   id: string
@@ -16,70 +19,156 @@ interface MessageRow {
   client_timestamp: string | Date
 }
 
+interface ChatRoomRow {
+  chat_room_id: string | number
+}
+
 export interface ChatMessagePage {
   messages: StoredChatMessage[]
   nextCursor: string | null
   hasMore: boolean
 }
 
-export class DatabaseNotConfiguredError extends Error {
-  constructor() {
-    super("Neon database URL is not configured")
-    this.name = "DatabaseNotConfiguredError"
-  }
-}
+const UNKNOWN_CHARACTER_NAME = "알 수 없는 캐릭터"
 
-let sqlClient: NeonQueryFunction<false, false> | null = null
 let schemaReady: Promise<void> | null = null
-
-function getDatabaseUrl() {
-  return (
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL_UNPOOLED ||
-    process.env.POSTGRES_URL_NON_POOLING ||
-    ""
-  ).trim()
-}
-
-function getSql() {
-  if (sqlClient) return sqlClient
-  const databaseUrl = getDatabaseUrl()
-  if (!databaseUrl) throw new DatabaseNotConfiguredError()
-  sqlClient = neon(databaseUrl)
-  return sqlClient
-}
 
 async function ensureSchema() {
   if (schemaReady) return schemaReady
 
   schemaReady = (async () => {
-    const sql = getSql()
+    await ensureUserAccountSchema()
+    const sql = getNeonSql()
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS storychat_chat_rooms (
+        chat_room_id BIGSERIAL PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES storychat_accounts(account_id) ON DELETE CASCADE,
+        room_key TEXT NOT NULL,
+        character_name VARCHAR(100) NOT NULL DEFAULT '알 수 없는 캐릭터',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (account_id, room_key)
+      )
+    `
+    await sql`
+      CREATE INDEX IF NOT EXISTS storychat_chat_rooms_account_idx
+      ON storychat_chat_rooms (account_id, updated_at DESC)
+    `
     await sql`
       CREATE TABLE IF NOT EXISTS storychat_messages (
         message_seq BIGSERIAL PRIMARY KEY,
-        admin_id TEXT NOT NULL,
-        room_id TEXT NOT NULL,
+        chat_room_id BIGINT REFERENCES storychat_chat_rooms(chat_room_id) ON DELETE CASCADE,
+        admin_id TEXT,
+        room_id TEXT,
         message_id TEXT NOT NULL,
         message_type TEXT NOT NULL,
         content TEXT NOT NULL,
         message_data JSONB NOT NULL,
         client_timestamp TIMESTAMPTZ NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE (admin_id, room_id, message_id)
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `
     await sql`
-      CREATE INDEX IF NOT EXISTS storychat_messages_room_cursor_idx
-      ON storychat_messages (admin_id, room_id, message_seq DESC)
+      ALTER TABLE storychat_messages
+      ADD COLUMN IF NOT EXISTS chat_room_id BIGINT REFERENCES storychat_chat_rooms(chat_room_id) ON DELETE CASCADE
     `
+    await sql`ALTER TABLE storychat_messages ALTER COLUMN admin_id DROP NOT NULL`
+    await sql`ALTER TABLE storychat_messages ALTER COLUMN room_id DROP NOT NULL`
+
+    // Backfill the previous identifier/room-key storage into stable account-owned rooms.
+    await sql`
+      INSERT INTO storychat_chat_rooms (account_id, room_key, character_name)
+      SELECT DISTINCT account.account_id, message.room_id, '알 수 없는 캐릭터'
+      FROM storychat_messages message
+      JOIN storychat_accounts account
+        ON account.normalized_identifier = LOWER(TRIM(message.admin_id))
+      WHERE message.chat_room_id IS NULL
+        AND message.admin_id IS NOT NULL
+        AND message.room_id IS NOT NULL
+      ON CONFLICT (account_id, room_key) DO NOTHING
+    `
+    await sql`
+      UPDATE storychat_messages message
+      SET chat_room_id = room.chat_room_id
+      FROM storychat_accounts account
+      JOIN storychat_chat_rooms room ON room.account_id = account.account_id
+      WHERE message.chat_room_id IS NULL
+        AND message.admin_id IS NOT NULL
+        AND message.room_id IS NOT NULL
+        AND account.normalized_identifier = LOWER(TRIM(message.admin_id))
+        AND room.room_key = message.room_id
+    `
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS storychat_messages_room_message_idx
+      ON storychat_messages (chat_room_id, message_id)
+      WHERE chat_room_id IS NOT NULL
+    `
+    await sql`
+      CREATE INDEX IF NOT EXISTS storychat_messages_room_cursor_v2_idx
+      ON storychat_messages (chat_room_id, message_seq DESC)
+      WHERE chat_room_id IS NOT NULL
+    `
+    await sql.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM storychat_messages WHERE chat_room_id IS NULL) THEN
+          ALTER TABLE storychat_messages ALTER COLUMN chat_room_id SET NOT NULL;
+        END IF;
+      END
+      $$
+    `)
   })().catch((error) => {
     schemaReady = null
     throw error
   })
 
   return schemaReady
+}
+
+function normalizeCharacterName(characterName?: string) {
+  const normalized = characterName?.trim()
+  return normalized ? normalized.slice(0, 100) : UNKNOWN_CHARACTER_NAME
+}
+
+async function findChatRoomId(accountId: string, roomId: string) {
+  const sql = getNeonSql()
+  const rows = await sql.query(
+    `SELECT chat_room_id
+     FROM storychat_chat_rooms
+     WHERE account_id = $1 AND room_key = $2
+     LIMIT 1`,
+    [accountId, roomId],
+  ) as unknown as ChatRoomRow[]
+  return rows[0] ? String(rows[0].chat_room_id) : null
+}
+
+async function ensureChatRoom({
+  accountId,
+  roomId,
+  characterName,
+}: {
+  accountId: string
+  roomId: string
+  characterName?: string
+}) {
+  const sql = getNeonSql()
+  const normalizedCharacterName = normalizeCharacterName(characterName)
+  const rows = await sql.query(
+    `INSERT INTO storychat_chat_rooms (account_id, room_key, character_name)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (account_id, room_key)
+     DO UPDATE SET
+       character_name = CASE
+         WHEN EXCLUDED.character_name = $4 THEN storychat_chat_rooms.character_name
+         ELSE EXCLUDED.character_name
+       END,
+       updated_at = NOW()
+     RETURNING chat_room_id`,
+    [accountId, roomId, normalizedCharacterName, UNKNOWN_CHARACTER_NAME],
+  ) as unknown as ChatRoomRow[]
+  return String(rows[0].chat_room_id)
 }
 
 function parseMessageData(row: MessageRow): StoredChatMessage {
@@ -91,35 +180,42 @@ function parseMessageData(row: MessageRow): StoredChatMessage {
 }
 
 export async function getChatMessagePage({
-  adminId,
+  accountId,
   roomId,
+  characterName,
   cursor,
   limit,
 }: {
-  adminId: string
+  accountId: string
   roomId: string
+  characterName?: string
   cursor?: string
   limit: number
 }): Promise<ChatMessagePage> {
   await ensureSchema()
-  const sql = getSql()
+  const sql = getNeonSql()
+  const chatRoomId = characterName
+    ? await ensureChatRoom({ accountId, roomId, characterName })
+    : await findChatRoomId(accountId, roomId)
+  if (!chatRoomId) return { messages: [], nextCursor: null, hasMore: false }
+
   const queryLimit = limit + 1
   const rows = cursor
     ? await sql.query(
         `SELECT message_seq, message_data, client_timestamp
          FROM storychat_messages
-         WHERE admin_id = $1 AND room_id = $2 AND message_seq < $3::bigint
+         WHERE chat_room_id = $1::bigint AND message_seq < $2::bigint
          ORDER BY message_seq DESC
-         LIMIT $4`,
-        [adminId, roomId, cursor, queryLimit],
+         LIMIT $3`,
+        [chatRoomId, cursor, queryLimit],
       ) as unknown as MessageRow[]
     : await sql.query(
         `SELECT message_seq, message_data, client_timestamp
          FROM storychat_messages
-         WHERE admin_id = $1 AND room_id = $2
+         WHERE chat_room_id = $1::bigint
          ORDER BY message_seq DESC
-         LIMIT $3`,
-        [adminId, roomId, queryLimit],
+         LIMIT $2`,
+        [chatRoomId, queryLimit],
       ) as unknown as MessageRow[]
 
   const hasMore = rows.length > limit
@@ -134,21 +230,24 @@ export async function getChatMessagePage({
 }
 
 export async function upsertChatMessages({
-  adminId,
+  accountId,
   roomId,
+  characterName,
   messages,
 }: {
-  adminId: string
+  accountId: string
   roomId: string
+  characterName?: string
   messages: StoredChatMessage[]
 }) {
   await ensureSchema()
-  const sql = getSql()
+  const sql = getNeonSql()
+  const chatRoomId = await ensureChatRoom({ accountId, roomId, characterName })
   const queries = messages.map((message) => sql.query(
     `INSERT INTO storychat_messages (
-       admin_id, room_id, message_id, message_type, content, message_data, client_timestamp
-     ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::timestamptz)
-     ON CONFLICT (admin_id, room_id, message_id)
+       chat_room_id, message_id, message_type, content, message_data, client_timestamp
+     ) VALUES ($1::bigint, $2, $3, $4, $5::jsonb, $6::timestamptz)
+     ON CONFLICT (chat_room_id, message_id) WHERE chat_room_id IS NOT NULL
      DO UPDATE SET
        message_type = EXCLUDED.message_type,
        content = EXCLUDED.content,
@@ -156,8 +255,7 @@ export async function upsertChatMessages({
        client_timestamp = EXCLUDED.client_timestamp,
        updated_at = NOW()`,
     [
-      adminId,
-      roomId,
+      chatRoomId,
       message.id,
       message.type,
       message.content,
@@ -170,29 +268,35 @@ export async function upsertChatMessages({
 }
 
 export async function deleteChatMessages({
-  adminId,
+  accountId,
   roomId,
   messageIds,
 }: {
-  adminId: string
+  accountId: string
   roomId: string
   messageIds: string[]
 }) {
   if (messageIds.length === 0) return
   await ensureSchema()
-  const sql = getSql()
+  const sql = getNeonSql()
+  const chatRoomId = await findChatRoomId(accountId, roomId)
+  if (!chatRoomId) return
+
   await sql.query(
     `DELETE FROM storychat_messages
-     WHERE admin_id = $1 AND room_id = $2 AND message_id = ANY($3::text[])`,
-    [adminId, roomId, messageIds],
+     WHERE chat_room_id = $1::bigint AND message_id = ANY($2::text[])`,
+    [chatRoomId, messageIds],
   )
 }
 
-export async function clearChatMessages({ adminId, roomId }: { adminId: string; roomId: string }) {
+export async function clearChatMessages({ accountId, roomId }: { accountId: string; roomId: string }) {
   await ensureSchema()
-  const sql = getSql()
+  const sql = getNeonSql()
+  const chatRoomId = await findChatRoomId(accountId, roomId)
+  if (!chatRoomId) return
+
   await sql.query(
-    `DELETE FROM storychat_messages WHERE admin_id = $1 AND room_id = $2`,
-    [adminId, roomId],
+    `DELETE FROM storychat_messages WHERE chat_room_id = $1::bigint`,
+    [chatRoomId],
   )
 }

@@ -36,9 +36,14 @@ export async function getAdminSessionState() {
   return readJsonResponse<AdminSessionState>(response)
 }
 
-export async function loadChatHistoryPage(roomId: string, cursor?: string): Promise<ChatHistoryPage> {
+export async function loadChatHistoryPage(
+  roomId: string,
+  cursor?: string,
+  characterName?: string,
+): Promise<ChatHistoryPage> {
   const params = new URLSearchParams({ roomId, limit: "30" })
   if (cursor) params.set("cursor", cursor)
+  if (characterName) params.set("characterName", characterName)
   const response = await fetch(`/api/messages?${params.toString()}`, { cache: "no-store" })
   const page = await readJsonResponse<Omit<ChatHistoryPage, "messages"> & { messages: ChatMessage[] }>(response)
   return {
@@ -47,11 +52,11 @@ export async function loadChatHistoryPage(roomId: string, cursor?: string): Prom
   }
 }
 
-export async function saveChatMessages(roomId: string, messages: ChatMessage[]) {
+export async function saveChatMessages(roomId: string, messages: ChatMessage[], characterName?: string) {
   const response = await fetch("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ roomId, messages }),
+    body: JSON.stringify({ roomId, characterName, messages }),
     keepalive: true,
   })
   return readJsonResponse<{ saved: number }>(response)

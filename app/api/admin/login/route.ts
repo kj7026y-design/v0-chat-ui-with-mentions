@@ -4,7 +4,7 @@ import {
   createAdminSessionToken,
   getAdminSessionCookieOptions,
 } from "@/lib/server/admin-auth"
-import { DatabaseNotConfiguredError } from "@/lib/server/chat-message-store"
+import { DatabaseNotConfiguredError } from "@/lib/server/neon-database"
 import { authenticateAccount, type AccountType } from "@/lib/server/user-account-store"
 
 export const runtime = "nodejs"

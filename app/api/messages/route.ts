@@ -19,6 +19,12 @@ function getRoomId(value: unknown) {
   return roomId && roomId.length <= 200 ? roomId : null
 }
 
+function getCharacterName(value: unknown) {
+  if (typeof value !== "string") return undefined
+  const characterName = value.trim()
+  return characterName && characterName.length <= 100 ? characterName : undefined
+}
+
 function normalizeMessage(value: unknown): StoredChatMessage | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   const message = value as Record<string, unknown>
@@ -60,6 +66,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const roomId = getRoomId(url.searchParams.get("roomId") || url.searchParams.get("chatId"))
+  const characterName = getCharacterName(url.searchParams.get("characterName"))
   const cursor = url.searchParams.get("cursor") || undefined
   const requestedLimit = Number(url.searchParams.get("limit") || 30)
   const limit = Number.isFinite(requestedLimit) ? Math.min(50, Math.max(1, Math.floor(requestedLimit))) : 30
@@ -70,7 +77,13 @@ export async function GET(request: Request) {
   }
 
   try {
-    const page = await getChatMessagePage({ adminId: session.username, roomId, cursor, limit })
+    const page = await getChatMessagePage({
+      accountId: session.accountId,
+      roomId,
+      characterName,
+      cursor,
+      limit,
+    })
     return NextResponse.json({ roomId, ...page, source: "neon" })
   } catch (error) {
     return errorResponse(error)
@@ -81,8 +94,13 @@ export async function POST(request: Request) {
   const session = await requireAccount()
   if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
 
-  const body = await request.json().catch(() => null) as { roomId?: unknown; messages?: unknown } | null
+  const body = await request.json().catch(() => null) as {
+    roomId?: unknown
+    characterName?: unknown
+    messages?: unknown
+  } | null
   const roomId = getRoomId(body?.roomId)
+  const characterName = getCharacterName(body?.characterName)
   const rawMessages = Array.isArray(body?.messages) ? body.messages : []
   const messages = rawMessages.map(normalizeMessage)
 
@@ -93,8 +111,9 @@ export async function POST(request: Request) {
 
   try {
     await upsertChatMessages({
-      adminId: session.username,
+      accountId: session.accountId,
       roomId,
+      characterName,
       messages: messages as StoredChatMessage[],
     })
     return NextResponse.json({ saved: messages.length })
@@ -117,7 +136,7 @@ export async function DELETE(request: Request) {
 
   try {
     if (body?.clear === true) {
-      await clearChatMessages({ adminId: session.username, roomId })
+      await clearChatMessages({ accountId: session.accountId, roomId })
       return NextResponse.json({ cleared: true })
     }
 
@@ -128,7 +147,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "삭제할 메시지 ID가 필요합니다." }, { status: 400 })
     }
 
-    await deleteChatMessages({ adminId: session.username, roomId, messageIds })
+    await deleteChatMessages({ accountId: session.accountId, roomId, messageIds })
     return NextResponse.json({ deleted: messageIds.length })
   } catch (error) {
     return errorResponse(error)

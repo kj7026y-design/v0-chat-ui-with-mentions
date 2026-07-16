@@ -534,7 +534,7 @@ export default function ChatPage() {
         const session = await getAdminSessionState()
         if (cancelled || !session.authenticated) return
 
-        const page = await loadChatHistoryPage(chatId)
+        const page = await loadChatHistoryPage(chatId, undefined, characterName)
         if (cancelled) return
 
         for (const message of page.messages) {
@@ -555,7 +555,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true
     }
-  }, [chatId])
+  }, [characterName, chatId])
 
   useEffect(() => {
     if (!isHistoryPersistenceEnabled || isHistoryLoading) return
@@ -579,7 +579,7 @@ export default function ChatPage() {
     }
     enqueueHistoryOperation(async () => {
       try {
-        await saveChatMessages(chatId, snapshots.map(({ message }) => message))
+        await saveChatMessages(chatId, snapshots.map(({ message }) => message), characterName)
         for (const { message, fingerprint } of snapshots) {
           if (pendingMessageFingerprintsRef.current.get(message.id) !== fingerprint) continue
           persistedMessageFingerprintsRef.current.set(message.id, fingerprint)
@@ -594,7 +594,7 @@ export default function ChatPage() {
         throw error
       }
     })
-  }, [chatId, isHistoryLoading, isHistoryPersistenceEnabled, messages])
+  }, [characterName, chatId, isHistoryLoading, isHistoryPersistenceEnabled, messages])
 
   const loadOlderHistory = async () => {
     if (
@@ -611,7 +611,7 @@ export default function ChatPage() {
     setIsLoadingOlderHistory(true)
 
     try {
-      const page = await loadChatHistoryPage(chatId, historyCursor)
+      const page = await loadChatHistoryPage(chatId, historyCursor, characterName)
       for (const message of page.messages) {
         persistedMessageFingerprintsRef.current.set(message.id, getChatMessageFingerprint(message))
       }
