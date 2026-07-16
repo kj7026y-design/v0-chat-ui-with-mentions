@@ -154,6 +154,11 @@ function debugRoleplayContent({
   })
 }
 
+function debugRoleplayJson(label: string, payload: unknown) {
+  if (process.env.NODE_ENV === "production") return
+  console.debug(label, JSON.stringify(payload, null, 2))
+}
+
 type UserInputKind = "dialogue" | "action" | "dialogue_action" | "intent_summary" | "ooc_instruction"
 type SceneEscalation = "none" | "verbal" | "romantic" | "physical"
 type FlirtChannel = "dialogue" | "power_play" | "proximity" | "touch"
@@ -1777,6 +1782,25 @@ async function validateRoleplayOutputWithJudge(
   const judge = await judgeRoleplayQuality({ output: text, ctx, profile })
   const judgedErrors = aiQualityJudgeResultToValidation(judge)
   const severityOverrides = aiQualityJudgeSeverityOverrides(judge) as Partial<Record<RoleplayValidationKey, "hard" | "repairable" | "soft">>
+  const ruleFailures = getValidationFailureKeys(ruleErrors)
+  const judgeFailures = Object.entries(judge)
+    .filter(([, item]) => item.failed)
+    .map(([key, item]) => ({ key, reason: item.reason, severity: item.severity }))
+
+  if (ruleFailures.length > 0 || judgeFailures.length > 0) {
+    debugRoleplayJson("[RP validation details]", {
+      contentChars: Array.from(text).length,
+      minChars: ctx.turnPolicy.minChars,
+      maxChars: ctx.turnPolicy.maxChars,
+      dialogueCount: extractQuotedLines(text).length,
+      maxDialogues: profile.maxDialogues ?? 2,
+      ruleFailures,
+      judgeFailures,
+      overPhysicalEvidence: ruleErrors.overPhysical
+        ? splitIntoSentences(stripQuotedDialogue(text)).filter(detectsPhysicalEscalation)
+        : [],
+    })
+  }
 
   return {
     errors: {
@@ -3915,6 +3939,17 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
     allowsOpenRouterFallbackForGemini(model) &&
     !fallbackProvider?.includes("openrouter")
   ) {
+    debugRoleplayJson("[Gemini RP provider fallback decision]", {
+      reason: savedContent ? "hard-validation-remained-after-repair" : "empty-after-repair",
+      attemptedModel,
+      currentOutputModel: outputModel,
+      repairAttempted,
+      failures: repairedFinalValidation ? getValidationFailureKeys(repairedFinalValidation) : ["empty"],
+      hardFailures: repairedFinalClassifiedValidation?.hard ?? [],
+      repairableFailures: repairedFinalClassifiedValidation?.repairable ?? [],
+      softFailures: repairedFinalClassifiedValidation?.soft ?? [],
+      currentContentPreview: savedContent.slice(0, 400),
+    })
     const providerFallbackConfig = buildOpenRouterFallbackModel()
     const providerFallbackModelName = getOpenRouterModelName(providerFallbackConfig)
     usedFallback = true
@@ -4081,7 +4116,7 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
 
   const mismatch = streamedContent !== savedContent
   if (process.env.NODE_ENV !== "production") {
-    console.debug("[generation stream final]", {
+    debugRoleplayJson("[generation stream final]", {
       requestId: runId,
       runId,
       provider: "gemini",
@@ -4212,7 +4247,7 @@ export function runChatEventStream({
 
         const mismatch = streamedContent !== savedContent
         if (process.env.NODE_ENV !== "production") {
-          console.debug("[generation stream final]", {
+          debugRoleplayJson("[generation stream final]", {
             requestId: runId,
             runId,
             provider,
