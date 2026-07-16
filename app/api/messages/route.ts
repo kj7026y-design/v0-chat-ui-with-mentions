@@ -49,14 +49,14 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: "채팅 내역 DB 요청에 실패했습니다." }, { status: 500 })
 }
 
-async function requireAdmin() {
+async function requireAccount() {
   const session = await getAdminSession()
   return session
 }
 
 export async function GET(request: Request) {
-  const session = await requireAdmin()
-  if (!session) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 })
+  const session = await requireAccount()
+  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
 
   const url = new URL(request.url)
   const roomId = getRoomId(url.searchParams.get("roomId") || url.searchParams.get("chatId"))
@@ -78,8 +78,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await requireAdmin()
-  if (!session) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 })
+  const session = await requireAccount()
+  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
 
   const body = await request.json().catch(() => null) as { roomId?: unknown; messages?: unknown } | null
   const roomId = getRoomId(body?.roomId)
@@ -104,8 +104,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const session = await requireAdmin()
-  if (!session) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 })
+  const session = await requireAccount()
+  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
 
   const body = await request.json().catch(() => null) as {
     roomId?: unknown

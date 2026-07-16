@@ -1,7 +1,16 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
-import { Eye, EyeOff, LoaderCircle, LockKeyhole, UserRound, X } from "lucide-react"
+import {
+  BriefcaseBusiness,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+  UserRound,
+  X,
+} from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export default function LandingPage() {
@@ -66,11 +75,21 @@ export default function LandingPage() {
 
 function LoginModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
-  const [username, setUsername] = useState("admin")
+  const [accountType, setAccountType] = useState<"staff" | "member">("staff")
+  const [identifier, setIdentifier] = useState("admin")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const changeAccountType = (nextType: "staff" | "member") => {
+    if (nextType === accountType) return
+    setAccountType(nextType)
+    setIdentifier(nextType === "staff" ? "admin" : "")
+    setPassword("")
+    setShowPassword(false)
+    setError("")
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -82,7 +101,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
       const response = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ accountType, identifier, password }),
       })
       const data = await response.json().catch(() => ({})) as { error?: string }
       if (!response.ok) throw new Error(data.error || "로그인하지 못했습니다.")
@@ -102,7 +121,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
       <div className="fixed inset-x-4 bottom-0 z-50 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2">
         <div className="animate-in overflow-hidden rounded-t-2xl border border-border bg-popover duration-300 slide-in-from-bottom-4 sm:rounded-2xl sm:fade-in sm:slide-in-from-bottom-0">
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
-            <h3 className="text-lg font-semibold text-popover-foreground">관리자 로그인</h3>
+            <h3 className="text-lg font-semibold text-popover-foreground">로그인</h3>
             <button
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-accent"
@@ -113,19 +132,61 @@ function LoginModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <form className="space-y-4 p-5" onSubmit={handleSubmit}>
+            <div
+              className="grid grid-cols-2 rounded-lg bg-muted p-1"
+              role="group"
+              aria-label="계정 유형"
+            >
+              <button
+                type="button"
+                aria-pressed={accountType === "staff"}
+                onClick={() => changeAccountType("staff")}
+                className={`flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors ${
+                  accountType === "staff"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <BriefcaseBusiness className="h-4 w-4" aria-hidden="true" />
+                직원
+              </button>
+              <button
+                type="button"
+                aria-pressed={accountType === "member"}
+                onClick={() => changeAccountType("member")}
+                className={`flex h-10 items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors ${
+                  accountType === "member"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+                회원
+              </button>
+            </div>
+
             <p className="text-center text-sm text-muted-foreground">
-              관리자 계정으로 로그인하면 채팅 내역이 DB에 저장됩니다.
+              {accountType === "staff"
+                ? "관리자·개발자·운영자는 아이디로 로그인합니다."
+                : "작가와 일반 회원은 이메일로 로그인합니다."}
             </p>
 
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-popover-foreground">관리자 아이디</span>
+              <span className="text-xs font-medium text-popover-foreground">
+                {accountType === "staff" ? "아이디" : "이메일"}
+              </span>
               <span className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 focus-within:border-ring">
-                <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+                {accountType === "staff"
+                  ? <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  : <Mail className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                 <input
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  autoComplete="username"
+                  type={accountType === "staff" ? "text" : "email"}
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
+                  autoComplete={accountType === "staff" ? "username" : "email"}
+                  placeholder={accountType === "staff" ? "아이디" : "name@example.com"}
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none"
+                  autoFocus
                   required
                 />
               </span>
@@ -141,7 +202,6 @@ function LoginModal({ onClose }: { onClose: () => void }) {
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="current-password"
                   className="h-11 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none"
-                  autoFocus
                   required
                 />
                 <button

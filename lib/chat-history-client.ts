@@ -3,6 +3,12 @@ import type { ChatMessage } from "@/lib/chat-types"
 export interface AdminSessionState {
   authenticated: boolean
   username?: string
+  accountId?: string
+  accountType?: "staff" | "member"
+  role?: "administrator" | "developer" | "operator" | "member"
+  displayName?: string
+  memberKind?: "writer" | "general"
+  writerTier?: "prime" | "gold" | "silver"
 }
 
 export interface ChatHistoryPage {

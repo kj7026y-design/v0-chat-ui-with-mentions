@@ -2,12 +2,25 @@ import "server-only"
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 import { cookies } from "next/headers"
+import type {
+  AccountRole,
+  AccountType,
+  AuthenticatedAccount,
+  MemberKind,
+  WriterTier,
+} from "@/lib/server/user-account-store"
 
 export const ADMIN_SESSION_COOKIE = "storychat_admin_session"
 export const ADMIN_SESSION_MAX_AGE = 60 * 60 * 24 * 7
 
-interface AdminSessionPayload {
+export interface AdminSessionPayload {
+  accountId: string
+  accountType: AccountType
+  role: AccountRole
   username: string
+  displayName: string
+  memberKind?: MemberKind
+  writerTier?: WriterTier
   expiresAt: number
 }
 
@@ -52,13 +65,15 @@ function signPayload(payload: string) {
   return createHmac("sha256", getSessionSecret()).update(payload).digest("base64url")
 }
 
-export function validateAdminCredentials(username: string, password: string) {
-  return constantTimeEqual(username.trim(), getAdminUsername()) && constantTimeEqual(password, getAdminPassword())
-}
-
-export function createAdminSessionToken(username = getAdminUsername()) {
+export function createAdminSessionToken(account: AuthenticatedAccount) {
   const payload: AdminSessionPayload = {
-    username,
+    accountId: account.accountId,
+    accountType: account.accountType,
+    role: account.role,
+    username: account.identifier,
+    displayName: account.displayName,
+    memberKind: account.memberKind,
+    writerTier: account.writerTier,
     expiresAt: Date.now() + ADMIN_SESSION_MAX_AGE * 1000,
   }
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url")
@@ -74,7 +89,11 @@ function parseAdminSessionToken(token: string | undefined): AdminSessionPayload 
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Partial<AdminSessionPayload>
-    if (payload.username !== getAdminUsername()) return null
+    if (typeof payload.accountId !== "string" || !payload.accountId) return null
+    if (payload.accountType !== "staff" && payload.accountType !== "member") return null
+    if (!payload.role || !["administrator", "developer", "operator", "member"].includes(payload.role)) return null
+    if (typeof payload.username !== "string" || !payload.username) return null
+    if (typeof payload.displayName !== "string" || !payload.displayName) return null
     if (typeof payload.expiresAt !== "number" || payload.expiresAt <= Date.now()) return null
     return payload as AdminSessionPayload
   } catch {
@@ -89,7 +108,11 @@ export async function getAdminSession() {
 
   if (canUseDevelopmentAdminSession()) {
     return {
+      accountId: "staff-admin",
+      accountType: "staff" as const,
+      role: "administrator" as const,
       username: getAdminUsername(),
+      displayName: "관리자",
       expiresAt: Date.now() + ADMIN_SESSION_MAX_AGE * 1000,
     }
   }
