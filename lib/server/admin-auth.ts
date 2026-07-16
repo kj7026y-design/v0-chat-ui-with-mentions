@@ -9,6 +9,7 @@ import type {
   MemberKind,
   WriterTier,
 } from "@/lib/server/user-account-store"
+import { getActiveAccountById } from "@/lib/server/user-account-store"
 
 export const ADMIN_SESSION_COOKIE = "storychat_admin_session"
 export const ADMIN_SESSION_MAX_AGE = 60 * 60 * 24 * 7
@@ -101,10 +102,22 @@ function parseAdminSessionToken(token: string | undefined): AdminSessionPayload 
   }
 }
 
-export async function getAdminSession() {
+export async function getAdminSession(): Promise<AdminSessionPayload | null> {
   const cookieStore = await cookies()
   const session = parseAdminSessionToken(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)
-  if (session) return session
+  if (session) {
+    const account = await getActiveAccountById(session.accountId)
+    if (!account) return null
+    return {
+      ...session,
+      accountType: account.accountType,
+      role: account.role,
+      username: account.identifier,
+      displayName: account.displayName,
+      memberKind: account.memberKind,
+      writerTier: account.writerTier,
+    }
+  }
 
   if (canUseDevelopmentAdminSession()) {
     return {

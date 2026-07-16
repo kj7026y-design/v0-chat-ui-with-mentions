@@ -38,6 +38,7 @@ interface SampleAccount {
   displayName: string
   memberKind?: MemberKind
   writerTier?: WriterTier
+  birthDate?: string
 }
 
 const SAMPLE_PASSWORD = "12345"
@@ -71,6 +72,7 @@ const SAMPLE_ACCOUNTS: SampleAccount[] = [
     displayName: "프라임 작가",
     memberKind: "writer",
     writerTier: "prime",
+    birthDate: "1992-03-14",
   },
   {
     accountId: "member-writer-gold",
@@ -80,6 +82,7 @@ const SAMPLE_ACCOUNTS: SampleAccount[] = [
     displayName: "골드 작가",
     memberKind: "writer",
     writerTier: "gold",
+    birthDate: "1995-08-22",
   },
   {
     accountId: "member-writer-silver",
@@ -89,6 +92,7 @@ const SAMPLE_ACCOUNTS: SampleAccount[] = [
     displayName: "실버 작가",
     memberKind: "writer",
     writerTier: "silver",
+    birthDate: "1998-11-05",
   },
   {
     accountId: "member-general",
@@ -97,6 +101,7 @@ const SAMPLE_ACCOUNTS: SampleAccount[] = [
     identifier: "member@storychat.test",
     displayName: "일반 회원",
     memberKind: "general",
+    birthDate: "2000-06-18",
   },
 ]
 
@@ -156,9 +161,9 @@ async function seedSampleAccounts() {
   const profileQueries = SAMPLE_ACCOUNTS
     .filter((account) => account.accountType === "member" && account.memberKind)
     .map((account) => sql.query(
-      `INSERT INTO storychat_member_profiles (account_id, member_kind, writer_tier)
-       VALUES ($1, $2, $3)`,
-      [account.accountId, account.memberKind, account.writerTier ?? null],
+      `INSERT INTO storychat_member_profiles (account_id, member_kind, writer_tier, birth_date)
+       VALUES ($1, $2, $3, $4::date)`,
+      [account.accountId, account.memberKind, account.writerTier ?? null, account.birthDate ?? null],
     ))
   await sql.transaction(profileQueries)
 }
@@ -202,8 +207,11 @@ export async function ensureUserAccountSchema() {
     await sql`
       CREATE TABLE IF NOT EXISTS storychat_member_profiles (
         account_id TEXT PRIMARY KEY REFERENCES storychat_accounts(account_id) ON DELETE CASCADE,
+        member_id TEXT NOT NULL DEFAULT ('MBR-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 12))),
         member_kind TEXT NOT NULL CHECK (member_kind IN ('writer', 'general')),
         writer_tier TEXT CHECK (writer_tier IN ('prime', 'gold', 'silver')),
+        birth_date DATE NOT NULL,
+        unsafe_enabled BOOLEAN NOT NULL DEFAULT FALSE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         CHECK (
@@ -212,6 +220,67 @@ export async function ensureUserAccountSchema() {
           (member_kind = 'general' AND writer_tier IS NULL)
         )
       )
+    `
+    await sql`
+      ALTER TABLE storychat_member_profiles
+      ADD COLUMN IF NOT EXISTS member_id TEXT
+    `
+    await sql`
+      ALTER TABLE storychat_member_profiles
+      ALTER COLUMN member_id SET DEFAULT ('MBR-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 12)))
+    `
+    await sql`
+      UPDATE storychat_member_profiles
+      SET member_id = 'MBR-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 12))
+      WHERE member_id IS NULL OR BTRIM(member_id) = ''
+    `
+    await sql`ALTER TABLE storychat_member_profiles ALTER COLUMN member_id SET NOT NULL`
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS storychat_member_profiles_member_id_idx
+      ON storychat_member_profiles (member_id)
+    `
+    await sql`
+      ALTER TABLE storychat_member_profiles
+      ADD COLUMN IF NOT EXISTS birth_date DATE
+    `
+    await sql`
+      ALTER TABLE storychat_member_profiles
+      ADD COLUMN IF NOT EXISTS unsafe_enabled BOOLEAN NOT NULL DEFAULT FALSE
+    `
+    await sql`
+      UPDATE storychat_member_profiles
+      SET birth_date = CASE account_id
+        WHEN 'member-writer-prime' THEN DATE '1992-03-14'
+        WHEN 'member-writer-gold' THEN DATE '1995-08-22'
+        WHEN 'member-writer-silver' THEN DATE '1998-11-05'
+        WHEN 'member-general' THEN DATE '2000-06-18'
+        ELSE birth_date
+      END
+      WHERE birth_date IS NULL
+    `
+    await sql`ALTER TABLE storychat_member_profiles ALTER COLUMN birth_date SET NOT NULL`
+    await sql`
+      CREATE TABLE IF NOT EXISTS storychat_member_permissions (
+        account_id TEXT NOT NULL REFERENCES storychat_member_profiles(account_id) ON DELETE CASCADE,
+        permission_key TEXT NOT NULL CHECK (permission_key IN ('authoring', 'premium_models', 'media_generation')),
+        granted_by_account_id TEXT REFERENCES storychat_accounts(account_id) ON DELETE SET NULL,
+        granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (account_id, permission_key)
+      )
+    `
+    await sql`
+      CREATE TABLE IF NOT EXISTS storychat_member_audit_logs (
+        audit_id BIGSERIAL PRIMARY KEY,
+        actor_account_id TEXT REFERENCES storychat_accounts(account_id) ON DELETE SET NULL,
+        target_account_id TEXT NOT NULL REFERENCES storychat_accounts(account_id) ON DELETE CASCADE,
+        action TEXT NOT NULL,
+        details JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `
+    await sql`
+      CREATE INDEX IF NOT EXISTS storychat_member_audit_target_idx
+      ON storychat_member_audit_logs (target_account_id, created_at DESC)
     `
     await sql`
       CREATE INDEX IF NOT EXISTS storychat_accounts_type_role_idx
@@ -273,6 +342,42 @@ export async function authenticateAccount({
     accountType: account.account_type,
     role: account.role,
     identifier: account.login_id || account.email || normalizedIdentifier,
+    displayName: account.display_name,
+    memberKind: account.member_kind ?? undefined,
+    writerTier: account.writer_tier ?? undefined,
+  }
+}
+
+export async function getActiveAccountById(accountId: string): Promise<AuthenticatedAccount | null> {
+  await ensureUserAccountSchema()
+  const sql = getNeonSql()
+  const rows = await sql.query(
+    `SELECT
+       account.account_id,
+       account.account_type,
+       account.role,
+       account.login_id,
+       account.email,
+       account.password_hash,
+       account.display_name,
+       profile.member_kind,
+       profile.writer_tier
+     FROM storychat_accounts account
+     LEFT JOIN storychat_member_profiles profile ON profile.account_id = account.account_id
+     WHERE account.account_id = $1
+       AND account.status = 'active'
+       AND account.is_blocked = FALSE
+     LIMIT 1`,
+    [accountId],
+  ) as unknown as AccountRow[]
+  const account = rows[0]
+  if (!account) return null
+
+  return {
+    accountId: account.account_id,
+    accountType: account.account_type,
+    role: account.role,
+    identifier: account.login_id || account.email || account.account_id,
     displayName: account.display_name,
     memberKind: account.member_kind ?? undefined,
     writerTier: account.writer_tier ?? undefined,
