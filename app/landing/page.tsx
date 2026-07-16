@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
-import { LoaderCircle, LockKeyhole, UserRound, X } from "lucide-react"
+import { Eye, EyeOff, LoaderCircle, LockKeyhole, UserRound, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export default function LandingPage() {
@@ -68,6 +68,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const [username, setUsername] = useState("admin")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -135,7 +136,7 @@ function LoginModal({ onClose }: { onClose: () => void }) {
               <span className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 focus-within:border-ring">
                 <LockKeyhole className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="current-password"
@@ -143,6 +144,18 @@ function LoginModal({ onClose }: { onClose: () => void }) {
                   autoFocus
                   required
                 />
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword
+                    ? <EyeOff className="h-4 w-4" aria-hidden="true" />
+                    : <Eye className="h-4 w-4" aria-hidden="true" />}
+                </button>
               </span>
             </label>
 
