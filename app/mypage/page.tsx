@@ -15,7 +15,6 @@ import {
   Edit3,
   Camera,
   Upload,
-  UsersRound,
   X,
 } from "lucide-react"
 import Link from "next/link"
@@ -44,7 +43,6 @@ import {
 } from "@/lib/generated-media-storage"
 import { EventCard } from "@/components/chat/event-card"
 import { EventDetailModal } from "@/components/chat/event-detail-modal"
-import { getAdminSessionState } from "@/lib/chat-history-client"
 
 const PROFILE_STORAGE_KEY = "storychat_profile"
 const DEFAULT_PROFILE: ProfileState = {
@@ -69,7 +67,6 @@ export default function MyPage() {
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
   const [isAccountDeleteConfirmOpen, setIsAccountDeleteConfirmOpen] = useState(false)
-  const [canManageMembers, setCanManageMembers] = useState(false)
   const [profile, setProfile] = useState<ProfileState>(DEFAULT_PROFILE)
   const [profileForm, setProfileForm] = useState<ProfileState>(profile)
   const credits = useAppStore((s) => s.credits)
@@ -77,7 +74,6 @@ export default function MyPage() {
   const isDark = mounted ? theme === "dark" : true
 
   useEffect(() => {
-    let cancelled = false
     setMounted(true)
     setLibrary(getStoryChatLibrary())
     setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
@@ -100,20 +96,9 @@ export default function MyPage() {
     }
 
     const syncGeneratedMedia = () => setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
-    void getAdminSessionState()
-      .then((session) => {
-        if (cancelled) return
-        setCanManageMembers(
-          session.authenticated &&
-          session.accountType === "staff" &&
-          (session.role === "administrator" || session.role === "developer" || session.role === "operator"),
-        )
-      })
-      .catch(() => undefined)
     window.addEventListener("storychat-generated-media-updated", syncGeneratedMedia)
     window.addEventListener("storage", syncGeneratedMedia)
     return () => {
-      cancelled = true
       window.removeEventListener("storychat-generated-media-updated", syncGeneratedMedia)
       window.removeEventListener("storage", syncGeneratedMedia)
     }
@@ -442,27 +427,6 @@ export default function MyPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {canManageMembers && (
-        <section className="px-5 pb-6">
-          <h2 className="mb-3 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            운영 관리
-          </h2>
-          <Link
-            href="/admin/members"
-            className="flex w-full items-center gap-4 rounded-lg border border-border bg-card px-4 py-4 transition-colors hover:bg-accent"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-              <UsersRound className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="text-sm font-medium text-foreground">회원 관리</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">권한, 접근, 크레딧 및 회원 정보</p>
-            </div>
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          </Link>
-        </section>
       )}
 
       {/* App Settings */}
