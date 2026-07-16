@@ -93,7 +93,7 @@ const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
 const PROMPT_VERSION = "rp-pipeline-v8"
 const NORMALIZER_VERSION = "rp-normalizer-v2"
-const VALIDATOR_VERSION = "rp-validator-v9"
+const VALIDATOR_VERSION = "rp-validator-v10"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const GEMINI_SAFETY_SETTINGS = [
@@ -1553,13 +1553,16 @@ function hasNaturalPropHandAction(sentence: string, ctx: CompiledRoleplayContext
     "의자",
     "책",
     "가방",
+    "주머니",
+    "재킷",
+    "코트",
     "열쇠",
     "라이터",
     "담배",
     ...ctx.allowedProps,
   ]
   const propPattern = new RegExp([...new Set(naturalProps)].map(escapeRegExp).join("|"), "u")
-  const naturalActionPattern = /(대|열|닫|올리|놓|내려놓|들|쥐|잡|짚|가리키|밀|접|펼|서명|꺼내|건네)/u
+  const naturalActionPattern = /(대|열|닫|올리|놓|내려놓|들|쥐|잡|짚|가리키|밀|접|펼|서명|꺼내|건네|넣|꽂)/u
 
   return propPattern.test(sentence) && naturalActionPattern.test(sentence)
 }
@@ -1578,7 +1581,7 @@ function hasDirectUnpromptedHandFailure(sentence: string) {
 }
 
 function hasHandAsTensionCenter(sentence: string) {
-  return hasHandMention(sentence) && /(긴장|떨|망설|피하|거두|멈칫|닿|만지|쓸|입술|목|허리|몸|관능|열기|숨|회피)/u.test(sentence)
+  return hasHandMention(sentence) && /(긴장|떨|망설|피하|거두|멈칫|닿|만지|쓸|입술|목|허리|관능|열기|회피)/u.test(sentence)
 }
 
 function hasUnpromptedHandFocus(output: string, ctx: CompiledRoleplayContext) {
