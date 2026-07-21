@@ -105,8 +105,8 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v9"
-const NORMALIZER_VERSION = "rp-normalizer-v2"
+const PROMPT_VERSION = "rp-pipeline-v10"
+const NORMALIZER_VERSION = "rp-normalizer-v3"
 const VALIDATOR_VERSION = "rp-validator-v11"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
@@ -295,6 +295,8 @@ export interface CompiledRoleplayContext {
   bannedThisTurn: string[]
   serviceRequestBlocked: boolean
   autoAdvanceContinuityState: string[]
+  recentAssistantOpenings: string[]
+  avoidCharacterNameOpening: boolean
   regenerationAvoidContent: string
   previousAssistantContent: string
 }
@@ -1017,36 +1019,36 @@ function buildResponseGoal(
   }
   if (policy.autoAdvance) {
     if (policy.continuesExistingPhysicalContact) {
-      return withEstablishedState(`${characterName}은 직전 답변에서 확정된 위치, 밀착, 접촉과 감정 수위를 그대로 이어받아 자신의 반응과 행동을 한 단계 자연스럽게 진행한다. 장면을 접촉 이전으로 되돌리거나 다시 허락을 묻지 않으며, ${userName}의 새 행동·대사·감정·반응은 만들지 않는다.`)
+      return withEstablishedState(`직전 답변에서 확정된 위치, 밀착, 접촉과 감정 수위를 그대로 이어받아 ${characterName} 자신의 반응과 행동을 한 단계 자연스럽게 진행한다. 장면을 접촉 이전으로 되돌리거나 다시 허락을 묻지 않으며, ${userName}의 새 행동·대사·감정·반응은 만들지 않는다.`)
     }
-    return withEstablishedState(`${characterName}은 직전 답변의 확정된 사건, 위치, 분위기와 감정선을 그대로 이어받아 자신의 반응과 행동으로 스토리를 한 단계 자연스럽게 진행한다. ${userName}의 새 행동·대사·감정·반응은 만들지 않는다.`)
+    return withEstablishedState(`직전 답변의 확정된 사건, 위치, 분위기와 감정선을 그대로 이어받아 ${characterName} 자신의 반응과 행동으로 스토리를 한 단계 자연스럽게 진행한다. ${userName}의 새 행동·대사·감정·반응은 만들지 않는다.`)
   }
   const inputMeaning = [input.raw, input.action, input.dialogue, input.intent].filter(Boolean).join(" ")
   const requestsDirectAnswer = asksDirectQuestion(inputMeaning)
   if (requestsDirectAnswer) {
-    return withEstablishedState(`${characterName}은 ${userName}이 물은 구체적인 대상에 캐릭터다운 답, 허락, 거절, 이유 중 하나를 먼저 제시한다. 질문을 되풀이하거나 왜 궁금한지 되묻지 않는다.`)
+    return withEstablishedState(`${userName}이 물은 구체적인 대상에 ${characterName}다운 답, 허락, 거절, 이유 중 하나를 먼저 제시한다. 질문을 되풀이하거나 왜 궁금한지 되묻지 않는다.`)
   }
 
   if (policy.flirtChannel === "power_play") {
-    return withEstablishedState(`${characterName}은 ${userName}의 도발을 말과 조건 제시로 받아치되, 실제로 붙잡는 행동까지는 아직 가지 않는다.`)
+    return withEstablishedState(`${userName}의 도발을 ${characterName}다운 말과 조건 제시로 받아치되, 실제로 붙잡는 행동까지는 아직 가지 않는다.`)
   }
 
   if (policy.flirtChannel === "touch") {
     if (input.physicalContactPermitted && !input.physicalContactRequested) {
-      return withEstablishedState(`${characterName}은 ${userName}이 명시적으로 허락한 범위에서 캐릭터다운 신체 접촉을 한 단계 먼저 시작할 수 있으며, ${userName}의 반응은 대신 쓰지 않는다.`)
+      return withEstablishedState(`${userName}이 명시적으로 허락한 범위에서 ${characterName}다운 신체 접촉을 한 단계 먼저 시작할 수 있으며, ${userName}의 반응은 대신 쓰지 않는다.`)
     }
-    return withEstablishedState(`${characterName}은 ${userName}이 이미 만든 접촉과 현재 수위를 그대로 이어받아 캐릭터다운 적극적 반응과 행동을 한 단계 진행한다. 망설임이나 거리 확인으로 장면을 후퇴시키지 않되, ${userName}의 다음 반응은 대신 쓰지 않는다.`)
+    return withEstablishedState(`${userName}이 이미 만든 접촉과 현재 수위를 그대로 이어받아 ${characterName}다운 적극적 반응과 행동을 한 단계 진행한다. 망설임이나 거리 확인으로 장면을 후퇴시키지 않되, ${userName}의 다음 반응은 대신 쓰지 않는다.`)
   }
 
   if (policy.flirtChannel === "proximity") {
-    return withEstablishedState(`${characterName}은 가까워진 거리의 긴장에 반응하되, 새 접촉을 만들지 않고 ${userName}의 뜻을 묻는다.`)
+    return withEstablishedState(`가까워진 거리의 긴장에 ${characterName}답게 반응하되, 새 접촉을 만들지 않고 ${userName}의 뜻을 묻는다.`)
   }
 
   if (input.kind === "dialogue") {
-    return withEstablishedState(`${characterName}은 ${userName}의 말뜻에 반응하고, 같은 말을 되풀이하지 않는다.`)
+    return withEstablishedState(`${userName}의 말뜻에 ${characterName}답게 반응하고, 같은 말을 되풀이하지 않는다.`)
   }
 
-  return withEstablishedState(`${characterName}은 최신 입력의 의미에만 반응하고 장면을 한 단계만 진행한다.`)
+  return withEstablishedState(`최신 입력의 의미에 ${characterName}답게 반응하고 장면을 한 단계만 진행한다.`)
 }
 
 const ROLEPLAY_PROP_WORDS = [
@@ -1182,6 +1184,21 @@ function latestInputEndsPhysicalContact(input: ParsedUserInput) {
   return /(?:그만(?:해|둬|하자|이라고)|멈춰(?:줘)?|하지\s*마|손(?:을)?\s*떼|놔(?:줘)?|놓아(?:줘)?|떨어져|비켜)/u.test(latestInput)
 }
 
+function extractAssistantOpening(content: string) {
+  return content
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 90)
+}
+
+function startsWithCharacterNameSubject(content: string, characterName: string) {
+  const opening = content.trimStart()
+  const name = characterName.trim()
+  if (!opening || !name) return false
+
+  return new RegExp(`^${escapeRegExp(name)}(?:은|는|이|가)(?=\\s)`, "u").test(opening)
+}
+
 export function compileRoleplayContext(
   promptContext: DynamicPromptContext,
   messages: NonNullable<ChatRequestBody["messages"]>,
@@ -1218,6 +1235,24 @@ export function compileRoleplayContext(
       .reverse()
       .find((message) => message.role === "assistant")?.content || ""
   )
+  const assistantOpeningSources = messages
+    .filter((message) => message.role === "assistant" && message.content.trim())
+    .map((message) => message.content.trim())
+  if (
+    previousAssistantContent &&
+    assistantOpeningSources.at(-1) !== previousAssistantContent
+  ) {
+    assistantOpeningSources.push(previousAssistantContent)
+  }
+  const recentAssistantContents = assistantOpeningSources.slice(-3)
+  const recentAssistantOpenings = recentAssistantContents.map(extractAssistantOpening)
+  const recentCharacterNameOpeningCount = recentAssistantContents.filter((content) =>
+    startsWithCharacterNameSubject(content, characterName),
+  ).length
+  const avoidCharacterNameOpening = (
+    startsWithCharacterNameSubject(previousAssistantContent, characterName) ||
+    recentCharacterNameOpeningCount >= 2
+  )
   const establishedSceneState = inferEstablishedSceneState(previousAssistantContent)
   const establishedPhysicalState = establishedSceneState.some((state) =>
     /몸|허리|엉덩이|얼굴|귀|가슴|하체|목덜미|쇄골|입술|입을\s*맞|무릎|다리\s*사이/u.test(state),
@@ -1253,6 +1288,8 @@ export function compileRoleplayContext(
     bannedThisTurn,
     serviceRequestBlocked,
     autoAdvanceContinuityState: establishedSceneState,
+    recentAssistantOpenings,
+    avoidCharacterNameOpening,
     regenerationAvoidContent: sanitizedRegenerationAvoidContent,
     previousAssistantContent,
   }
@@ -2520,7 +2557,7 @@ ${ctx.turnPolicy.minChars}~${ctx.turnPolicy.maxChars}자.
 }
 
 export function buildSafeFallbackReply(ctx: CompiledRoleplayContext) {
-  return buildContextualFallbackReply(ctx)
+  return normalizeGeneratedRoleplayOutput(buildContextualFallbackReply(ctx), ctx)
 }
 
 function buildContextualFallbackReply(ctx: CompiledRoleplayContext, _streamedDraft = "") {
@@ -2676,6 +2713,42 @@ export function normalizeOpenRouterOutput(content: string) {
   return separateQuotedDialogueParagraphs(cleanedParagraphs.join("\n\n")).trim()
 }
 
+function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledRoleplayContext) {
+  const normalized = normalizeOpenRouterOutput(content)
+  if (!normalized || !ctx.avoidCharacterNameOpening) return normalized
+
+  const characterName = ctx.characterName.trim()
+  if (!characterName) return normalized
+
+  const repeatedNameSubject = new RegExp(
+    `^(\\s*)${escapeRegExp(characterName)}(?:은|는|이|가)\\s+`,
+    "u",
+  )
+  const match = repeatedNameSubject.exec(normalized)
+  if (!match) return normalized
+
+  const remainder = normalized.slice(match[0].length).trimStart()
+  const userName = ctx.userName.trim()
+  const explicitUserSubjects = [
+    "상대",
+    "사용자",
+    "유저",
+    "너",
+    "네",
+    "나",
+    "내",
+    userName && userName !== "나" ? escapeRegExp(userName) : "",
+  ].filter(Boolean).join("|")
+  if (
+    explicitUserSubjects &&
+    new RegExp(`^(?:${explicitUserSubjects})(?:은|는|이|가)(?=\\s)`, "u").test(remainder)
+  ) {
+    return normalized
+  }
+
+  return remainder
+}
+
 function extractRecentMeaningCandidates(content: string) {
   const normalized = normalizeOpenRouterOutput(content)
   if (!normalized || isSystemLikeAssistantContent(normalized)) return []
@@ -2730,6 +2803,12 @@ ${compiledContext.toneRules.join("\n")}
 - 서비스 내부 정보 요청 차단: ${compiledContext.serviceRequestBlocked ? "예" : "아니오"}
 - 이번 턴 긴장도: ${turnPolicy.escalation}
 - 이번 플러팅 채널: ${turnPolicy.flirtChannel}
+
+[도입부 변주]
+- 최근 assistant 도입부: ${compiledContext.recentAssistantOpenings.length > 0 ? compiledContext.recentAssistantOpenings.map((opening) => `"${opening}"`).join(" / ") : "없음"}
+- 이번 답변에서 "${compiledContext.characterName}은/는/이/가"로 시작 금지: ${compiledContext.avoidCharacterNameOpening ? "예" : "아니오"}
+- 직전 답변과 같은 문법 구조로 시작하지 않는다. 대사 먼저, 주어를 생략한 즉각 동작, 이미 장면에 있는 소리·감각·표정 변화 중 가장 자연스러운 하나를 고른다.
+- 도입 방식의 고정 순환표를 만들지 말고 장면과 최신 입력에 맞춰 선택한다. 변주를 위해 새 날씨, 장소, 소품은 발명하지 않는다.
 
 [이번 턴 허용 범위]
 - 신체 접촉 허용: ${turnPolicy.allowPhysicalContact ? "예" : "아니오"}
@@ -2836,13 +2915,15 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 대사는 ${minDialogues}~${maxDialogues}개를 쓰고, 특별한 이유가 없으면 ${preferredDialogues}개로 맞춘다.
 - 대사는 큰따옴표 안에 쓴다.
 - 대사와 서술은 줄바꿈으로 분리한다.
-- 따옴표 밖 지문은 항상 "${characterName}" 또는 그/그녀를 중심으로 한 3인칭 제한 시점 소설체로 쓴다.
+- 따옴표 밖 지문은 항상 "${characterName}" 또는 그/그녀를 중심으로 한 3인칭 제한 시점 소설체로 쓰되, 모든 문장에 이름이나 대명사를 주어로 반복하지 않는다. 한국어에서 자연스러우면 주어를 생략한다.
 - 지문에서 "나는", "내가", "기다리고 있었어", "귀엽네" 같은 1인칭 주어와 대화체 어미를 쓰지 않는다.
-- 지문은 "${characterName}은 기다리고 있었다", "그는 귀엽다고 생각했다"처럼 -했다/-있었다/-한다 계열로 끝낸다.
+- 지문은 -했다/-있었다/-한다 계열로 끝낸다. "${characterName}은 ..."만 반복하지 말고 "짧은 웃음이 새어 나왔다", "대답 대신 고개가 기울었다"처럼 캐릭터 중심이 분명한 무주어·부분 주어 문장도 자연스럽게 섞는다.
 - 캐릭터의 속마음은 1인칭 독백으로 직접 쓰지 말고 "${characterName}은 ...라고 생각했다"처럼 3인칭 간접 서술로 표현한다.
 - 캐릭터다운 반말, 질문, 감탄은 큰따옴표 안의 대사에서만 사용한다.
 - 제목, 이름표, 구간명, 설명용 라벨을 붙이지 않는다.
 - 사용자의 마지막 말/행동에 대한 "${characterName}"의 즉각 반응을 먼저 쓴다.
+- 첫 문단은 대사로 바로 시작하거나, 이미 장면에 존재하는 감각·표정·동작으로 시작할 수 있다. 매 답변 첫 문장을 "${characterName}은/는/이/가"로 고정하지 않는다.
+- 직전 assistant 답변이 "${characterName}은/는/이/가"로 시작했다면 이번 답변은 같은 형태로 시작하지 않는다.
 - "${characterName}"의 새 행동은 서로 이어지는 1~2개의 구체적인 동작으로 제한한다.
 - 마지막을 억지로 멈춤, 기다림, 반응 확인으로 끝내지 않는다. 캐릭터 설정에 맞는 행동이나 짧은 대사로 자연스럽게 턴을 맺는다.
 - 같은 역할의 문단을 두 번 쓰지 않는다.
@@ -3589,7 +3670,7 @@ async function handleRoleplayChatFromNormalized(
   const attemptedModel = getProviderModelName(model)
   const initialCompletion = await requestCompletion(finalMessages)
   let outputModel = initialCompletion.model
-  let result = normalizeOpenRouterOutput(initialCompletion.content)
+  let result = normalizeGeneratedRoleplayOutput(initialCompletion.content, compiledContext)
   debugRoleplayContent({
     stage: "original",
     requestId,
@@ -3667,7 +3748,7 @@ ${validation.regenerationDuplicate || validation.previousResponseDuplicate
         },
       ]
       const retryCompletion = await requestCompletion(retryMessages)
-      const retryResult = normalizeOpenRouterOutput(retryCompletion.content)
+      const retryResult = normalizeGeneratedRoleplayOutput(retryCompletion.content, compiledContext)
       debugRoleplayContent({
         stage: "repaired",
         requestId,
@@ -4499,7 +4580,7 @@ ${originalProviderContent}`,
   }
 
   sendPhase("validating", "답변을 검수하는 중...")
-  let savedContent = normalizeOpenRouterOutput(rawGeminiContent)
+  let savedContent = normalizeGeneratedRoleplayOutput(rawGeminiContent, compiledContext)
   const hasEmptyVisibleOutput = !savedContent && finishReason === "STOP" && !rawGeminiContent.trim()
   if (hasEmptyVisibleOutput) {
     providerOutcome = "empty-visible-output"
@@ -4544,7 +4625,7 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
       const retryContent = retryResponse.text?.trim() || ""
       if (retryContent) {
         rawGeminiContent = retryContent
-        savedContent = normalizeOpenRouterOutput(retryContent)
+        savedContent = normalizeGeneratedRoleplayOutput(retryContent, compiledContext)
         finishReason = retryResponse.candidates?.[0]?.finishReason || finishReason
         safetyRatings = retryResponse.candidates?.[0]?.safetyRatings || safetyRatings
         outputModel = modelName
@@ -4600,7 +4681,7 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
         })
       }
       const fallbackCompletion = await callOpenRouterRoleplay(finalMessages, openRouterFallbackModel, userName)
-      savedContent = normalizeOpenRouterOutput(fallbackCompletion.content)
+      savedContent = normalizeGeneratedRoleplayOutput(fallbackCompletion.content, compiledContext)
       outputModel = fallbackCompletion.model
       debugRoleplayContent({
         stage: "fallback",
@@ -4632,7 +4713,7 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
         },
       ]
       const retryCompletion = await callGeminiRoleplay(retryMessages, model)
-      savedContent = normalizeOpenRouterOutput(retryCompletion.content)
+      savedContent = normalizeGeneratedRoleplayOutput(retryCompletion.content, compiledContext)
       outputModel = retryCompletion.model
       debugRoleplayContent({
         stage: "repaired",
@@ -4737,7 +4818,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
           hasEmptyVisibleOutput ? EMPTY_RESPONSE_FALLBACK_TIMEOUT_MS : OPENROUTER_TIMEOUT_MS,
         )
       : await callGeminiRoleplay(repairMessages, model)
-    const repairedContent = normalizeOpenRouterOutput(repairedCompletion.content)
+    const repairedContent = normalizeGeneratedRoleplayOutput(repairedCompletion.content, compiledContext)
     debugRoleplayContent({
       stage: "repaired",
       requestId: runId,
@@ -4832,7 +4913,7 @@ ${savedContent}
       },
     ]
     const repairedCompletion = await callOpenRouterRoleplay(repairMessages, repairFallbackModel, userName)
-    const repairedContent = normalizeOpenRouterOutput(repairedCompletion.content)
+    const repairedContent = normalizeGeneratedRoleplayOutput(repairedCompletion.content, compiledContext)
     debugRoleplayContent({
       stage: "repaired",
       requestId: runId,
@@ -4911,7 +4992,7 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
         providerFallbackConfig,
         userName,
       )
-      const providerFallbackContent = normalizeOpenRouterOutput(providerFallbackCompletion.content)
+      const providerFallbackContent = normalizeGeneratedRoleplayOutput(providerFallbackCompletion.content, compiledContext)
       debugRoleplayContent({
         stage: "fallback",
         requestId: runId,
@@ -4968,7 +5049,10 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
     fallbackModel = "local"
     outputModel = "local"
     sendPhase("fallback", "안전한 대체 응답을 준비하는 중...")
-    savedContent = buildContextualFallbackReply(compiledContext, rawGeminiContent)
+    savedContent = normalizeGeneratedRoleplayOutput(
+      buildContextualFallbackReply(compiledContext, rawGeminiContent),
+      compiledContext,
+    )
     debugRoleplayContent({ stage: "fallback", requestId: runId, model: outputModel, content: savedContent })
     repairedFinalValidationResult = await validateStreamContent(savedContent, true)
     repairedFinalValidation = repairedFinalValidationResult.errors
