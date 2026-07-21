@@ -1890,13 +1890,19 @@ function hasHandAsTensionCenter(sentence: string) {
 }
 
 function continuesEstablishedHandContactAtSentence(sentence: string, ctx: CompiledRoleplayContext) {
-  if (!ctx.turnPolicy.autoAdvance || !ctx.turnPolicy.continuesExistingPhysicalContact) return false
+  // Established contact belongs to the scene state, not only to auto-advance
+  // turns. A dialogue-only turn or regeneration may still continue the hand
+  // positions already fixed by the previous assistant response.
+  const continuity = [
+    ...ctx.autoAdvanceContinuityState,
+    ...inferAutoAdvanceContinuityState(ctx.previousAssistantContent),
+  ].join(" ")
+  if (!continuity) return false
 
-  const continuity = ctx.autoAdvanceContinuityState.join(" ")
   return (
-    (/(?:허리).*(?:감싸|잡)/u.test(continuity) && /(?:허리|옆구리|몸|밀착)/u.test(sentence)) ||
-    (/(?:엉덩이|둔부)/u.test(continuity) && /(?:엉덩이|둔부|골반)/u.test(sentence)) ||
-    (/(?:얼굴|뺨|턱).*(?:잡|만지)/u.test(continuity) && /(?:얼굴|뺨|턱|입술)/u.test(sentence)) ||
+    (/(?:허리).*(?:감싸|잡)/u.test(continuity) && /(?:허리|옆구리|등|골반|몸|밀착)/u.test(sentence)) ||
+    (/(?:엉덩이|둔부)/u.test(continuity) && /(?:허리|엉덩이|둔부|골반|등)/u.test(sentence)) ||
+    (/(?:얼굴|뺨|턱).*(?:잡|만지)/u.test(continuity) && /(?:얼굴|뺨|턱|입술|목|목덜미|귓가|귀)/u.test(sentence)) ||
     (/(?:가슴|흉부).*(?:손|닿)/u.test(continuity) && /(?:가슴팍|가슴|흉부|심장|손바닥)/u.test(sentence))
   )
 }
