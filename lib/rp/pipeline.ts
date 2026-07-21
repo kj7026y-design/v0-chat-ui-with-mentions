@@ -91,7 +91,9 @@ const OPENAI_TIMEOUT_MS = 45_000
 const QUALITY_JUDGE_TIMEOUT_MS = 15_000
 const DEFAULT_OPENAI_CHAT_MODEL = "gpt-4o-mini"
 const GEMINI_TIMEOUT_MS = 30_000
-const GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS = 90_000
+const GEMINI_REGENERATION_TIMEOUT_MS = 12_000
+const GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS = 20_000
+const GEMINI_HEDGED_FALLBACK_DELAY_MS = 8_000
 const GEMINI_STREAM_IDLE_TIMEOUT_MS = 20_000
 const GEMINI_STREAM_OVERALL_TIMEOUT_MS = 60_000
 const OPENROUTER_TIMEOUT_MS = 45_000
@@ -2964,6 +2966,7 @@ async function callOpenRouterRoleplay(
   model: ChatModelConfig,
   userName?: string,
   timeoutMs = OPENROUTER_TIMEOUT_MS,
+  abortSignal?: AbortSignal,
 ) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
@@ -2984,20 +2987,32 @@ async function callOpenRouterRoleplay(
     "\nUser:",
     "User:",
   ].filter(Boolean)
-  const response = await withTimeout(openrouter.chat.completions.create(buildOpenRouterRoleplayRequest({
-    profile,
-    messages: finalMessages,
-    baseParams: getOpenRouterGenerationParams(model),
-    stop: stopSequences,
-  })), timeoutMs, "openrouter-fallback")
-  const content = response.choices[0]?.message?.content?.trim()
-  if (!content) throw new ChatApiError("OpenRouter returned empty content", 502)
+  const requestAbortController = new AbortController()
+  const abortRequest = () => requestAbortController.abort()
+  if (abortSignal?.aborted) abortRequest()
+  abortSignal?.addEventListener("abort", abortRequest, { once: true })
 
-  return {
-    content,
-    provider: "openrouter",
-    model: profile.modelName,
-  } satisfies RoleplayCompletion
+  try {
+    const response = await withTimeout(openrouter.chat.completions.create(buildOpenRouterRoleplayRequest({
+      profile,
+      messages: finalMessages,
+      baseParams: getOpenRouterGenerationParams(model),
+      stop: stopSequences,
+    }), {
+      signal: requestAbortController.signal,
+    }), timeoutMs, "openrouter-fallback")
+    const content = response.choices[0]?.message?.content?.trim()
+    if (!content) throw new ChatApiError("OpenRouter returned empty content", 502)
+
+    return {
+      content,
+      provider: "openrouter",
+      model: profile.modelName,
+    } satisfies RoleplayCompletion
+  } finally {
+    abortSignal?.removeEventListener("abort", abortRequest)
+    requestAbortController.abort()
+  }
 }
 
 async function callOpenAIRoleplay(finalMessages: ChatMessages, model: ChatModelConfig) {
@@ -4041,12 +4056,19 @@ async function streamGeminiRoleplay({
   const modelName = profile.modelName
   const attemptedModel = modelName
   const validationByContent = new Map<string, RoleplayValidationWithJudge>()
-  const validateStreamContent = async (content: string) => {
-    const cached = validationByContent.get(content)
+  const validateStreamContent = async (content: string, localOnly = false) => {
+    const cacheKey = `${localOnly ? "local" : "judge"}:${content}`
+    const cached = validationByContent.get(cacheKey)
     if (cached) return cached
 
-    const validation = await validateRoleplayOutputWithJudge(content, compiledContext, profile)
-    validationByContent.set(content, validation)
+    const validation = localOnly
+      ? {
+          errors: validateRoleplayOutput(content, compiledContext, profile),
+          judge: emptyAiQualityJudgeResult(),
+          severityOverrides: {},
+        }
+      : await validateRoleplayOutputWithJudge(content, compiledContext, profile)
+    validationByContent.set(cacheKey, validation)
     return validation
   }
   const ai = new GoogleGenAI({ apiKey })
@@ -4068,21 +4090,69 @@ async function streamGeminiRoleplay({
   let promptFeedback: unknown
   const candidatePartDiagnostics: Array<Record<string, unknown>> = []
   const geminiStreamAbortController = new AbortController()
-  const isAutoAdvanceRegeneration = compiledContext.turnPolicy.autoAdvance && Boolean(compiledContext.regenerationAvoidContent)
+  const hedgeAbortController = new AbortController()
+  const isRegeneration = Boolean(compiledContext.regenerationAvoidContent)
+  const isAutoAdvanceRegeneration = compiledContext.turnPolicy.autoAdvance && isRegeneration
   const geminiInitialTimeoutMs = isAutoAdvanceRegeneration
     ? GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS
-    : GEMINI_TIMEOUT_MS
-  const geminiStreamOverallTimeoutMs = isAutoAdvanceRegeneration
-    ? GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS
-    : GEMINI_STREAM_OVERALL_TIMEOUT_MS
+    : isRegeneration
+      ? GEMINI_REGENERATION_TIMEOUT_MS
+      : GEMINI_TIMEOUT_MS
+  const geminiStreamOverallTimeoutMs = GEMINI_STREAM_OVERALL_TIMEOUT_MS
   const geminiInitialTimeoutStage: GenerationTimeoutStage = isAutoAdvanceRegeneration
     ? "gemini-auto-advance-regeneration"
-    : "gemini-initial"
+    : isRegeneration
+      ? "gemini-regeneration"
+      : "gemini-initial"
+  let hedgedFallbackStarted = false
+  let hedgedFallbackError: unknown
+  let geminiStartError: unknown
+  let allInitialCandidatesFailed = false
 
   try {
     sendPhase("generating", "답변을 생성하는 중...")
     const geminiStreamStartedAt = Date.now()
-    const stream = await withTimeout(ai.models.generateContentStream({
+    const canUseHedgedFallback = Boolean(process.env.OPENROUTER_API_KEY) && allowsOpenRouterFallbackForGemini(model)
+    const hedgedFallbackModel = canUseHedgedFallback ? buildOpenRouterFallbackModel() : undefined
+    let hedgeTimer: ReturnType<typeof setTimeout> | undefined
+    let startHedgedFallback = () => {}
+    let hedgedFallbackPromise: Promise<{ source: "openrouter"; completion: RoleplayCompletion }> | undefined
+
+    if (hedgedFallbackModel) {
+      hedgedFallbackPromise = new Promise((resolve, reject) => {
+        startHedgedFallback = () => {
+          if (hedgedFallbackStarted) return
+          hedgedFallbackStarted = true
+          sendPhase("fallback", "느린 응답을 대비해 대체 모델도 함께 준비하는 중...")
+          if (process.env.NODE_ENV !== "production") {
+            console.debug("[Gemini RP hedged fallback started]", {
+              requestId: runId,
+              delayMs: GEMINI_HEDGED_FALLBACK_DELAY_MS,
+              from: modelName,
+              to: getOpenRouterModelName(hedgedFallbackModel),
+              regeneration: isRegeneration,
+              autoAdvance: compiledContext.turnPolicy.autoAdvance,
+            })
+          }
+          void callOpenRouterRoleplay(
+            finalMessages,
+            hedgedFallbackModel,
+            userName,
+            OPENROUTER_TIMEOUT_MS,
+            hedgeAbortController.signal,
+          ).then(
+            (completion) => resolve({ source: "openrouter", completion }),
+            (error) => {
+              hedgedFallbackError = error
+              reject(error)
+            },
+          )
+        }
+        hedgeTimer = setTimeout(startHedgedFallback, GEMINI_HEDGED_FALLBACK_DELAY_MS)
+      })
+    }
+
+    const geminiStreamPromise = withTimeout(ai.models.generateContentStream({
       model: modelName,
       contents,
       config: {
@@ -4093,68 +4163,168 @@ async function streamGeminiRoleplay({
         }),
         abortSignal: geminiStreamAbortController.signal,
       },
-    }), geminiInitialTimeoutMs, geminiInitialTimeoutStage)
-    const iterator = stream[Symbol.asyncIterator]()
-    let receivedStreamChunk = false
+    }), geminiInitialTimeoutMs, geminiInitialTimeoutStage).then(
+      (stream) => ({ source: "gemini" as const, stream }),
+      (error) => {
+        geminiStartError = error
+        startHedgedFallback()
+        throw error
+      },
+    )
 
-    while (true) {
-      const streamElapsedMs = Date.now() - geminiStreamStartedAt
-      const overallRemainingMs = geminiStreamOverallTimeoutMs - streamElapsedMs
-      if (overallRemainingMs <= 0) {
-        throw new ChatTimeoutError(
-          isAutoAdvanceRegeneration ? "gemini-auto-advance-regeneration" : "gemini-stream-overall",
-          geminiStreamOverallTimeoutMs,
-        )
-      }
+    let initialWinner: Awaited<typeof geminiStreamPromise> | Awaited<NonNullable<typeof hedgedFallbackPromise>>
+    try {
+      initialWinner = hedgedFallbackPromise
+        ? await Promise.any([geminiStreamPromise, hedgedFallbackPromise])
+        : await geminiStreamPromise
+    } catch (error) {
+      if (hedgeTimer) clearTimeout(hedgeTimer)
+      allInitialCandidatesFailed = Boolean(hedgedFallbackPromise)
+      throw geminiStartError ?? hedgedFallbackError ?? error
+    }
 
-      const nextChunkTimeoutMs = receivedStreamChunk
-        ? Math.min(GEMINI_STREAM_IDLE_TIMEOUT_MS, overallRemainingMs)
-        : Math.min(Math.max(1, geminiInitialTimeoutMs - streamElapsedMs), overallRemainingMs)
-      const nextChunk = await withTimeout(
-        Promise.resolve(iterator.next()),
-        nextChunkTimeoutMs,
-        receivedStreamChunk
-          ? "gemini-stream-idle"
-          : isAutoAdvanceRegeneration
-            ? "gemini-auto-advance-regeneration"
-            : "gemini-first-chunk",
-      )
-      if (nextChunk.done) break
-      receivedStreamChunk = true
-      const chunk = nextChunk.value
-      finishReason = chunk.candidates?.[0]?.finishReason || finishReason
-      safetyRatings = chunk.candidates?.[0]?.safetyRatings || safetyRatings
-      promptFeedback = chunk.promptFeedback || promptFeedback
-      for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
-        if (candidatePartDiagnostics.length >= 20) break
-        const record = part as unknown as Record<string, unknown>
-        candidatePartDiagnostics.push({
-          keys: Object.keys(record),
-          textChars: typeof record.text === "string" ? record.text.length : 0,
-          thought: record.thought === true,
-          hasFunctionCall: Boolean(record.functionCall),
-          hasFunctionResponse: Boolean(record.functionResponse),
-        })
+    const acceptHedgedFallback = (completion: RoleplayCompletion) => {
+      if (hedgeTimer) clearTimeout(hedgeTimer)
+      geminiStreamAbortController.abort()
+      timeoutStage = getTimeoutStage(geminiStartError) ?? timeoutStage
+      usedFallback = true
+      fallbackProvider = geminiStartError
+        ? "openrouter-hedged-after-gemini-unavailable"
+        : "openrouter-hedged-after-gemini-slow"
+      fallbackModel = completion.model
+      outputModel = completion.model
+      rawGeminiContent = completion.content
+      transientFallbackContent = {
+        model: completion.model,
+        content: completion.content,
       }
-      const content = chunk.text || ""
-      if (!content) continue
-      if (ttftMs === undefined) ttftMs = Date.now() - startedAt
-      rawGeminiContent += content
-      if (normalizedBody.debugRawRoleplayStream) {
-        send({
-          event_type: "raw_delta",
-          raw_content: content,
-          elapsed_ms: Date.now() - startedAt,
-          is_final_event: false,
-          run_id: runId,
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[Gemini RP hedged fallback won]", {
+          requestId: runId,
+          elapsedMs: Date.now() - geminiStreamStartedAt,
+          from: modelName,
+          to: completion.model,
+          geminiError: geminiStartError instanceof Error ? geminiStartError.message : undefined,
         })
       }
     }
-    originalProviderContent = rawGeminiContent
+
+    if (initialWinner.source === "openrouter") {
+      acceptHedgedFallback(initialWinner.completion)
+    } else {
+      const iterator = initialWinner.stream[Symbol.asyncIterator]()
+      let receivedStreamChunk = false
+      let receivedVisibleGeminiContent = false
+      let hedgedFallbackWonBeforeGeminiContent = false
+
+      while (true) {
+        const streamElapsedMs = Date.now() - geminiStreamStartedAt
+        const overallRemainingMs = geminiStreamOverallTimeoutMs - streamElapsedMs
+        if (overallRemainingMs <= 0) {
+          throw new ChatTimeoutError("gemini-stream-overall", geminiStreamOverallTimeoutMs)
+        }
+
+          const nextChunkTimeoutMs = Math.min(
+            GEMINI_STREAM_IDLE_TIMEOUT_MS,
+            overallRemainingMs,
+          )
+        const geminiNextChunkPromise = withTimeout(
+          Promise.resolve(iterator.next()),
+          nextChunkTimeoutMs,
+          receivedStreamChunk ? "gemini-stream-idle" : geminiInitialTimeoutStage,
+        ).then(
+          (nextChunk) => ({ source: "gemini" as const, nextChunk }),
+          (error) => {
+            geminiStartError = error
+            throw error
+          },
+        )
+        let nextWinner: Awaited<typeof geminiNextChunkPromise> | Awaited<NonNullable<typeof hedgedFallbackPromise>>
+        try {
+          nextWinner = !receivedVisibleGeminiContent && hedgedFallbackPromise
+            ? await Promise.any([geminiNextChunkPromise, hedgedFallbackPromise])
+            : await geminiNextChunkPromise
+        } catch (error) {
+          throw geminiStartError ?? hedgedFallbackError ?? error
+        }
+
+        if (nextWinner.source === "openrouter") {
+          acceptHedgedFallback(nextWinner.completion)
+          hedgedFallbackWonBeforeGeminiContent = true
+          break
+        }
+
+        const nextChunk = nextWinner.nextChunk
+        if (nextChunk.done) {
+          if (!receivedVisibleGeminiContent && hedgedFallbackPromise) {
+            startHedgedFallback()
+            try {
+              const fallbackWinner = await hedgedFallbackPromise
+              acceptHedgedFallback(fallbackWinner.completion)
+              hedgedFallbackWonBeforeGeminiContent = true
+            } catch {
+              // Preserve the existing Gemini empty-output retry if the hedge fails.
+            }
+          }
+          break
+        }
+        receivedStreamChunk = true
+        const chunk = nextChunk.value
+        finishReason = chunk.candidates?.[0]?.finishReason || finishReason
+        safetyRatings = chunk.candidates?.[0]?.safetyRatings || safetyRatings
+        promptFeedback = chunk.promptFeedback || promptFeedback
+        for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+          if (candidatePartDiagnostics.length >= 20) break
+          const record = part as unknown as Record<string, unknown>
+          candidatePartDiagnostics.push({
+            keys: Object.keys(record),
+            textChars: typeof record.text === "string" ? record.text.length : 0,
+            thought: record.thought === true,
+            hasFunctionCall: Boolean(record.functionCall),
+            hasFunctionResponse: Boolean(record.functionResponse),
+          })
+        }
+        const content = chunk.text || ""
+        if (!content) continue
+        if (!receivedVisibleGeminiContent) {
+          receivedVisibleGeminiContent = true
+          if (hedgeTimer) clearTimeout(hedgeTimer)
+          hedgeAbortController.abort()
+          if (hedgedFallbackStarted) sendPhase("generating", "Gemini 응답을 이어받는 중...")
+          if (process.env.NODE_ENV !== "production") {
+            console.debug("[Gemini RP won hedged race]", {
+              requestId: runId,
+              elapsedMs: Date.now() - geminiStreamStartedAt,
+              fallbackStarted: hedgedFallbackStarted,
+            })
+          }
+        }
+        if (ttftMs === undefined) ttftMs = Date.now() - startedAt
+        rawGeminiContent += content
+        if (normalizedBody.debugRawRoleplayStream) {
+          send({
+            event_type: "raw_delta",
+            raw_content: content,
+            elapsed_ms: Date.now() - startedAt,
+            is_final_event: false,
+            run_id: runId,
+          })
+        }
+      }
+      if (!hedgedFallbackWonBeforeGeminiContent) {
+        if (hedgeTimer) clearTimeout(hedgeTimer)
+        hedgeAbortController.abort()
+        originalProviderContent = rawGeminiContent
+      }
+    }
   } catch (error) {
     geminiStreamAbortController.abort()
+    hedgeAbortController.abort()
     originalProviderContent = rawGeminiContent
     timeoutStage = getTimeoutStage(error) ?? timeoutStage
+    if (allInitialCandidatesFailed && hedgedFallbackError) {
+      rethrowWithTimeoutStage(hedgedFallbackError, timeoutStage)
+    }
     if (!isGeminiTransientError(error)) throw error
     if (!allowsOpenRouterFallbackForGemini(model)) throw error
     const openRouterFallbackModel = buildOpenRouterFallbackModel()
@@ -4301,7 +4471,9 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
       }
     }
   }
-  const initialValidationResult = savedContent ? await validateStreamContent(savedContent) : null
+  const initialValidationResult = savedContent
+    ? await validateStreamContent(savedContent, outputModel !== attemptedModel)
+    : null
   const initialValidation = initialValidationResult?.errors ?? null
   const initialSeverityOverrides = initialValidationResult?.severityOverrides ?? {}
   validationSeverityOverrides = initialSeverityOverrides
@@ -4381,7 +4553,7 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
       hasClassifiedFailures(initialClassifiedValidation) &&
       (
         initialClassifiedValidation.hard.length > 0 ||
-        !fallbackProvider?.startsWith("openrouter-after-gemini-unavailable")
+        !fallbackProvider?.startsWith("openrouter")
       )
     )
   ) {
@@ -4475,7 +4647,9 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
       model: repairedCompletion.model,
       content: repairedCompletion.content,
     })
-    const repairedValidationResult = repairedContent ? await validateStreamContent(repairedContent) : null
+    const repairedValidationResult = repairedContent
+      ? await validateStreamContent(repairedContent, repairedCompletion.model !== attemptedModel)
+      : null
     const repairedValidation = repairedValidationResult?.errors ?? null
     const repairedSeverityOverrides = repairedValidationResult?.severityOverrides ?? {}
     const repairedClassifiedValidation = repairedValidation ? classify(repairedValidation, repairedSeverityOverrides) : null
@@ -4524,7 +4698,9 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
   }
 
   sendPhase("validating", "다듬은 답변을 검수하는 중...")
-  const finalValidationResult = savedContent ? await validateStreamContent(savedContent) : null
+  const finalValidationResult = savedContent
+    ? await validateStreamContent(savedContent, outputModel !== attemptedModel)
+    : null
   const finalValidation = finalValidationResult?.errors ?? null
   const finalSeverityOverrides = finalValidationResult?.severityOverrides ?? {}
   validationSeverityOverrides = finalSeverityOverrides
@@ -4567,7 +4743,7 @@ ${savedContent}
       content: repairedCompletion.content,
     })
     const repairedValidationResult = repairedContent
-      ? await validateStreamContent(repairedContent)
+      ? await validateStreamContent(repairedContent, repairedCompletion.model !== attemptedModel)
       : finalValidation
         ? { errors: finalValidation, severityOverrides: finalSeverityOverrides }
         : null
@@ -4592,7 +4768,9 @@ ${savedContent}
     }
   }
 
-  let repairedFinalValidationResult = savedContent ? await validateStreamContent(savedContent) : null
+  let repairedFinalValidationResult = savedContent
+    ? await validateStreamContent(savedContent, outputModel !== attemptedModel)
+    : null
   let repairedFinalValidation = repairedFinalValidationResult?.errors ?? null
   let repairedFinalSeverityOverrides = repairedFinalValidationResult?.severityOverrides ?? {}
   let repairedFinalClassifiedValidation = repairedFinalValidation ? classify(repairedFinalValidation, repairedFinalSeverityOverrides) : null
@@ -4644,7 +4822,7 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
         content: providerFallbackCompletion.content,
       })
       const providerFallbackValidationResult = providerFallbackContent
-        ? await validateStreamContent(providerFallbackContent)
+        ? await validateStreamContent(providerFallbackContent, true)
         : null
       const providerFallbackValidation = providerFallbackValidationResult?.errors ?? null
       const providerFallbackSeverityOverrides = providerFallbackValidationResult?.severityOverrides ?? {}
@@ -4695,7 +4873,7 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
     sendPhase("fallback", "안전한 대체 응답을 준비하는 중...")
     savedContent = buildContextualFallbackReply(compiledContext, rawGeminiContent)
     debugRoleplayContent({ stage: "fallback", requestId: runId, model: outputModel, content: savedContent })
-    repairedFinalValidationResult = await validateStreamContent(savedContent)
+    repairedFinalValidationResult = await validateStreamContent(savedContent, true)
     repairedFinalValidation = repairedFinalValidationResult.errors
     repairedFinalSeverityOverrides = repairedFinalValidationResult.severityOverrides
     validationSeverityOverrides = repairedFinalSeverityOverrides
