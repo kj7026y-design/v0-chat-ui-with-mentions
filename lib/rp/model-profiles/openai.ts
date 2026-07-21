@@ -11,9 +11,12 @@ export const openaiRpProfile: RoleplayModelProfile = {
   promptStyle: "concise-direct",
   outputMode: "chat",
   targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
-  maxDialogues: 2,
+  minDialogues: 2,
+  preferredDialogues: 3,
+  maxDialogues: 4,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
+    tooFewDialogues: "repairable",
     tooManyDialogues: "repairable",
     overPhysical: "hard",
     metaLeak: "hard",

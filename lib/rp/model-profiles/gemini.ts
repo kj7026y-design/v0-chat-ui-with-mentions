@@ -13,9 +13,12 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
   promptStyle: "immersive-controlled",
   outputMode: "novel",
   targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
-  maxDialogues: 2,
+  minDialogues: 2,
+  preferredDialogues: 3,
+  maxDialogues: 4,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
+    tooFewDialogues: "repairable",
     tooManyDialogues: "repairable",
     overPhysical: "hard",
     metaLeak: "hard",
@@ -44,5 +47,16 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
   },
   safety: {
     geminiSafetyThreshold,
+  },
+}
+
+export const geminiProUnshapedProfile: RoleplayModelProfile = {
+  ...geminiFlashRpProfile,
+  id: "gemini-2.5-pro-unshaped",
+  modelName: process.env.GEMINI_PREMIUM_MODEL || "gemini-2.5-pro",
+  temperature: 0.85,
+  promptStyle: "unfiltered-novel",
+  safety: {
+    geminiSafetyThreshold: "BLOCK_NONE",
   },
 }

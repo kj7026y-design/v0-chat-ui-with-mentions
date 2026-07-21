@@ -2,6 +2,7 @@ import type { RoleplayModelProfile, ValidationFailureKey, ValidationSeverity } f
 
 export const DEFAULT_VALIDATION_SEVERITY: Partial<Record<ValidationFailureKey, ValidationSeverity>> = {
   brokenDialogueQuotes: "repairable",
+  tooFewDialogues: "repairable",
   tooManyDialogues: "repairable",
   internalTokenLeak: "hard",
   overPhysical: "hard",
@@ -9,6 +10,9 @@ export const DEFAULT_VALIDATION_SEVERITY: Partial<Record<ValidationFailureKey, V
   metaLeak: "hard",
   unpromptedHandFocus: "repairable",
   narrationStyleMismatch: "repairable",
+  regenerationDuplicate: "hard",
+  previousResponseDuplicate: "hard",
+  incompleteEnding: "hard",
   objectiveUserStateAssertion: "hard",
   userControlByNarration: "hard",
   controlsUser: "hard",

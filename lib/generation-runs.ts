@@ -1,5 +1,19 @@
 export type GenerationRunStatus = "streaming" | "completed" | "failed"
 export type GenerationValidationStatus = "passed" | "accepted_with_warnings" | "repaired" | "fallback" | "failed"
+export type GenerationProviderOutcome = "empty-visible-output"
+export type GenerationTimeoutStage =
+  | "request"
+  | "input-normalizer"
+  | "gemini-initial"
+  | "gemini-first-chunk"
+  | "gemini-stream-idle"
+  | "gemini-stream-overall"
+  | "gemini-empty-retry"
+  | "gemini-repair"
+  | "openrouter-fallback"
+  | "quality-judge"
+  | "openai"
+  | "pollinations"
 export type GenerationValidationAttempt = {
   stage: "initial" | "repair" | "fallback" | "final"
   status: GenerationValidationStatus
@@ -32,6 +46,8 @@ export type GenerationRun = {
   fallback?: boolean
   fallbackProvider?: string
   fallbackModel?: string
+  providerOutcome?: GenerationProviderOutcome
+  timeoutStage?: GenerationTimeoutStage
   status: GenerationRunStatus
   createdAt: string
   completedAt?: string

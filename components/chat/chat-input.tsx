@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, type ReactNode, type RefObject, type UIEvent } from "react"
-import { Send, Image as ImageIcon, MessageCircle, X, Zap, Asterisk } from "lucide-react"
+import { Send, Image as ImageIcon, MessageCircle, X, Zap, Asterisk, FastForward, AtSign } from "lucide-react"
 import { AlertModal } from "@/components/ui/app-modal"
 import { SLASH_COMMANDS } from "@/lib/chat-types"
 import { hasUnclosedActionMarker } from "@/lib/rp-input-parser"
@@ -23,6 +23,7 @@ interface ChatInputProps {
     content: string,
     mentionedTargets?: string[],
     image?: { url: string; name?: string },
+    options?: { autoAdvance?: boolean },
   ) => void
   onCommand: (command: string) => void
   characters?: ChatInputCharacter[]
@@ -146,6 +147,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const [isMobile, setIsMobile] = useState(false)
   const [isQuickBarDragging, setIsQuickBarDragging] = useState(false)
   const [inputScrollTop, setInputScrollTop] = useState(0)
+  const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const quickBarRef = useRef<HTMLDivElement>(null)
@@ -456,7 +458,14 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
     if (disabled) return
-    if (!input.trim() && !attachedImage) return
+    const shouldAutoAdvance = isAutoAdvanceEnabled && !input.trim() && !attachedImage
+    if (!input.trim() && !attachedImage && !shouldAutoAdvance) return
+
+    if (shouldAutoAdvance) {
+      onSendMessage("", undefined, undefined, { autoAdvance: true })
+      closeCharacterContext()
+      return
+    }
 
     // Check if it's a command
     if (input.trim().startsWith("/") && !attachedImage) {
@@ -650,7 +659,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={handleImageClick}
           disabled={disabled}
-          className="flex h-7 min-w-9 items-center justify-center rounded-full border border-border bg-secondary/80 px-2.5 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="이미지 첨부"
           title="이미지 첨부"
         >
@@ -666,21 +675,37 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={handleCommandClick}
           disabled={disabled}
-          className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-secondary/80 px-2.5 text-xs text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="명령어"
+          title="명령어"
         >
           <Zap className="w-4 h-4" />
-          <span>명령어</span>
         </button>
         <button
           type="button"
           onClick={insertActionMarker}
           disabled={disabled}
-          className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-secondary/80 px-2.5 text-xs text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="지문 삽입"
           title="지문 삽입"
         >
           <Asterisk className="w-4 h-4" />
-          <span>지문</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsAutoAdvanceEnabled((enabled) => !enabled)}
+          disabled={disabled}
+          aria-pressed={isAutoAdvanceEnabled}
+          aria-label={isAutoAdvanceEnabled ? "자동 진행 끄기" : "자동 진행 켜기"}
+          title={isAutoAdvanceEnabled ? "자동 진행 켜짐 · 빈 메시지를 전송하면 이야기가 진행됩니다" : "자동 진행 켜기"}
+          className={cn(
+            "flex h-7 w-9 shrink-0 items-center justify-center rounded-full border p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            isAutoAdvanceEnabled
+              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+              : "border-border bg-secondary/80 text-secondary-foreground hover:bg-accent",
+          )}
+        >
+          <FastForward className="h-4 w-4" />
         </button>
 
         {/* Divider */}
@@ -691,18 +716,18 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={() => openCharacterContext("mention")}
           disabled={disabled}
-          className="flex h-7 min-w-9 items-center justify-center rounded-full border border-border bg-secondary/80 px-2.5 text-xs font-semibold text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="캐릭터 멘션하기"
           title="캐릭터 멘션하기"
         >
-          @
+          <AtSign className="h-4 w-4" />
         </button>
         <button
           ref={speechButtonRef}
           type="button"
           onClick={() => openCharacterContext("speech")}
           disabled={disabled}
-          className="flex h-7 min-w-9 items-center justify-center rounded-full border border-border bg-secondary/80 px-2.5 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="캐릭터 대사 삽입하기"
           title="캐릭터 대사 삽입하기"
         >
@@ -754,7 +779,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
             onScroll={handleInputScroll}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder="메시지를 입력하세요..."
+            placeholder={isAutoAdvanceEnabled ? "빈 상태로 전송하면 자동 진행" : "메시지를 입력하세요..."}
             rows={1}
             className={cn(
               "relative z-10 max-h-24 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
@@ -767,16 +792,18 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         {/* Send Button */}
         <button
           type="submit"
-          disabled={disabled || (!input.trim() && !attachedImage)}
+          disabled={disabled || (!input.trim() && !attachedImage && !isAutoAdvanceEnabled)}
           className={cn(
             "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors",
-            input.trim() || attachedImage
+            input.trim() || attachedImage || isAutoAdvanceEnabled
               ? "bg-primary text-primary-foreground hover:bg-primary/90"
               : "bg-secondary text-muted-foreground border border-border"
           )}
-          aria-label="전송"
+          aria-label={!input.trim() && !attachedImage && isAutoAdvanceEnabled ? "스토리 자동 진행" : "전송"}
         >
-          <Send className="w-5 h-5" />
+          {!input.trim() && !attachedImage && isAutoAdvanceEnabled
+            ? <FastForward className="h-5 w-5" />
+            : <Send className="h-5 w-5" />}
         </button>
       </form>
       <AlertModal

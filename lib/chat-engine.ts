@@ -7,7 +7,13 @@ import {
   getChatModelConfig,
   type ChatModelId,
 } from "@/lib/chat-models"
-import { saveGenerationRun, type GenerationValidationAttempt, type GenerationValidationStatus } from "@/lib/generation-runs"
+import {
+  saveGenerationRun,
+  type GenerationProviderOutcome,
+  type GenerationTimeoutStage,
+  type GenerationValidationAttempt,
+  type GenerationValidationStatus,
+} from "@/lib/generation-runs"
 import { buildModelBackground } from "@/lib/model-background"
 import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser"
 import type { StoryCharacter, StoryPersona, StoryWork, StoryWorld } from "@/lib/storychat-storage"
@@ -97,6 +103,8 @@ export type ChatStreamEvent = {
   fallback?: boolean
   fallback_provider?: string
   fallback_model?: string
+  provider_outcome?: GenerationProviderOutcome
+  timeout_stage?: GenerationTimeoutStage
   status?: "streaming" | "completed" | "failed"
   error?: string
   room_id?: string
@@ -107,6 +115,8 @@ export type GenerateAssistantReplyOptions = {
   roomId?: string
   userMessageId?: string
   characterMessageId?: string
+  regenerationAvoidContent?: string
+  autoAdvance?: boolean
   bypassRoleplayRules?: boolean
   debugRawRoleplayStream?: boolean
   answerLength?: AssistantReplyLengthBudget
@@ -151,6 +161,12 @@ function sliceTextChars(content: string, maxChars: number) {
 function trimAnswerToMaxChars(content: string, maxChars: number) {
   const trimmed = content.trim()
   if (countTextChars(trimmed) <= maxChars) return trimmed
+  // The RP server already validates its answer-length budget. If it returned a
+  // complete sentence, preserve the vetted ending instead of cutting off the
+  // final paragraph again on the client.
+  if (/[.!?。！？…]["'”’」』)]*$/u.test(trimmed) || /["”’」』]$/u.test(trimmed)) {
+    return trimmed
+  }
 
   const sliced = sliceTextChars(trimmed, maxChars)
   const sentenceMatch = [...sliced.matchAll(/[.!?。！？](?:["'”’」』)]*)/gu)].at(-1)
@@ -919,6 +935,8 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
         fallback: event.fallback,
         fallbackProvider: event.fallback_provider,
         fallbackModel: event.fallback_model,
+        providerOutcome: event.provider_outcome,
+        timeoutStage: event.timeout_stage,
         status: event.status === "failed" ? "failed" : "completed",
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
@@ -998,6 +1016,10 @@ async function generatePollinationsReply(
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n\n")
   const promptContext = buildDynamicPromptContext(context, introContext)
+  const previousAssistantContent = [...history]
+    .reverse()
+    .find((message) => message.type === "ai" && message.content.trim())
+    ?.content.trim()
   const requestBody = {
     mode: model.mode,
     modelId,
@@ -1005,6 +1027,9 @@ async function generatePollinationsReply(
     roomId: options.roomId,
     userMessageId: options.userMessageId,
     characterMessageId: options.characterMessageId,
+    regenerationAvoidContent: options.regenerationAvoidContent,
+    autoAdvance: options.autoAdvance,
+    previousAssistantContent,
     messages: outboundMessages,
     bypassRoleplayRules,
     debugRawRoleplayStream,
@@ -1114,6 +1139,8 @@ export async function generateAssistantReply(
     fallback: completedEvent?.fallback,
     fallbackProvider: completedEvent?.fallback_provider,
     fallbackModel: completedEvent?.fallback_model,
+    providerOutcome: completedEvent?.provider_outcome,
+    timeoutStage: completedEvent?.timeout_stage,
     savedContent: completedEvent?.saved_content || content,
     speakerId: context?.character?.id,
     speakerName: context?.character?.name || context?.status?.characterName,

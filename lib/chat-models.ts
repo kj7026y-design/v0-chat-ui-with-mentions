@@ -42,14 +42,15 @@ export const CHAT_MODELS: ChatModelConfig[] = [
   {
     id: "gemini-pro",
     label: "Gemini 2.5 Pro",
-    description: "프리미엄 소설 모드 · 더 긴 서사 답변",
+    description: "언셰이프 · 안전 필터를 낮춘 몰입형 서사 답변",
     provider: "gemini",
     mode: "premium",
     creditCostPerReply: PREMIUM_REPLY_CREDIT_COST,
     minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
     maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
     maxTokens: 6000,
-    badge: "프리미엄",
+    badge: "언셰이프",
+    providerModel: "gemini-2.5-pro",
   },
   {
     id: "openai",

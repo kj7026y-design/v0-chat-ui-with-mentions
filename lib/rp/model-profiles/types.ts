@@ -4,6 +4,7 @@ export type RoleplayProvider = Extract<ChatModelProvider, "openai" | "gemini" | 
 
 export type ValidationFailureKey =
   | "brokenDialogueQuotes"
+  | "tooFewDialogues"
   | "tooManyDialogues"
   | "objectiveUserStateAssertion"
   | "responseMissedUserIntent"
@@ -22,6 +23,9 @@ export type ValidationFailureKey =
   | "metaLeak"
   | "unpromptedHandFocus"
   | "narrationStyleMismatch"
+  | "regenerationDuplicate"
+  | "previousResponseDuplicate"
+  | "incompleteEnding"
 
 export type ValidationSeverity = "hard" | "repairable" | "soft" | "off"
 
@@ -38,6 +42,8 @@ export type RoleplayModelProfile = {
     min: number
     max: number
   }
+  minDialogues: number
+  preferredDialogues: number
   maxDialogues: number
   validationSensitivity: Partial<Record<ValidationFailureKey, ValidationSeverity>>
   repair: {

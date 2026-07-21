@@ -1,4 +1,9 @@
-import type { GenerationValidationAttempt, GenerationValidationStatus } from "@/lib/generation-runs"
+import type {
+  GenerationProviderOutcome,
+  GenerationTimeoutStage,
+  GenerationValidationAttempt,
+  GenerationValidationStatus,
+} from "@/lib/generation-runs"
 
 export type ChatMessageStatus = "pending" | "streaming" | "completed" | "failed" | "repaired"
 
@@ -20,6 +25,8 @@ export interface ChatMessage {
   fallback?: boolean
   fallbackProvider?: string
   fallbackModel?: string
+  providerOutcome?: GenerationProviderOutcome
+  timeoutStage?: GenerationTimeoutStage
   streamedContent?: string
   savedContent?: string
   imageUrl?: string
@@ -37,6 +44,7 @@ export interface ChatMessage {
   originalContent?: string
   turnId?: string
   isGenerationError?: boolean
+  isAutoAdvance?: boolean
   retryPayload?: {
     content: string
     mentions?: string[]
@@ -45,6 +53,8 @@ export interface ChatMessage {
       name?: string
     }
     turnId?: string
+    autoAdvance?: boolean
+    regenerationAvoidContent?: string
   }
 }
 

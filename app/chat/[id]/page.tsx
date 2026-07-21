@@ -30,6 +30,7 @@ import {
   runCommand,
 } from "@/lib/chat-engine"
 import { getChatMemoryMemo } from "@/lib/chat-memory-storage"
+import { areAssistantResponsesSubstantiallyDuplicate } from "@/lib/response-similarity"
 import {
   clearChatHistory,
   deleteChatMessages as deleteStoredChatMessages,
@@ -80,6 +81,7 @@ const CHARACTER_NAME = "이무기"
 const CHARACTER_EMOJI = "🐉"
 const AUTO_IMAGE_GENERATION_CHANCE = 0
 const AUTO_IMAGE_GENERATION_LIMIT = 3
+const AUTO_ADVANCE_MODEL_CONTENT = `[System: 사용자가 새 행동이나 대사를 입력하지 않고 침묵하고 있습니다. 직전 장면의 확정 상태를 유지한 채 캐릭터의 행동이나 다음 대사로 스토리를 자연스럽게 한 단계 이어가세요. 사용자의 새 행동, 대사, 감정, 동의나 반응을 대신 만들지 마세요.]`
 
 const storyStatus: StoryStatus = {
   useChapters: true,
@@ -107,6 +109,27 @@ function getStatusLocation(statusBarText?: string) {
 
 function makeTurnId() {
   return `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function isAutoAdvanceTurn(message: ChatMessage, allMessages: ChatMessage[]) {
+  if (message.isAutoAdvance === true || message.retryPayload?.autoAdvance === true) return true
+  if (!message.turnId) return false
+
+  const sameTurnMessages = allMessages.filter((candidate) => candidate.turnId === message.turnId)
+  return !sameTurnMessages.some((candidate) => candidate.type === "user")
+}
+
+function getLatestAssistantContent(allMessages: ChatMessage[]) {
+  return [...allMessages]
+    .reverse()
+    .find((message) => message.type === "ai" && message.content.trim())
+    ?.content.trim() || ""
+}
+
+function rejectDuplicateAssistantResponse(content: string, reference: string) {
+  if (reference && areAssistantResponsesSubstantiallyDuplicate(content, reference)) {
+    throw new Error("새 답변이 이전 답변을 반복해서 채택하지 않았어요.")
+  }
 }
 
 function isPersistableChatMessage(message: ChatMessage) {
@@ -699,17 +722,22 @@ export default function ChatPage() {
     content: string,
     mentions?: string[],
     image?: { url: string; name?: string },
+    options?: { autoAdvance?: boolean },
   ) => {
     const displayContent = content.trim()
+    const isAutoAdvance = options?.autoAdvance === true && !displayContent && !image
+    if (!displayContent && !image && !isAutoAdvance) return
     const parsedInput = parseChatInput(displayContent, chatInputCharacters, mentions)
     if (parsedInput.kind === "character_line" && parsedInput.isEmptyLine) {
       toast.error("대사 내용을 입력하세요.")
       return
     }
 
-    const modelContent = parsedInput.kind === "plain"
-      ? buildModelContentFromUserInput(displayContent)
-      : displayContent
+    const modelContent = isAutoAdvance
+      ? AUTO_ADVANCE_MODEL_CONTENT
+      : parsedInput.kind === "plain"
+        ? buildModelContentFromUserInput(displayContent)
+        : displayContent
 
     const replyCreditCost = CREDIT_COSTS.message + selectedModel.creditCostPerReply
     if (credits < replyCreditCost) {
@@ -730,12 +758,14 @@ export default function ChatPage() {
     }
 
     const turnId = makeTurnId()
-    const userMessage = {
-      ...buildUserMessage(displayContent, chatInputCharacters, mentions, image),
-      ...(modelContent !== displayContent ? { originalContent: modelContent } : {}),
-      turnId,
-      status: "completed" as const,
-    }
+    const userMessage = isAutoAdvance
+      ? null
+      : {
+          ...buildUserMessage(displayContent, chatInputCharacters, mentions, image),
+          ...(modelContent !== displayContent ? { originalContent: modelContent } : {}),
+          turnId,
+          status: "completed" as const,
+        }
     const openingMessageId = selectedIntroScenario
       ? `intro-${chatId}-${selectedIntroScenario.id}`
       : ""
@@ -754,7 +784,7 @@ export default function ChatPage() {
         }
       : null
     const historyBeforeUser = openingMessage ? [openingMessage] : messages
-    const generationHistory = [...historyBeforeUser, userMessage]
+    const generationHistory = userMessage ? [...historyBeforeUser, userMessage] : historyBeforeUser
     const openingIsInHistory = Boolean(
       openingMessageId && historyBeforeUser.some((message) => message.id === openingMessageId),
     )
@@ -771,6 +801,7 @@ export default function ChatPage() {
       speakerId: currentCharacter?.id,
       speakerName: characterName,
       turnId,
+      isAutoAdvance,
     }
     const handleStreamEvent = (event: ChatStreamEvent) => {
       if (event.event_type === "phase") {
@@ -816,6 +847,8 @@ export default function ChatPage() {
               fallback: event.fallback,
               fallbackProvider: event.fallback_provider,
               fallbackModel: event.fallback_model,
+              providerOutcome: event.provider_outcome,
+              timeoutStage: event.timeout_stage,
               savedContent,
               streamedContent: message.content,
             }
@@ -831,11 +864,11 @@ export default function ChatPage() {
     }
     setMessages((prev) => [
       ...(prev.length === 0 && openingMessage ? [openingMessage] : prev),
-      userMessage,
+      ...(userMessage ? [userMessage] : []),
       streamingMessage,
     ])
     setIsTyping(true)
-    setTypingLabel(undefined)
+    setTypingLabel(isAutoAdvance ? "스토리를 이어가는 중..." : undefined)
     setTypingVariant("text")
     const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
     const plannedDialogueAssistChars = getDialogueAssistCharCount(
@@ -855,15 +888,20 @@ export default function ChatPage() {
           selectedModelId,
           {
             roomId: chatId,
-            userMessageId: userMessage.id,
+            userMessageId: userMessage?.id,
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
+            autoAdvance: isAutoAdvance,
             answerLength,
             onStreamEvent: handleStreamEvent,
           },
         )),
         turnId,
+        isAutoAdvance,
+      }
+      if (isAutoAdvance) {
+        rejectDuplicateAssistantResponse(reply.content, getLatestAssistantContent(generationHistory))
       }
       if (!spendCredit(replyCreditCost, "채팅 답변 생성", selectedModel.creditCostPerReply > 0 ? `${selectedModel.label} 모델 답변` : "기본 답변")) {
         throw new Error("Insufficient reply credits")
@@ -871,7 +909,7 @@ export default function ChatPage() {
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
         previousStatus: runtimeStoryStatus,
-        userContent: displayContent,
+        userContent: isAutoAdvance ? "" : displayContent,
         replyContent: reply.content,
       })
       const nextChatStoryStatus = {
@@ -922,17 +960,19 @@ export default function ChatPage() {
         timestamp: new Date(),
         status: "failed",
         turnId,
+        isAutoAdvance,
         isGenerationError: true,
         retryPayload: {
           content,
           mentions,
           image,
           turnId,
+          autoAdvance: isAutoAdvance,
         },
       }
       setMessages((prev) =>
         prev.some((message) => message.id === characterMessageId)
-          ? prev.map((message) => message.id === characterMessageId ? errorMessage : message)
+          ? prev.map((message) => message.id === characterMessageId ? { ...message, ...errorMessage } : message)
           : [...prev, errorMessage],
       )
       toast.error(errorText)
@@ -949,7 +989,12 @@ export default function ChatPage() {
     if (!failedMessage || !retryPayload) return
 
     const retryTurnId = retryPayload.turnId || failedMessage.turnId || makeTurnId()
+    const retryIsAutoAdvance = isAutoAdvanceTurn(failedMessage, messages)
+    const retryIsRegeneration = Boolean(retryPayload.regenerationAvoidContent?.trim())
     const retryMessages = messages.filter((message) => message.id !== messageId)
+    const retryModelContent = retryIsAutoAdvance
+      ? AUTO_ADVANCE_MODEL_CONTENT
+      : retryPayload.content
     const characterMessageId = `assistant-${retryTurnId}`
     const streamingMessage: ChatMessage = {
       id: characterMessageId,
@@ -960,10 +1005,11 @@ export default function ChatPage() {
       speakerId: currentCharacter?.id,
       speakerName: characterName,
       turnId: retryTurnId,
+      isAutoAdvance: retryIsAutoAdvance,
     }
     const handleStreamEvent = (event: ChatStreamEvent) => {
       if (event.event_type === "phase") {
-        setTypingLabel(event.phase_label)
+        setTypingLabel(retryIsRegeneration ? "답변 재생성 중" : event.phase_label)
         if (process.env.NODE_ENV !== "production") {
           console.debug("[generation phase]", {
             runId: event.run_id,
@@ -997,6 +1043,8 @@ export default function ChatPage() {
               fallback: event.fallback,
               fallbackProvider: event.fallback_provider,
               fallbackModel: event.fallback_model,
+              providerOutcome: event.provider_outcome,
+              timeoutStage: event.timeout_stage,
               savedContent,
               streamedContent: message.content,
             }
@@ -1012,7 +1060,13 @@ export default function ChatPage() {
     }
     setMessages([...retryMessages, streamingMessage])
     setIsTyping(true)
-    setTypingLabel(undefined)
+    setTypingLabel(
+      retryIsRegeneration
+        ? "답변 재생성 중"
+        : retryIsAutoAdvance
+          ? "스토리를 이어가는 중..."
+          : undefined,
+    )
     setTypingVariant("text")
     const autoCommandIds = readingSettings.selectedCommandIds.filter((id) => AUTO_COMMAND_IDS.includes(id))
     const plannedDialogueAssistChars = getDialogueAssistCharCount(
@@ -1033,29 +1087,38 @@ export default function ChatPage() {
       const reply = {
         ...(await generateAssistantReply(
           retryMessages,
-          retryPayload.content,
+          retryModelContent,
           selectedIntroScenario,
           buildImageCommandContext(retryMessages),
           selectedModelId,
           {
             roomId: chatId,
-            userMessageId: retryMessages.findLast((message) => message.type === "user")?.id,
+            userMessageId: retryIsAutoAdvance
+              ? undefined
+              : retryMessages.findLast((message) => message.type === "user")?.id,
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
+            autoAdvance: retryIsAutoAdvance,
+            regenerationAvoidContent: retryPayload.regenerationAvoidContent,
             answerLength,
             onStreamEvent: handleStreamEvent,
           },
         )),
         turnId: retryTurnId,
+        isAutoAdvance: retryIsAutoAdvance,
       }
+      const retryDuplicateReference = retryPayload.regenerationAvoidContent || (
+        retryIsAutoAdvance ? getLatestAssistantContent(retryMessages) : ""
+      )
+      rejectDuplicateAssistantResponse(reply.content, retryDuplicateReference)
       if (retryCreditCost > 0 && !spendCredit(retryCreditCost, "답변 재생성", `${selectedModel.label} 모델 재생성`)) {
         throw new Error("Insufficient model credits")
       }
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
         previousStatus: runtimeStoryStatus,
-        userContent: retryPayload.content,
+        userContent: retryIsAutoAdvance ? "" : retryPayload.content,
         replyContent: reply.content,
       })
       const nextChatStoryStatus = {
@@ -1105,7 +1168,7 @@ export default function ChatPage() {
     } catch (error) {
       setMessages((prev) =>
         prev.some((message) => message.id === characterMessageId)
-          ? prev.map((message) => message.id === characterMessageId ? { ...failedMessage, status: "failed" } : message)
+          ? prev.map((message) => message.id === characterMessageId ? { ...message, ...failedMessage, status: "failed" } : message)
           : [...prev, { ...failedMessage, status: "failed" }],
       )
       toast.error(error instanceof Error ? error.message : "다시 생성하지 못했어요.")
@@ -1191,37 +1254,76 @@ export default function ChatPage() {
     const targetMessage = messages[targetIndex]
     if (targetIndex < 0 || !targetMessage || targetMessage.type !== "ai") return
 
+    const isAutoAdvanceRewrite = isAutoAdvanceTurn(targetMessage, messages)
     const turnMessages = targetMessage.turnId
       ? messages.filter((message) => message.turnId === targetMessage.turnId)
       : []
-    const sourceUserMessage =
-      turnMessages.find((message) => message.type === "user" && message.content.trim()) ??
-      messages.slice(0, targetIndex).findLast((message) => message.type === "user" && message.content.trim())
-    const userContent = (sourceUserMessage?.originalContent || sourceUserMessage?.content || "").trim()
+    const sourceUserMessage = isAutoAdvanceRewrite
+      ? undefined
+      : turnMessages.find((message) => message.type === "user" && message.content.trim()) ??
+        messages.slice(0, targetIndex).findLast((message) => message.type === "user" && message.content.trim())
+    const userContent = isAutoAdvanceRewrite
+      ? AUTO_ADVANCE_MODEL_CONTENT
+      : (sourceUserMessage?.originalContent || sourceUserMessage?.content || "").trim()
     if (!userContent) {
       toast.error("다시 생성할 사용자 메시지를 찾지 못했어요.")
       return
     }
 
     const rewriteHistoryBase = messages.slice(0, targetIndex)
-    const sourceUserIndex = sourceUserMessage
-      ? rewriteHistoryBase.findIndex((message) => message.id === sourceUserMessage.id)
-      : -1
-    const failedAssistantMessage: ChatMessage = {
-      ...targetMessage,
-      id: `${targetMessage.id}-failed-rewrite`,
-      content: targetMessage.content,
-      timestamp: new Date(),
+    // Regeneration must not include the answer being replaced. Supplying the old
+    // assistant message as context makes the model treat it as the preferred
+    // continuation and often reproduce it verbatim.
+    const rewriteHistory = rewriteHistoryBase
+    const handleRewriteStreamEvent = (event: ChatStreamEvent) => {
+      if (event.event_type === "phase") {
+        // 재생성 중에는 공급자 단계 문구가 재생성 상태를 덮어쓰지 않게 한다.
+        setTypingLabel("답변 재생성 중")
+        return
+      }
+      if (event.event_type === "raw_delta") return
+
+      setMessages((prev) =>
+        prev.map((message) => {
+          if (message.id !== messageId) return message
+          if (event.is_final_event) {
+            return {
+              ...message,
+              content: event.saved_content ?? message.content,
+              status: event.status === "failed" ? "failed" : "completed",
+              generationRunId: event.run_id,
+              provider: event.provider,
+              model: event.model,
+              attemptedModel: event.attempted_model,
+              outputModel: event.output_model ?? undefined,
+              validationStatus: event.validation_status,
+              validationFailures: event.validation_failures,
+              validationAttempts: event.validation_attempts,
+              repairAttempted: event.repair_attempted,
+              fallback: event.fallback,
+              fallbackProvider: event.fallback_provider,
+              fallbackModel: event.fallback_model,
+              providerOutcome: event.provider_outcome,
+              timeoutStage: event.timeout_stage,
+            }
+          }
+          return {
+            ...message,
+            content: `${message.content}${event.content ?? ""}`,
+            status: "streaming",
+          }
+        }),
+      )
     }
-    const rewriteHistory = sourceUserIndex >= 0
-      ? [
-          ...rewriteHistoryBase.slice(0, sourceUserIndex),
-          failedAssistantMessage,
-          ...rewriteHistoryBase.slice(sourceUserIndex),
-        ]
-      : rewriteHistoryBase
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId
+          ? { ...message, content: "", status: "streaming" }
+          : message,
+      ),
+    )
     setIsTyping(true)
-    setTypingLabel(undefined)
+    setTypingLabel("답변 재생성 중")
     setTypingVariant("text")
 
     try {
@@ -1233,8 +1335,13 @@ export default function ChatPage() {
         selectedModelId,
         {
           bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
+          debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
+          onStreamEvent: handleRewriteStreamEvent,
+          regenerationAvoidContent: targetMessage.content,
+          autoAdvance: isAutoAdvanceRewrite,
         },
       )
+      rejectDuplicateAssistantResponse(rewrittenReply.content, targetMessage.content)
 
       setMessages((prev) =>
         prev.map((msg) =>
@@ -1243,6 +1350,23 @@ export default function ChatPage() {
                 ...msg,
                 content: rewrittenReply.content,
                 timestamp: new Date(),
+                status: "completed",
+                isAutoAdvance: isAutoAdvanceRewrite || msg.isAutoAdvance,
+                generationRunId: rewrittenReply.generationRunId,
+                provider: rewrittenReply.provider,
+                model: rewrittenReply.model,
+                attemptedModel: rewrittenReply.attemptedModel,
+                outputModel: rewrittenReply.outputModel,
+                validationStatus: rewrittenReply.validationStatus,
+                validationFailures: rewrittenReply.validationFailures,
+                validationAttempts: rewrittenReply.validationAttempts,
+                repairAttempted: rewrittenReply.repairAttempted,
+                fallback: rewrittenReply.fallback,
+                fallbackProvider: rewrittenReply.fallbackProvider,
+                fallbackModel: rewrittenReply.fallbackModel,
+                providerOutcome: rewrittenReply.providerOutcome,
+                timeoutStage: rewrittenReply.timeoutStage,
+                savedContent: rewrittenReply.savedContent,
                 speakerId: rewrittenReply.speakerId ?? msg.speakerId,
                 speakerName: rewrittenReply.speakerName ?? msg.speakerName,
               }
@@ -1252,7 +1376,27 @@ export default function ChatPage() {
       setEditedMessageIds((prev) => new Set(prev).add(messageId))
       toast.success("메시지를 다시 작성했어요.")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "다시 작성하지 못했어요.")
+      const errorText = error instanceof Error ? error.message : "다시 작성하지 못했어요."
+      const rewriteErrorMessage: ChatMessage = {
+        id: messageId,
+        type: "status",
+        content: `새 답변을 채택하지 않았어요.\n${errorText}\n다시 생성할 수 있습니다.`,
+        timestamp: new Date(),
+        status: "failed",
+        turnId: targetMessage.turnId,
+        isGenerationError: true,
+        isAutoAdvance: isAutoAdvanceRewrite,
+        retryPayload: {
+          content: userContent,
+          turnId: targetMessage.turnId,
+          autoAdvance: isAutoAdvanceRewrite,
+          regenerationAvoidContent: targetMessage.content,
+        },
+      }
+      setMessages((prev) =>
+        prev.map((message) => message.id === messageId ? { ...message, ...rewriteErrorMessage } : message),
+      )
+      toast.error(errorText)
     } finally {
       setIsTyping(false)
       setTypingLabel(undefined)

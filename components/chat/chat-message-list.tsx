@@ -347,6 +347,7 @@ export function ChatMessageList({
               key={message.id}
               message={message}
               extraMessages={extraMessages}
+              typingLabel={typingLabel}
               onRewrite={onRewriteMessage}
               onRetry={onRetryFailedMessage}
               onDelete={onDeleteMessage}
@@ -394,6 +395,7 @@ export function ChatMessageList({
 interface BubbleMessageBubbleProps {
   message: ChatMessage
   extraMessages?: ChatMessage[]
+  typingLabel?: string
   onRewrite?: (messageId: string) => void
   onRetry?: (messageId: string) => void
   onDelete?: (messageId: string) => void
@@ -416,6 +418,7 @@ interface BubbleMessageBubbleProps {
 function BubbleMessageBubble({
   message,
   extraMessages = [],
+  typingLabel,
   onRewrite,
   onRetry,
   onDelete,
@@ -579,10 +582,9 @@ function BubbleMessageBubble({
     ...(message.speakerName ? [message.speakerName] : []),
   ]
   const displayContent = normalizeMessageNewlines(message.content)
+  const streamingLabel = (typingLabel?.trim() || "답변 생성 중").replace(/\.+$/, "")
   const statusLabel =
-    message.status === "streaming"
-      ? "답변 생성 중..."
-      : message.status === "failed"
+    message.status === "failed"
         ? "생성 실패"
         : message.status === "repaired"
           ? "검수 후 수정됨"
@@ -782,12 +784,25 @@ function BubbleMessageBubble({
             </p>
           )}
           {!displayContent && message.status === "streaming" && (
-            <p
-              className="whitespace-pre-wrap break-words opacity-70 [word-break:keep-all]"
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex min-h-5 items-center gap-2 opacity-70"
               style={{ fontSize: Math.max(12, textSize - 1), lineHeight }}
             >
-              답변 생성 중...
-            </p>
+              <span>{streamingLabel}</span>
+              <BubbleTypingDots color="currentColor" />
+            </div>
+          )}
+          {displayContent && message.status === "streaming" && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="mt-1 flex items-center gap-1.5 text-[10px] font-medium opacity-60"
+            >
+              <span>{streamingLabel}</span>
+              <BubbleTypingDots color="currentColor" compact />
+            </div>
           )}
           {statusLabel && displayContent && (
             <p className="mt-1 text-[10px] font-medium opacity-60">{statusLabel}</p>
@@ -974,7 +989,7 @@ function UserSegmentedMessage({
           return (
             <p
               key={`user-action-${index}`}
-              className="max-w-[82%] whitespace-pre-wrap break-words px-1.5 py-0.5 text-right italic [word-break:keep-all] sm:max-w-[80%] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+              className="max-w-[82%] whitespace-pre-wrap break-words px-1.5 py-0.5 text-right [word-break:keep-all] sm:max-w-[80%] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
               style={actionStyle}
             >
               {renderHighlightedMentions(part.text, mentionNames)}
@@ -1251,6 +1266,27 @@ function isDarkColor(hexColor: string) {
   const blue = Number.parseInt(hex.slice(4, 6), 16)
   const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255
   return luminance < 0.55
+}
+
+function BubbleTypingDots({ color, compact = false }: { color: string; compact?: boolean }) {
+  const dotSize = compact ? "h-1 w-1" : "h-1.5 w-1.5"
+
+  return (
+    <span className="inline-flex items-center gap-1" aria-hidden="true">
+      <span
+        className={cn(dotSize, "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:0ms]")}
+        style={{ backgroundColor: color }}
+      />
+      <span
+        className={cn(dotSize, "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:150ms]")}
+        style={{ backgroundColor: color }}
+      />
+      <span
+        className={cn(dotSize, "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:300ms]")}
+        style={{ backgroundColor: color }}
+      />
+    </span>
+  )
 }
 
 function BubbleImageGeneratingIndicator({ label, themeConfig }: { label: string; themeConfig: ChatThemeConfig }) {
