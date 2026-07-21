@@ -2061,6 +2061,7 @@ async function judgeRoleplayQuality({
         })
       if (
         process.env.NODE_ENV !== "production" &&
+        process.env.DEBUG_RP_JUDGE_SUPPRESSED === "1" &&
         (parsed.objectiveUserStateAssertion.failed !== sanitized.objectiveUserStateAssertion.failed ||
           parsed.userControlByNarration.failed !== sanitized.userControlByNarration.failed)
       ) {
@@ -2105,6 +2106,7 @@ async function judgeRoleplayQuality({
         })
       if (
         process.env.NODE_ENV !== "production" &&
+        process.env.DEBUG_RP_JUDGE_SUPPRESSED === "1" &&
         (parsed.objectiveUserStateAssertion.failed !== sanitized.objectiveUserStateAssertion.failed ||
           parsed.userControlByNarration.failed !== sanitized.userControlByNarration.failed)
       ) {
