@@ -106,8 +106,8 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v11"
-const NORMALIZER_VERSION = "rp-normalizer-v3"
+const PROMPT_VERSION = "rp-pipeline-v12"
+const NORMALIZER_VERSION = "rp-normalizer-v4"
 const VALIDATOR_VERSION = "rp-validator-v13"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
@@ -1245,11 +1245,11 @@ export function compileRoleplayContext(
   ) {
     assistantOpeningSources.push(previousAssistantContent)
   }
-  const recentAssistantContents = assistantOpeningSources.slice(-3)
+  const recentAssistantContents = assistantOpeningSources.slice(-5)
   const recentAssistantOpenings = recentAssistantContents.map(extractAssistantOpening)
-  const lastTwoAssistantContents = recentAssistantContents.slice(-2)
-  const avoidCharacterNameOpening = lastTwoAssistantContents.length === 2 &&
-    lastTwoAssistantContents.every((content) => startsWithCharacterNameSubject(content, characterName))
+  const avoidCharacterNameOpening = recentAssistantContents.some((content) =>
+    startsWithCharacterNameSubject(content, characterName),
+  )
   const establishedSceneState = inferEstablishedSceneState(previousAssistantContent)
   const establishedPhysicalState = establishedSceneState.some((state) =>
     /몸|허리|엉덩이|얼굴|귀|가슴|하체|목덜미|쇄골|입술|입을\s*맞|무릎|다리\s*사이/u.test(state),
@@ -2803,8 +2803,34 @@ export function normalizeOpenRouterOutput(content: string) {
   return separateQuotedDialogueParagraphs(cleanedParagraphs.join("\n\n")).trim()
 }
 
-function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledRoleplayContext) {
-  const normalized = normalizeOpenRouterOutput(content)
+function normalizeAutoAdvanceResponseOpening(content: string, ctx: CompiledRoleplayContext) {
+  if (!content || !ctx.turnPolicy.autoAdvance) return content
+
+  const characterName = ctx.characterName.trim()
+  const actorSubject = characterName
+    ? `(?:${escapeRegExp(characterName)}|그|그녀)(?:은|는|이|가)\\s+`
+    : `(?:그|그녀)(?:은|는|이|가)\\s+`
+  const answerInsteadPattern = new RegExp(`^(\\s*)(${actorSubject})대답 대신\\s+`, "u")
+  const noAnswerPattern = new RegExp(
+    `^(\\s*)(${actorSubject})(?:아무\\s*)?대답(?:을|도)?\\s*(?:하지|하지도)\\s*않고\\s*`,
+    "u",
+  )
+  const replyToRemarkPattern = new RegExp(
+    `^(\\s*)(${actorSubject})(?:그|상대의)\\s*(?:말|질문)에\\s*답(?:하듯|하며|하는\\s*대신)\\s*`,
+    "u",
+  )
+
+  return content
+    .replace(answerInsteadPattern, "$1$2")
+    .replace(noAnswerPattern, "$1$2")
+    .replace(replyToRemarkPattern, "$1$2")
+    .replace(/^(\s*)대답 대신\s+/u, "$1")
+    .replace(/^(\s*)(?:아무\s*)?대답(?:을|도)?\s*(?:하지|하지도)\s*않고\s*/u, "$1")
+    .replace(/^(\s*)(?:그|상대의)\s*(?:말|질문)에\s*답(?:하듯|하며|하는\s*대신)\s*/u, "$1")
+}
+
+export function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledRoleplayContext) {
+  const normalized = normalizeAutoAdvanceResponseOpening(normalizeOpenRouterOutput(content), ctx)
   if (!normalized || !ctx.avoidCharacterNameOpening) return normalized
 
   const characterName = ctx.characterName.trim()
@@ -2896,10 +2922,11 @@ ${compiledContext.toneRules.join("\n")}
 
 [도입부 변주]
 - 최근 assistant 도입부: ${compiledContext.recentAssistantOpenings.length > 0 ? compiledContext.recentAssistantOpenings.map((opening) => `"${opening}"`).join(" / ") : "없음"}
-- 최근 답변들이 "${compiledContext.characterName}은/는/이/가"로 연속 시작해 이번에는 다른 도입부가 필수인지: ${compiledContext.avoidCharacterNameOpening ? "예" : "아니오"}
-- 같은 도입 문법이 최근 답변에서 연속 반복된 경우에만 대사 먼저, 주어를 생략한 즉각 동작, 이미 장면에 있는 소리·감각·표정 변화 중 가장 자연스러운 하나로 바꾼다.
-- "${compiledContext.characterName}은/는/이/가" 시작 자체는 금지가 아니다. 최근 도입 패턴과 겹치지 않으면 장면상 자연스럽게 사용할 수 있다.
-- 도입 방식의 고정 순환표를 만들지 말고 장면과 최신 입력에 맞춰 선택한다. 변주를 위해 새 날씨, 장소, 소품은 발명하지 않는다.
+- 이번 답변은 위 최근 도입부 어느 것과도 다르게 시작한다.
+- 첫 문장의 주어, 핵심 동사, 문장 순서와 대사/지문 시작 방식을 최근 도입부와 겹치지 않게 구성한다.
+- 최근 도입부 중 하나라도 "${compiledContext.characterName}은/는/이/가"로 시작했다면 이번에는 이름 주어로 시작하지 않는다: ${compiledContext.avoidCharacterNameOpening ? "예" : "아니오"}.
+- 대사 먼저, 주어를 생략한 즉각 동작, 이미 존재하는 소리·감각·표정·공간 변화 중 최근에 사용하지 않은 자연스러운 방식을 고른다.
+- 정해진 도입 문구나 순환표를 만들지 말고 현재 장면에서 실제로 일어나는 내용으로 시작한다. 변주를 위해 새 날씨, 장소, 소품은 발명하지 않는다.
 
 [이번 턴 허용 범위]
 - 신체 접촉 허용: ${turnPolicy.allowPhysicalContact ? "예" : "아니오"}
@@ -2917,7 +2944,9 @@ ${turnPolicy.allowPhysicalContact
 - 사용자가 명시하지 않은 소품이나 장소를 새로 만들지 않는다.
 - 기존 소품 목록에 없는 물건을 새로 등장시키지 않는다.
 - 사용자의 말을 그대로 되풀이하지 말고 의미에 반응한다.
-${turnPolicy.autoAdvance ? "- 자동 진행에서는 직전 답변에서 이미 완료된 이동·접촉·밀착을 다시 실행하지 않는다. 확정 상태를 유지한 다음 순간부터 새로운 캐릭터 반응을 쓴다." : ""}
+${turnPolicy.autoAdvance ? `- 자동 진행에서는 직전 답변에서 이미 완료된 이동·접촉·밀착을 다시 실행하지 않는다. 확정 상태를 유지한 다음 순간부터 새로운 캐릭터 반응을 쓴다.
+- 자동 진행에는 새로운 사용자 대사나 질문이 없다. 캐릭터가 답할 말이 생긴 것처럼 "대답 대신", "대답하지 않고", "그 말에 답하며"로 시작하지 않는다.
+- 기다림을 생략하는 의미가 필요하면 "상대의 대답을 기다리는 대신"처럼 대답의 주체를 정확히 쓰거나, 설명 없이 다음 행동으로 바로 이어간다.` : ""}
 ${compiledContext.regenerationAvoidContent ? "- 재생성에서는 폐기된 기존 답변의 문장, 대사, 행동 순서와 결말을 복사하지 않는다. 폐기 답변 이전의 확정 상태에서 출발해 다른 다음 행동과 대사를 선택한다." : ""}
 
 [이번 응답 목표]
@@ -2927,10 +2956,27 @@ ${compiledContext.responseGoal}
 ${compiledContext.bannedThisTurn.length > 0 ? compiledContext.bannedThisTurn.map((meaning) => `- ${meaning}`).join("\n") : "- 최근 답변의 결론이나 행동을 유의어로 반복하지 않는다."}`
 }
 
+function buildTurnOpeningInstruction(compiledContext: CompiledRoleplayContext) {
+  const recentOpenings = compiledContext.recentAssistantOpenings
+    .map((opening) => opening.slice(0, 70))
+    .map((opening) => `- ${opening}`)
+    .join("\n")
+
+  return `[이번 도입부 필수 조건]
+${recentOpenings || "- 비교할 최근 도입부 없음"}
+위 최근 도입부와 주어, 핵심 동사, 문장 순서, 대사/지문 시작 방식이 모두 다른 첫 문장을 쓴다.
+${compiledContext.avoidCharacterNameOpening ? `최근에 사용했으므로 "${compiledContext.characterName}은/는/이/가"로 시작하지 않는다.` : "이름 주어 시작도 가능하지만 정형 문구처럼 사용하지 않는다."}
+정해진 문구를 순환하지 말고 현재 장면의 실제 다음 순간으로 시작한다.`
+}
+
 function formatCompiledUserInputForModel(compiledContext: CompiledRoleplayContext) {
   const { latestInput, turnPolicy } = compiledContext
   if (turnPolicy.autoAdvance) {
-    return AUTO_ADVANCE_TRIGGER_CONTENT
+    return `${AUTO_ADVANCE_TRIGGER_CONTENT}
+
+${buildTurnOpeningInstruction(compiledContext)}
+
+새 사용자 대사나 질문이 없으므로 캐릭터가 답할 말이 생긴 것처럼 "대답 대신"으로 시작하지 않는다.`
   }
 
   const actorName = latestInput.actor || compiledContext.userName
@@ -2945,7 +2991,9 @@ function formatCompiledUserInputForModel(compiledContext: CompiledRoleplayContex
 이번 턴 조건: 긴장도 ${turnPolicy.escalation}, 플러팅 채널 ${turnPolicy.flirtChannel}, 신체 접촉 허용 ${turnPolicy.allowPhysicalContact ? "예" : "아니오"}.
 재생성 조건: ${compiledContext.regenerationAvoidContent ? "폐기된 기존 답변과 다른 행동 및 대사 전개를 작성한다." : "일반 생성"}.
 기존 소품: ${compiledContext.allowedProps.length > 0 ? compiledContext.allowedProps.join(", ") : "없음"}.
-응답 목표: ${compiledContext.responseGoal}`
+응답 목표: ${compiledContext.responseGoal}
+
+${buildTurnOpeningInstruction(compiledContext)}`
 }
 
 export function generateDynamicPrompt({
@@ -3012,13 +3060,13 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 대사와 서술은 줄바꿈으로 분리한다.
 - 따옴표 밖 지문은 항상 "${characterName}" 또는 그/그녀를 중심으로 한 3인칭 제한 시점 소설체로 쓰되, 모든 문장에 이름이나 대명사를 주어로 반복하지 않는다. 한국어에서 자연스러우면 주어를 생략한다.
 - 지문에서 "나는", "내가", "기다리고 있었어", "귀엽네" 같은 1인칭 주어와 대화체 어미를 쓰지 않는다.
-- 지문은 -했다/-있었다/-한다 계열로 끝낸다. "${characterName}은 ..."만 반복하지 말고 "짧은 웃음이 새어 나왔다", "대답 대신 고개가 기울었다"처럼 캐릭터 중심이 분명한 무주어·부분 주어 문장도 자연스럽게 섞는다.
+- 지문은 -했다/-있었다/-한다 계열로 끝낸다. "${characterName}은 ..."만 반복하지 말고 "짧은 웃음이 새어 나왔다", "고개가 느릿하게 기울었다"처럼 캐릭터 중심이 분명한 무주어·부분 주어 문장도 자연스럽게 섞는다.
 - 캐릭터의 속마음은 1인칭 독백으로 직접 쓰지 말고 "${characterName}은 ...라고 생각했다"처럼 3인칭 간접 서술로 표현한다.
 - 캐릭터다운 반말, 질문, 감탄은 큰따옴표 안의 대사에서만 사용한다.
 - 제목, 이름표, 구간명, 설명용 라벨을 붙이지 않는다.
 - 사용자의 마지막 말/행동에 대한 "${characterName}"의 즉각 반응을 먼저 쓴다.
 - 첫 문단은 대사로 바로 시작하거나, 이미 장면에 존재하는 감각·표정·동작으로 시작할 수 있다. 매 답변 첫 문장을 "${characterName}은/는/이/가"로 고정하지 않는다.
-- 최근 assistant 답변 두 개 이상이 연속으로 "${characterName}은/는/이/가"로 시작했을 때만 이번 답변은 다른 형태로 시작한다. 한 번의 이름 주어 시작만으로 금지하지 않는다.
+- 최근 assistant 도입부와 같은 주어·핵심 동사·문장 순서로 시작하지 않는다. 최근 도입부에 이름 주어 시작이 있으면 이번에는 다른 형태로 시작한다.
 - "${characterName}"의 새 행동은 서로 이어지는 1~2개의 구체적인 동작으로 제한한다.
 - 마지막을 억지로 멈춤, 기다림, 반응 확인으로 끝내지 않는다. 캐릭터 설정에 맞는 행동이나 짧은 대사로 자연스럽게 턴을 맺는다.
 - 같은 역할의 문단을 두 번 쓰지 않는다.
@@ -3027,6 +3075,9 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 
 [진행]
 - 최근 사용자 메시지에서 바로 이어간다.
+${compiledContext?.turnPolicy.autoAdvance ? `- 이번 요청은 자동 진행이다. 직전 assistant 답변 뒤에 새로운 사용자 대사나 질문이 들어오지 않았다.
+- 캐릭터가 새 사용자 발화에 답하는 것처럼 "대답 대신", "대답하지 않고", "그 말에 답하며"라고 쓰지 않는다.
+- 상대의 답변을 기다리지 않고 움직이는 장면이라면 그 주체를 명시하거나, 별도 연결 표현 없이 직전 상태의 다음 행동부터 쓴다.` : ""}
 - 사용자가 구체적인 대상, 이유, 허락, 가능 여부를 물으면 그 대상에 대한 캐릭터다운 답을 먼저 제시한다.
 - 질문을 그대로 되풀이하거나 "왜 궁금한데", "그게 왜 궁금해"처럼 질문 이유만 되묻고 끝내지 않는다.
 - 장면은 "${characterName}"의 반응만으로 한 번의 의미 있는 행동 흐름만 진행한다. 이미 시작된 합의된 접촉은 현재 수위에서 구체적으로 이어갈 수 있다.
