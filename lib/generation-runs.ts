@@ -5,6 +5,7 @@ export type GenerationTimeoutStage =
   | "request"
   | "input-normalizer"
   | "gemini-initial"
+  | "gemini-auto-advance-regeneration"
   | "gemini-first-chunk"
   | "gemini-stream-idle"
   | "gemini-stream-overall"

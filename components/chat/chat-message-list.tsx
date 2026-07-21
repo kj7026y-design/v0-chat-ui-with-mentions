@@ -787,21 +787,21 @@ function BubbleMessageBubble({
             <div
               role="status"
               aria-live="polite"
-              className="flex min-h-5 items-center gap-2 opacity-70"
+              className="flex min-h-10 flex-col items-center justify-center gap-1.5 opacity-70"
               style={{ fontSize: Math.max(12, textSize - 1), lineHeight }}
             >
-              <span>{streamingLabel}</span>
               <BubbleTypingDots color="currentColor" />
+              <span>{streamingLabel}</span>
             </div>
           )}
           {displayContent && message.status === "streaming" && (
             <div
               role="status"
               aria-live="polite"
-              className="mt-1 flex items-center gap-1.5 text-[10px] font-medium opacity-60"
+              className="mt-1 flex flex-col items-start gap-1 text-[10px] font-medium opacity-60"
             >
-              <span>{streamingLabel}</span>
               <BubbleTypingDots color="currentColor" compact />
+              <span>{streamingLabel}</span>
             </div>
           )}
           {statusLabel && displayContent && (

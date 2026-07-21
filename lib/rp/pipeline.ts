@@ -91,6 +91,7 @@ const OPENAI_TIMEOUT_MS = 45_000
 const QUALITY_JUDGE_TIMEOUT_MS = 15_000
 const DEFAULT_OPENAI_CHAT_MODEL = "gpt-4o-mini"
 const GEMINI_TIMEOUT_MS = 30_000
+const GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS = 90_000
 const GEMINI_STREAM_IDLE_TIMEOUT_MS = 20_000
 const GEMINI_STREAM_OVERALL_TIMEOUT_MS = 60_000
 const OPENROUTER_TIMEOUT_MS = 45_000
@@ -165,7 +166,13 @@ function debugRoleplayContent({
   content: string
 }) {
   if (process.env.NODE_ENV === "production") return
-  console.debug(`[RP ${stage} message]`, {
+  const stageLabel: Record<RoleplayContentLogStage, string> = {
+    original: "original provider output",
+    repaired: "repaired provider output",
+    fallback: "fallback provider output",
+    final: "final output",
+  }
+  console.debug(`[RP ${stageLabel[stage]}]`, {
     requestId: requestId || "untracked",
     model,
     contentLength: content.length,
@@ -176,6 +183,32 @@ function debugRoleplayContent({
 function debugRoleplayJson(label: string, payload: unknown) {
   if (process.env.NODE_ENV === "production") return
   console.debug(label, JSON.stringify(payload, null, 2))
+}
+
+function debugGenerationBoundary(
+  boundary: "START" | "END",
+  details: {
+    requestId: string
+    model: string
+    autoAdvance: boolean
+    regeneration: boolean
+    status?: "completed" | "failed" | "unknown"
+    elapsedMs?: number
+  },
+) {
+  if (process.env.NODE_ENV === "production") return
+
+  const divider = "=".repeat(88)
+  const suffix = [
+    `requestId=${details.requestId}`,
+    `model=${details.model}`,
+    `autoAdvance=${details.autoAdvance}`,
+    `regeneration=${details.regeneration}`,
+    details.status ? `status=${details.status}` : "",
+    typeof details.elapsedMs === "number" ? `elapsedMs=${details.elapsedMs}` : "",
+  ].filter(Boolean).join(" | ")
+
+  console.log(`\n${divider}\n[RP GENERATION ${boundary}] ${suffix}\n${divider}`)
 }
 
 type UserInputKind = "dialogue" | "action" | "dialogue_action" | "intent_summary" | "ooc_instruction"
@@ -3351,10 +3384,15 @@ async function handleRoleplayChatFromNormalized(
   )
   if (process.env.NODE_ENV !== "production") {
     console.debug("[RP input resolution]", {
+      requestId: requestId || "untracked",
+      model: profile.modelName,
       autoAdvanceSource: normalizedBody.autoAdvanceSource,
       effectiveAutoAdvance: compiledContext.turnPolicy.autoAdvance,
+      regeneration: Boolean(compiledContext.regenerationAvoidContent),
       latestRole: messages.at(-1)?.role,
+      modelInputChars: latestRawInput.length,
       normalizedInputType: normalizedLatestInput.inputType,
+      intent: normalizedLatestInput.intent,
       regenerationAvoidChars: normalizedBody.regenerationAvoidContent.length,
       previousAssistantChars: normalizedBody.previousAssistantContent.length,
     })
@@ -3941,10 +3979,15 @@ async function streamGeminiRoleplay({
   )
   if (process.env.NODE_ENV !== "production") {
     console.debug("[RP input resolution]", {
+      requestId: runId,
+      model: profile.modelName,
       autoAdvanceSource: normalizedBody.autoAdvanceSource,
       effectiveAutoAdvance: compiledContext.turnPolicy.autoAdvance,
+      regeneration: Boolean(compiledContext.regenerationAvoidContent),
       latestRole: messages.at(-1)?.role,
+      modelInputChars: latestRawInput.length,
       normalizedInputType: normalizedLatestInput.inputType,
+      intent: normalizedLatestInput.intent,
       regenerationAvoidChars: normalizedBody.regenerationAvoidContent.length,
       previousAssistantChars: normalizedBody.previousAssistantContent.length,
     })
@@ -4004,6 +4047,16 @@ async function streamGeminiRoleplay({
   let promptFeedback: unknown
   const candidatePartDiagnostics: Array<Record<string, unknown>> = []
   const geminiStreamAbortController = new AbortController()
+  const isAutoAdvanceRegeneration = compiledContext.turnPolicy.autoAdvance && Boolean(compiledContext.regenerationAvoidContent)
+  const geminiInitialTimeoutMs = isAutoAdvanceRegeneration
+    ? GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS
+    : GEMINI_TIMEOUT_MS
+  const geminiStreamOverallTimeoutMs = isAutoAdvanceRegeneration
+    ? GEMINI_AUTO_ADVANCE_REGENERATION_TIMEOUT_MS
+    : GEMINI_STREAM_OVERALL_TIMEOUT_MS
+  const geminiInitialTimeoutStage: GenerationTimeoutStage = isAutoAdvanceRegeneration
+    ? "gemini-auto-advance-regeneration"
+    : "gemini-initial"
 
   try {
     sendPhase("generating", "답변을 생성하는 중...")
@@ -4019,24 +4072,31 @@ async function streamGeminiRoleplay({
         }),
         abortSignal: geminiStreamAbortController.signal,
       },
-    }), GEMINI_TIMEOUT_MS, "gemini-initial")
+    }), geminiInitialTimeoutMs, geminiInitialTimeoutStage)
     const iterator = stream[Symbol.asyncIterator]()
     let receivedStreamChunk = false
 
     while (true) {
       const streamElapsedMs = Date.now() - geminiStreamStartedAt
-      const overallRemainingMs = GEMINI_STREAM_OVERALL_TIMEOUT_MS - streamElapsedMs
+      const overallRemainingMs = geminiStreamOverallTimeoutMs - streamElapsedMs
       if (overallRemainingMs <= 0) {
-        throw new ChatTimeoutError("gemini-stream-overall", GEMINI_STREAM_OVERALL_TIMEOUT_MS)
+        throw new ChatTimeoutError(
+          isAutoAdvanceRegeneration ? "gemini-auto-advance-regeneration" : "gemini-stream-overall",
+          geminiStreamOverallTimeoutMs,
+        )
       }
 
       const nextChunkTimeoutMs = receivedStreamChunk
         ? Math.min(GEMINI_STREAM_IDLE_TIMEOUT_MS, overallRemainingMs)
-        : Math.min(Math.max(1, GEMINI_TIMEOUT_MS - streamElapsedMs), overallRemainingMs)
+        : Math.min(Math.max(1, geminiInitialTimeoutMs - streamElapsedMs), overallRemainingMs)
       const nextChunk = await withTimeout(
         Promise.resolve(iterator.next()),
         nextChunkTimeoutMs,
-        receivedStreamChunk ? "gemini-stream-idle" : "gemini-first-chunk",
+        receivedStreamChunk
+          ? "gemini-stream-idle"
+          : isAutoAdvanceRegeneration
+            ? "gemini-auto-advance-regeneration"
+            : "gemini-first-chunk",
       )
       if (nextChunk.done) break
       receivedStreamChunk = true
@@ -4292,7 +4352,18 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
       })
       usedFallback = usedFallback || outputModel !== attemptedModel
     }
-  } else if (!savedContent || isGeminiSafetyFinishReason(finishReason) || (initialClassifiedValidation && hasClassifiedFailures(initialClassifiedValidation))) {
+  } else if (
+    !savedContent ||
+    isGeminiSafetyFinishReason(finishReason) ||
+    (
+      initialClassifiedValidation &&
+      hasClassifiedFailures(initialClassifiedValidation) &&
+      (
+        initialClassifiedValidation.hard.length > 0 ||
+        !fallbackProvider?.startsWith("openrouter-after-gemini-unavailable")
+      )
+    )
+  ) {
     const contentBeforeRepair = savedContent
     const outputModelBeforeRepair = outputModel
     const validationBeforeRepair = initialValidation
@@ -4442,7 +4513,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
     finalValidation &&
     finalClassifiedValidation &&
     !repairAttempted &&
-    hasClassifiedFailures(finalClassifiedValidation) &&
+    finalClassifiedValidation.hard.length > 0 &&
     fallbackProvider?.startsWith("openrouter-after-gemini")
   ) {
     repairAttempted = true
@@ -4770,8 +4841,16 @@ export function runChatEventStream({
       let eventId = 0
       let streamedContent = ""
       let ttftMs: number | undefined
+      let finalStatus: "completed" | "failed" | "unknown" = "unknown"
 
       const send = (payload: Record<string, unknown>) => {
+        if (payload.is_final_event === true) {
+          finalStatus = payload.status === "completed"
+            ? "completed"
+            : payload.status === "failed"
+              ? "failed"
+              : "unknown"
+        }
         controller.enqueue(encoder.encode(encodeStreamEvent({ event_id: eventId++, ...payload })))
       }
 
@@ -4785,6 +4864,13 @@ export function runChatEventStream({
           run_id: runId,
         })
       }
+
+      debugGenerationBoundary("START", {
+        requestId: runId,
+        model: providerModel,
+        autoAdvance: normalizedBody.autoAdvance,
+        regeneration: Boolean(normalizedBody.regenerationAvoidContent),
+      })
 
       try {
         if (roleplayEnabled && model.provider === "gemini" && !bypassRoleplayRules) {
@@ -4902,6 +4988,14 @@ export function runChatEventStream({
           user_message_id: userMessageId,
         })
       } finally {
+        debugGenerationBoundary("END", {
+          requestId: runId,
+          model: providerModel,
+          autoAdvance: normalizedBody.autoAdvance,
+          regeneration: Boolean(normalizedBody.regenerationAvoidContent),
+          status: finalStatus,
+          elapsedMs: Date.now() - startedAt,
+        })
         controller.close()
       }
     },
