@@ -57,6 +57,15 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
 
+function hasCompleteNamedReference(text: string, name: string) {
+  const trimmedName = name.trim()
+  if (!trimmedName) return false
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}_])${escapeRegExp(trimmedName)}(?:은|는|이|가|의|을|를|에게|한테|도|만)?(?![\\p{L}\\p{N}_])`,
+    "u",
+  ).test(text)
+}
+
 function stripDialogue(value: string) {
   return value
     .replace(/"[^"]*"/g, " ")
@@ -119,9 +128,8 @@ function isEvidenceInCharacterDialogue(evidence: string, output: string, charact
 }
 
 function hasUserReference(text: string, userName: string) {
-  const name = userName.trim()
   return (
-    Boolean(name && text.includes(name)) ||
+    hasCompleteNamedReference(text, userName) ||
     /(?:너|네|상대|사용자|유저)(?:는|가|의|를|에게|한테|도|와|과)?/.test(text)
   )
 }
@@ -129,7 +137,7 @@ function hasUserReference(text: string, userName: string) {
 function hasExplicitUserStateOwner(text: string, userName: string) {
   const name = userName.trim()
   const namedSubject = name
-    ? new RegExp(`${escapeRegExp(name)}(?:은|는|이|가|도|만)(?=$|[\\s,])`, "u").test(text)
+    ? new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(name)}(?:은|는|이|가|도|만)(?![\\p{L}\\p{N}_])`, "u").test(text)
     : false
   if (namedSubject || /(?:너는|너도|너만|네가|상대는|상대가|사용자는|사용자가|유저는|유저가)(?=$|[\s,])/u.test(text)) {
     return true
@@ -179,6 +187,24 @@ function hasCharacterStateOwner(text: string, characterName: string) {
   return namedOwner || characterPronounOwner
 }
 
+function findNarrationSentenceContainingEvidence(evidence: string, output: string) {
+  const normalizedEvidence = normalizeEvidenceText(evidence)
+  if (!normalizedEvidence) return ""
+
+  return stripDialogue(output)
+    .split(/(?<=[.!?。！？])\s+|[\r\n]+/u)
+    .map(normalizeEvidenceText)
+    .find((sentence) => sentence.includes(normalizedEvidence)) || ""
+}
+
+function hasCharacterNarrationSubject(text: string, characterName: string) {
+  const name = characterName.trim()
+  const namedSubject = name
+    ? new RegExp(`(?:^|[\\s,(])${escapeRegExp(name)}(?:은|는|이|가)(?![\\p{L}\\p{N}_])`, "u").test(text)
+    : false
+  return namedSubject || /(?:^|[\\s,(])(?:그|그녀)(?:는|가)(?![\\p{L}\\p{N}_])/u.test(text)
+}
+
 function hasObservableUserSurface(text: string) {
   return /(대답|말|어조|목소리|표정|눈빛|시선|태도|반응|미소|침묵|몸짓|고개)/.test(text)
 }
@@ -190,6 +216,12 @@ function hasCharacterInterpretationFrame(text: string) {
 function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudgeSanitizeContext) {
   if (isEvidenceInCharacterDialogue(evidence, ctx.output, ctx.characterName)) return false
   if (!isEvidenceInNarration(evidence, ctx.output)) return false
+  const containingSentence = findNarrationSentenceContainingEvidence(evidence, ctx.output)
+  if (
+    containingSentence &&
+    hasCharacterNarrationSubject(containingSentence, ctx.characterName) &&
+    !hasExplicitUserStateOwner(evidence, ctx.userName)
+  ) return false
   if (hasCharacterStateOwner(evidence, ctx.characterName)) return false
   if (!hasUserReference(evidence, ctx.userName)) return false
   if (!hasExplicitUserStateOwner(evidence, ctx.userName)) return false

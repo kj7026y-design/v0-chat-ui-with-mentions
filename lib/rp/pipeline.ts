@@ -1688,28 +1688,38 @@ function hasSubjectiveUserObservationFrame(sentence: string) {
   return /(것\s*같|듯(?:하|했)?|처럼\s*보|처럼\s*느껴|보였|느꼈|짐작|예상|기대|의심|오해|읽(?:었|히)|기다렸|기다린|기다리며|궁금|알\s*수\s*없|않을\s*것|할\s*것)/u.test(sentence)
 }
 
-function hasControlsUserAction(content: string, ctx: CompiledRoleplayContext) {
+function getControlsUserActionSentences(content: string, ctx: CompiledRoleplayContext) {
   const userName = ctx.userName.trim()
-  if (!userName) return false
+  if (!userName) return []
 
   const escaped = escapeRegExp(userName)
-  const subject = `${escaped}(?:은|는|이|가|의|에게|한테|도)?`
+  // Short persona names such as "나" must be complete Korean tokens. Without
+  // these boundaries, "소리 나게 ... 다가왔다" can be misread as if the
+  // persona named "나" were the subject of "다가왔다".
+  const tokenStart = "(?<![\\p{L}\\p{N}_])"
+  const tokenEnd = "(?![\\p{L}\\p{N}_])"
+  const subject = `${tokenStart}${escaped}(?:은|는|이|가|의|에게|한테|도)?${tokenEnd}`
+  const possessive = `${tokenStart}${escaped}의${tokenEnd}`
   const narrationSentences = splitIntoSentences(stripQuotedDialogue(content))
   const patterns = [
     new RegExp(`${subject}\\s*[^.?!\\n]{0,28}(?:눈|시선)을\\s*떼지\\s*않`, "u"),
-    new RegExp(`${escaped}의\\s*시선이\\s*[^.?!\\n]{0,24}(?:따라왔|머물렀)`, "u"),
+    new RegExp(`${possessive}\\s*시선이\\s*[^.?!\\n]{0,24}(?:따라왔|머물렀)`, "u"),
     new RegExp(`${subject}\\s*[^.?!\\n]{0,24}시선이\\s*[^.?!\\n]{0,16}(?:따라왔|머물렀)`, "u"),
     new RegExp(`${subject}\\s*[^.?!\\n]{0,24}(?:대답하지\\s*않|침묵했|움직이지\\s*않|다가오지\\s*않|물러서지\\s*않)`, "u"),
     new RegExp(`${subject}\\s*[^.?!\\n]{0,24}고개를\\s*(?:끄덕였|저었)`, "u"),
-    new RegExp(`${escaped}의\\s*표정이\\s*[^.?!\\n]{0,12}굳`, "u"),
+    new RegExp(`${possessive}\\s*표정이\\s*[^.?!\\n]{0,12}굳`, "u"),
     new RegExp(`${subject}\\s*[^.?!\\n]{0,24}(?:표정이\\s*굳|숨을\\s*삼켰|입술을\\s*다물었)`, "u"),
     new RegExp(`${subject}\\s*[^.?!\\n]{0,28}(?:말했다|물었다|답했다|웃었다|바라보았다|다가왔다|물러섰다|생각했다|느꼈다|잡았다|놓았다|내밀었다|돌렸다|피했다)`, "u"),
   ]
 
-  return narrationSentences.some((sentence) =>
+  return narrationSentences.filter((sentence) =>
     !hasSubjectiveUserObservationFrame(sentence) &&
     patterns.some((pattern) => pattern.test(sentence)),
   )
+}
+
+function hasControlsUserAction(content: string, ctx: CompiledRoleplayContext) {
+  return getControlsUserActionSentences(content, ctx).length > 0
 }
 
 function hasContractContext(ctx: CompiledRoleplayContext) {
@@ -2149,6 +2159,9 @@ async function validateRoleplayOutputWithJudge(
       judgeFailures,
       overPhysicalEvidence: ruleErrors.overPhysical
         ? splitIntoSentences(stripQuotedDialogue(text)).filter((sentence) => detectsPhysicalEscalation(sentence, ctx.userName))
+        : [],
+      controlsUserEvidence: ruleErrors.controlsUser
+        ? getControlsUserActionSentences(text, ctx)
         : [],
       unpromptedHandFocusEvidence: ruleErrors.unpromptedHandFocus
         ? getFocusedHandSentences(text, ctx)
