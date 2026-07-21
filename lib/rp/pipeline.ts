@@ -97,6 +97,7 @@ const GEMINI_HEDGED_FALLBACK_DELAY_MS = 8_000
 const GEMINI_STREAM_IDLE_TIMEOUT_MS = 20_000
 const GEMINI_STREAM_OVERALL_TIMEOUT_MS = 60_000
 const OPENROUTER_TIMEOUT_MS = 45_000
+const OPENROUTER_FINAL_RECOVERY_TIMEOUT_MS = 20_000
 const EMPTY_VISIBLE_OUTPUT_RETRY_TIMEOUT_MS = 90_000
 const EMPTY_RESPONSE_FALLBACK_TIMEOUT_MS = 45_000
 const MAX_REGENERATION_AVOID_CHARS = 12_000
@@ -105,9 +106,9 @@ const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v10"
+const PROMPT_VERSION = "rp-pipeline-v11"
 const NORMALIZER_VERSION = "rp-normalizer-v3"
-const VALIDATOR_VERSION = "rp-validator-v11"
+const VALIDATOR_VERSION = "rp-validator-v12"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const SERVICE_INFO_PROTECTION_PROMPT = `[서비스 내부 정보 보호 - 모든 모델 공통]
@@ -2273,9 +2274,9 @@ async function validateRoleplayOutputWithJudge(
   const ruleFailures = getValidationFailureKeys(ruleErrors)
   const terminalRuleFailures = getFailuresForKeys(ruleErrors, TERMINAL_OUTPUT_CONTRACT_KEYS)
 
-  // Length, dialogue count, quote integrity, and a cut-off ending are fully
-  // deterministic. Repair them before paying for a semantic judge call.
-  if (terminalRuleFailures.length > 0) {
+  // Deterministic failures already force a repair. Run the semantic judge only
+  // on a rule-clean candidate so the user does not wait for a redundant call.
+  if (ruleFailures.length > 0) {
     debugRoleplayJson("[RP validation details]", {
       contentChars: Array.from(text).length,
       minChars: ctx.turnPolicy.minChars,
@@ -2286,7 +2287,7 @@ async function validateRoleplayOutputWithJudge(
       maxDialogues: profile.maxDialogues ?? 4,
       ruleFailures,
       terminalRuleFailures,
-      judgeSkipped: "deterministic-output-contract-failed",
+      judgeSkipped: "deterministic-rule-validation-failed",
     })
     return {
       errors: ruleErrors,
@@ -2415,6 +2416,12 @@ function passesTerminalOutputContract(
   return getTerminalBlockingFailureKeys(errors, classified).length === 0
 }
 
+function hasOnlyTerminalOutputContractFailures(errors: RoleplayValidationErrors) {
+  const failures = getValidationFailureKeys(errors)
+  const terminalFailures = new Set<string>(TERMINAL_OUTPUT_CONTRACT_KEYS)
+  return failures.length > 0 && failures.every((failure) => terminalFailures.has(failure))
+}
+
 function hasStackedRepairableFailures(errors: RoleplayValidationErrors) {
   return getRepairableFailureKeys(errors).length >= 2
 }
@@ -2506,6 +2513,8 @@ function buildValidationFailedError(
 }
 
 export function buildRepairPrompt(errors: ReturnType<typeof validateRoleplayOutput>, ctx: CompiledRoleplayContext) {
+  const repairTargetMinChars = Math.min(ctx.turnPolicy.maxChars, ctx.turnPolicy.minChars + 100)
+  const repairTargetMaxChars = Math.max(repairTargetMinChars, ctx.turnPolicy.maxChars - 100)
   const labels: Record<keyof typeof errors, string> = {
     brokenDialogueQuotes: "대사 따옴표가 깨졌거나 닫히지 않음",
     tooFewDialogues: "이번 턴에 대사가 너무 적음",
@@ -2563,7 +2572,7 @@ ${ctx.characterName}의 대사에는 최신 입력에 대한 새 정보나 분�
 ${errors.tooShort ? `방금 답변은 캐릭터 반응 자체가 지나치게 짧아서 실패했다.
 원문에 이미 있는 행동의 세부 감각, 표정, 호흡, 주변 분위기와 캐릭터의 내적 반응만 보강하라.
 새 행동, 새 요구, 새 갈등, 새 증거, 새 조건, 인물 위치 변화, 문이나 소품의 상태 변화는 추가하지 마라.
-최소 ${ctx.turnPolicy.minChars}자를 반드시 채우되 같은 의미를 바꿔 말하며 분량을 늘리지 마라.` : ""}
+최소 ${ctx.turnPolicy.minChars}자를 반드시 채우고 ${repairTargetMinChars}~${repairTargetMaxChars}자를 목표로 하되, 같은 의미를 바꿔 말하며 분량을 늘리지 마라.` : ""}
 ${errors.responseMissedUserIntent && ctx.turnPolicy.allowPhysicalContact ? `사용자가 이미 접촉을 시작했거나 ${ctx.characterName}이 먼저 행동하도록 허락했다. 장면을 거리 확인, 일반적인 조건 제시, 망설임으로 되돌리지 말고 현재 접촉과 수위에 직접 반응하라.` : ""}
 ${errors.characterVoiceWeak ? `${ctx.characterName}의 설정에 적극성, 먼저 유혹함, 주도성, 직설적인 농담이 있다면 이를 실제 행동과 짧은 대사로 드러내라. 상대가 먼저 말하게 하려고 가만히 있는다는 식의 근거 없는 수동적 동기를 만들지 마라.` : ""}
 ${errors.unpromptedHandFocus ? `방금 답변은 손 묘사가 접촉/관능/회피/긴장 표현의 중심이 되어서 실패했다.
@@ -2929,6 +2938,8 @@ export function generateDynamicPrompt({
 }) {
   const responseMaxChars = compiledContext?.turnPolicy.maxChars ?? profile?.targetChars.max ?? MAX_OPENROUTER_RESPONSE_CHARS
   const responseMinChars = compiledContext?.turnPolicy.minChars ?? profile?.targetChars.min ?? DEFAULT_MIN_ANSWER_CHARS
+  const preferredResponseMinChars = Math.min(responseMaxChars, responseMinChars + 100)
+  const preferredResponseMaxChars = Math.max(preferredResponseMinChars, responseMaxChars - 100)
   const paragraphCount = compiledContext?.turnPolicy.paragraphCount ?? "3~5문단"
   const minDialogues = profile?.minDialogues ?? 2
   const preferredDialogues = profile?.preferredDialogues ?? 3
@@ -2960,6 +2971,7 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 [출력 형식]
 - 한국어로만 쓴다.
 - 최종 본문은 반드시 ${responseMinChars}~${responseMaxChars}자 범위 안에 들어야 한다. 이 범위를 권장 분량으로 해석하지 않는다.
+- 경계 미달을 피하도록 초안은 ${preferredResponseMinChars}~${preferredResponseMaxChars}자를 목표로 작성한다.
 - ${paragraphCount}으로 쓴다.
 - 완결된 대사는 반드시 ${minDialogues}~${maxDialogues}개를 쓰고, 특별한 이유가 없으면 ${preferredDialogues}개로 맞춘다. 최소 개수보다 적거나 최대 개수보다 많게 출력하지 않는다.
 - 출력 직전에 분량과 큰따옴표로 닫힌 대사 개수를 내부적으로 확인하고, 조건에 맞는 완성된 본문만 출력한다.
@@ -3182,6 +3194,22 @@ function formatMessagesForGemini(messages: NonNullable<ChatRequestBody["messages
 }
 
 type ChatMessages = NonNullable<ChatRequestBody["messages"]>
+
+function buildIsolatedRecoveryMessages(
+  finalMessages: ChatMessages,
+  recoveryInstruction: string,
+): ChatMessages {
+  const systemMessage = finalMessages.find((message) => message.role === "system")
+  const latestUserMessage = [...finalMessages].reverse().find((message) => message.role === "user")
+  const userContent = [latestUserMessage?.content, recoveryInstruction]
+    .filter(Boolean)
+    .join("\n\n")
+
+  return [
+    ...(systemMessage ? [systemMessage] : []),
+    { role: "user" as const, content: userContent },
+  ]
+}
 
 type RoleplayCompletion = {
   content: string
@@ -3739,25 +3767,15 @@ async function handleRoleplayChatFromNormalized(
 
   if (!result) {
     validationAttempts.push(buildSyntheticValidationAttempt("initial", ["empty-provider-response"]))
-    if (!profile.fallback.allowLocalFallback) {
-      throw new ChatApiError(
-        "Provider returned empty content",
-        502,
-        ["empty-provider-response"],
-        "failed",
-        repairAttempted,
-        fallbackUsed,
-        validationAttempts,
-      )
-    }
-    fallbackUsed = true
-    outputModel = "local"
-    result = buildSafeFallbackReply(compiledContext)
-    debugRoleplayContent({ stage: "fallback", requestId, model: outputModel, content: result })
-    const validationResult = await validateRoleplayOutputWithJudge(result, compiledContext, profile)
-    validation = validationResult.errors
-    validationSeverityOverrides = validationResult.severityOverrides
-    validationAttempts.push(buildValidationAttempt("fallback", validation, classify(validation)))
+    throw new ChatApiError(
+      "Provider returned empty content",
+      502,
+      ["empty-provider-response"],
+      "failed",
+      repairAttempted,
+      fallbackUsed,
+      validationAttempts,
+    )
   } else {
     const validationResult = await validateRoleplayOutputWithJudge(result, compiledContext, profile)
     validation = validationResult.errors
@@ -3845,32 +3863,79 @@ ${validation.regenerationDuplicate || validation.previousResponseDuplicate
         const blockingFailures = retryValidation && retryClassifiedValidation
           ? getTerminalBlockingFailureKeys(retryValidation, retryClassifiedValidation)
           : originalBlockingFailures
-        console.warn("[RP repair failed final output contract; trying local fallback]", {
+        console.warn("[RP repair failed final output contract; trying bounded final recovery]", {
           requestId,
           failures: retryFailures,
           blockingFailures,
           retryPreview: retryResult.slice(0, 300),
         })
-        if (!profile.fallback.allowLocalFallback) {
-          throw buildValidationFailedError(blockingFailures, {
-            repairAttempted,
-            fallback: fallbackUsed,
-            validationAttempts,
-          })
-        }
-        fallbackUsed = true
-        outputModel = "local"
-        result = buildSafeFallbackReply(compiledContext)
-        debugRoleplayContent({ stage: "fallback", requestId, model: outputModel, content: result })
-        const fallbackValidationResult = await validateRoleplayOutputWithJudge(result, compiledContext, profile)
-        validation = fallbackValidationResult.errors
-        validationSeverityOverrides = fallbackValidationResult.severityOverrides
-        classifiedValidation = classify(validation)
-        validationAttempts.push(buildValidationAttempt("fallback", validation, classifiedValidation))
+        const recoverySource = retryResult || originalResult
+        const recoveryErrors = retryValidation ?? originalValidation
+        const formatOnlyRecovery = hasOnlyTerminalOutputContractFailures(recoveryErrors)
+        const recoveryTargetMinChars = Math.min(
+          compiledContext.turnPolicy.maxChars,
+          compiledContext.turnPolicy.minChars + 100,
+        )
+        const recoveryTargetMaxChars = Math.max(
+          recoveryTargetMinChars,
+          compiledContext.turnPolicy.maxChars - 100,
+        )
+        const recoveryInstruction = formatOnlyRecovery
+          ? `[형식 전용 최종 보정]
+아래 원문의 사건 순서, 완료된 행동, 위치, 접촉 상태와 대사의 핵심 의미를 유지하라.
+새 행동이나 새 요구를 추가하지 말고 기존 장면의 감각·표정·호흡과 ${characterName}의 내적 반응만 보강하라.
+최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며 ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
+완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.
 
-        const fallbackBlockingFailures = getTerminalBlockingFailureKeys(validation, classifiedValidation)
-        if (fallbackBlockingFailures.length > 0) {
-          throw buildValidationFailedError(fallbackBlockingFailures, {
+[보정할 원문]
+${recoverySource}`
+          : `[최종 새 답변 재생성]
+앞선 초안들은 검수 실패로 폐기됐다. 그 문장, 완료 행동, 접촉과 요구를 이어 쓰거나 표현만 바꿔 반복하지 마라.
+시스템 프롬프트의 확정된 직전 장면과 최신 사용자 입력에서 바로 출발해 ${characterName}의 새로운 다음 반응을 작성하라.
+최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며 ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
+완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.`
+        const recoveryCompletion = await requestCompletion(
+          buildIsolatedRecoveryMessages(finalMessages, recoveryInstruction),
+        )
+        const recoveryResult = normalizeGeneratedRoleplayOutput(recoveryCompletion.content, compiledContext)
+        debugRoleplayContent({
+          stage: "repaired",
+          requestId,
+          model: recoveryCompletion.model,
+          content: recoveryCompletion.content,
+        })
+        const recoveryValidationResult = recoveryResult
+          ? await validateRoleplayOutputWithJudge(recoveryResult, compiledContext, profile)
+          : null
+        const recoveryValidation = recoveryValidationResult?.errors ?? null
+        const recoverySeverityOverrides = recoveryValidationResult?.severityOverrides ?? {}
+        const recoveryClassifiedValidation = recoveryValidation
+          ? classify(recoveryValidation, recoverySeverityOverrides)
+          : null
+
+        if (recoveryValidation && recoveryClassifiedValidation) {
+          validationAttempts.push(buildValidationAttempt("repair", recoveryValidation, recoveryClassifiedValidation))
+        } else {
+          validationAttempts.push(buildSyntheticValidationAttempt("repair", ["empty-final-recovery"]))
+        }
+
+        if (
+          recoveryResult &&
+          recoveryValidation &&
+          recoveryClassifiedValidation &&
+          passesTerminalOutputContract(recoveryValidation, recoveryClassifiedValidation)
+        ) {
+          result = recoveryResult
+          outputModel = recoveryCompletion.model
+          fallbackUsed = fallbackUsed || outputModel !== attemptedModel
+          validation = recoveryValidation
+          validationSeverityOverrides = recoverySeverityOverrides
+          classifiedValidation = recoveryClassifiedValidation
+        } else {
+          const recoveryBlockingFailures = recoveryValidation && recoveryClassifiedValidation
+            ? getTerminalBlockingFailureKeys(recoveryValidation, recoveryClassifiedValidation)
+            : blockingFailures
+          throw buildValidationFailedError(recoveryBlockingFailures, {
             repairAttempted,
             fallback: fallbackUsed,
             validationAttempts,
@@ -3899,7 +3964,6 @@ ${validation.regenerationDuplicate || validation.previousResponseDuplicate
   validation = finalValidation
   const finalClassifiedValidation = classify(finalValidation)
   validationAttempts.push(buildValidationAttempt("final", finalValidation, finalClassifiedValidation))
-  debugRoleplayContent({ stage: "final", requestId, model: outputModel, content: result })
 
   const finalBlockingFailures = getTerminalBlockingFailureKeys(finalValidation, finalClassifiedValidation)
   if (finalBlockingFailures.length > 0) {
@@ -3914,6 +3978,8 @@ ${validation.regenerationDuplicate || validation.previousResponseDuplicate
       validationAttempts,
     })
   }
+
+  debugRoleplayContent({ stage: "final", requestId, model: outputModel, content: result })
 
   const validationMetadata = buildValidationMetadata({
     errors: validation,
@@ -4851,8 +4917,9 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
 초안이 있다면 그 흐름을 버리지 말고 같은 장면의 완성본으로 정리하라.`
 
     if (process.env.NODE_ENV !== "production") {
-      console.debug("[Gemini RP stream validation failed]", {
+      console.debug("[RP stream candidate validation failed]", {
         requestId: runId,
+        outputModel,
         finishReason,
         autoAdvance: compiledContext.turnPolicy.autoAdvance,
         modelInputChars: latestRawInput.length,
@@ -4862,7 +4929,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
               ? "empty-visible-output"
               : "empty-or-safety"],
         classified: initialClassifiedValidation,
-        rawGeminiPreview: rawGeminiContent.slice(0, 400),
+        candidatePreview: rawGeminiContent.slice(0, 400),
       })
     }
 
@@ -5023,6 +5090,115 @@ ${savedContent}
   let repairedFinalBlockingFailures = repairedFinalValidation && repairedFinalClassifiedValidation
     ? getTerminalBlockingFailureKeys(repairedFinalValidation, repairedFinalClassifiedValidation)
     : []
+
+  // A provider can fix the semantic problem yet undershoot the mechanical
+  // length/dialogue contract. Give that candidate one bounded recovery pass
+  // instead of replacing it with the short generic local fallback.
+  if (
+    savedContent &&
+    repairedFinalValidation &&
+    repairedFinalBlockingFailures.length > 0 &&
+    process.env.OPENROUTER_API_KEY &&
+    allowsOpenRouterFallbackForGemini(model)
+  ) {
+    const recoveryModelConfig = buildOpenRouterFallbackModel()
+    const recoveryModelName = getOpenRouterModelName(recoveryModelConfig)
+    const formatOnlyRecovery = hasOnlyTerminalOutputContractFailures(repairedFinalValidation)
+    const recoveryTargetMinChars = Math.min(
+      compiledContext.turnPolicy.maxChars,
+      compiledContext.turnPolicy.minChars + 100,
+    )
+    const recoveryTargetMaxChars = Math.max(
+      recoveryTargetMinChars,
+      compiledContext.turnPolicy.maxChars - 100,
+    )
+    const recoveryInstruction = formatOnlyRecovery
+      ? `[형식 전용 최종 보정]
+아래 원문은 장면 내용은 유지할 수 있지만 최종 출력 형식을 통과하지 못했다.
+원문의 사건 순서, 완료된 행동, 위치, 접촉 상태, 대사의 핵심 의미를 바꾸지 마라.
+새 행동, 새 요구, 새 접촉, 새 소품을 만들지 말고 기존 행동의 감각·표정·호흡과 ${characterName}의 내적 반응만 보강하라.
+최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며, ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
+완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.
+
+[보정할 원문]
+${savedContent}`
+      : `[최종 새 답변 재생성]
+앞선 생성 시도들은 검수 실패로 전부 폐기됐다. 그 초안의 문장, 행동 순서, 접촉, 요구를 이어 쓰거나 표현만 바꿔 반복하지 마라.
+시스템 프롬프트에 정리된 직전 장면의 확정 상태와 최신 사용자 입력에서 바로 출발해 ${characterName}의 새로운 다음 반응을 작성하라.
+이미 완료된 밀착, 끌어당김, 같은 부위 잡기, 입맞춤을 다시 실행하지 말고 새로운 결과나 결정을 최소 하나 진행하라.
+최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며, ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
+완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.`
+
+    repairAttempted = true
+    usedFallback = true
+    fallbackProvider = fallbackProvider?.includes("openrouter")
+      ? `${fallbackProvider}+final-recovery`
+      : "openrouter-final-recovery"
+    fallbackModel = recoveryModelName
+    sendPhase("repairing", formatOnlyRecovery ? "답변 분량과 대사 수를 맞추는 중..." : "새 답변을 다시 구성하는 중...")
+
+    try {
+      const recoveryCompletion = await callOpenRouterRoleplay(
+        buildIsolatedRecoveryMessages(finalMessages, recoveryInstruction),
+        recoveryModelConfig,
+        userName,
+        OPENROUTER_FINAL_RECOVERY_TIMEOUT_MS,
+      )
+      const recoveryContent = normalizeGeneratedRoleplayOutput(recoveryCompletion.content, compiledContext)
+      debugRoleplayContent({
+        stage: "repaired",
+        requestId: runId,
+        model: recoveryCompletion.model,
+        content: recoveryCompletion.content,
+      })
+      const recoveryValidationResult = recoveryContent
+        ? await validateStreamContent(recoveryContent, true)
+        : null
+      const recoveryValidation = recoveryValidationResult?.errors ?? null
+      const recoverySeverityOverrides = recoveryValidationResult?.severityOverrides ?? {}
+      const recoveryClassifiedValidation = recoveryValidation
+        ? classify(recoveryValidation, recoverySeverityOverrides)
+        : null
+
+      if (recoveryValidation && recoveryClassifiedValidation) {
+        validationAttempts.push(buildValidationAttempt("repair", recoveryValidation, recoveryClassifiedValidation))
+      } else {
+        validationAttempts.push(buildSyntheticValidationAttempt("repair", ["empty-final-recovery"]))
+      }
+
+      if (
+        recoveryContent &&
+        recoveryValidation &&
+        recoveryClassifiedValidation &&
+        passesTerminalOutputContract(recoveryValidation, recoveryClassifiedValidation)
+      ) {
+        savedContent = recoveryContent
+        outputModel = recoveryCompletion.model
+        repairedFinalValidationResult = recoveryValidationResult
+        repairedFinalValidation = recoveryValidation
+        repairedFinalSeverityOverrides = recoverySeverityOverrides
+        validationSeverityOverrides = recoverySeverityOverrides
+        repairedFinalClassifiedValidation = recoveryClassifiedValidation
+        repairedFinalBlockingFailures = []
+      } else if (process.env.NODE_ENV !== "production") {
+        console.debug("[RP final recovery rejected]", {
+          requestId: runId,
+          model: recoveryCompletion.model,
+          failures: recoveryValidation ? getValidationFailureKeys(recoveryValidation) : ["empty-final-recovery"],
+        })
+      }
+    } catch (error) {
+      timeoutStage = getTimeoutStage(error) ?? timeoutStage
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[RP final recovery failed]", {
+          requestId: runId,
+          model: recoveryModelName,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
   if (
     (!savedContent || repairedFinalBlockingFailures.length > 0) &&
     process.env.OPENROUTER_API_KEY &&
@@ -5105,7 +5281,7 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
     } catch (error) {
       timeoutStage = getTimeoutStage(error) ?? timeoutStage
       if (process.env.NODE_ENV !== "production") {
-        console.debug("[Gemini RP provider fallback failed; trying local fallback]", {
+        console.debug("[Gemini RP provider fallback failed; no local RP fallback used]", {
           requestId: runId,
           model: providerFallbackModelName,
           error: error instanceof Error ? error.message : String(error),
@@ -5114,43 +5290,9 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
     }
   }
 
-  if (!savedContent || repairedFinalBlockingFailures.length > 0) {
-    if (!profile.fallback.allowLocalFallback) {
-      const failures = repairedFinalBlockingFailures.length > 0
-        ? repairedFinalBlockingFailures
-        : ["empty"]
-      throw buildValidationFailedError(failures, {
-        repairAttempted,
-        fallback: usedFallback,
-        validationAttempts,
-      })
-    }
-    usedFallback = true
-    fallbackProvider = "local-contextual-fallback"
-    fallbackModel = "local"
-    outputModel = "local"
-    sendPhase("fallback", "안전한 대체 응답을 준비하는 중...")
-    savedContent = normalizeGeneratedRoleplayOutput(
-      buildContextualFallbackReply(compiledContext, rawGeminiContent),
-      compiledContext,
-    )
-    debugRoleplayContent({ stage: "fallback", requestId: runId, model: outputModel, content: savedContent })
-    repairedFinalValidationResult = await validateStreamContent(savedContent, true)
-    repairedFinalValidation = repairedFinalValidationResult.errors
-    repairedFinalSeverityOverrides = repairedFinalValidationResult.severityOverrides
-    validationSeverityOverrides = repairedFinalSeverityOverrides
-    repairedFinalClassifiedValidation = classify(repairedFinalValidation, repairedFinalSeverityOverrides)
-    repairedFinalBlockingFailures = getTerminalBlockingFailureKeys(
-      repairedFinalValidation,
-      repairedFinalClassifiedValidation,
-    )
-    validationAttempts.push(buildValidationAttempt("fallback", repairedFinalValidation, repairedFinalClassifiedValidation))
-  }
-
   if (repairedFinalValidation && repairedFinalClassifiedValidation) {
     validationAttempts.push(buildValidationAttempt("final", repairedFinalValidation, repairedFinalClassifiedValidation))
   }
-  debugRoleplayContent({ stage: "final", requestId: runId, model: outputModel, content: savedContent })
 
   if (!savedContent || repairedFinalBlockingFailures.length > 0) {
     const failures = repairedFinalBlockingFailures.length > 0
@@ -5195,6 +5337,8 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
     })
     return
   }
+
+  debugRoleplayContent({ stage: "final", requestId: runId, model: outputModel, content: savedContent })
 
   const validationMetadata = buildValidationMetadata({
     errors: repairedFinalValidation,
