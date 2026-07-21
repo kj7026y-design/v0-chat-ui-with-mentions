@@ -108,7 +108,7 @@ const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
 const PROMPT_VERSION = "rp-pipeline-v11"
 const NORMALIZER_VERSION = "rp-normalizer-v3"
-const VALIDATOR_VERSION = "rp-validator-v12"
+const VALIDATOR_VERSION = "rp-validator-v13"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const SERVICE_INFO_PROTECTION_PROMPT = `[서비스 내부 정보 보호 - 모든 모델 공통]
@@ -2035,6 +2035,33 @@ function latestInputExplicitlyRequestsRepeatedAction(ctx: CompiledRoleplayContex
   )
 }
 
+const MATERIAL_SCENE_PROGRESSION_PATTERNS = [
+  ["lift-person", /(?:상대|몸|허리|품)[^.?!\n]{0,45}(?:들어\s*올리|들어올리|번쩍\s*들)/u],
+  ["seat-person", /(?:상대|몸|자신|그|그녀)?[^.?!\n]{0,35}(?:앉히|걸터앉히|자리에\s*앉)/u],
+  ["lie-person", /(?:상대|몸|자신|그|그녀)?[^.?!\n]{0,35}(?:눕히|눕혔|누웠|쓰러뜨)/u],
+  ["raise-or-stand-person", /(?:상대|몸|자신|그|그녀)?[^.?!\n]{0,35}(?:일으켜|일으켰|세워|세웠)/u],
+  ["relocate-person", /(?:상대|몸|자신|그|그녀)?[^.?!\n]{0,45}(?:옮겨|옮겼|끌고\s*가|데리고\s*가|밀어\s*붙)/u],
+  ["turn-person", /(?:상대|몸|어깨|허리)[^.?!\n]{0,40}(?:돌려세우|돌려\s*세우|돌아세우|방향을\s*바꾸)/u],
+  ["release-contact", /(?:손|팔|허리|목덜미|몸)[^.?!\n]{0,35}(?:놓아주|풀어주|떼어내|거두|놓았|풀었)/u],
+  ["new-kiss", /(?:입술[^.?!\n]{0,30}(?:포개|맞대|겹치)|입을\s*맞추|입맞춤|키스)/u],
+  ["clothing-state", /(?:단추|셔츠|재킷|코트|옷|소매|넥타이)[^.?!\n]{0,35}(?:풀|잠그|벗|입|걷어|내리|올리)/u],
+  ["door-state", /(?:문|문고리|잠금장치)[^.?!\n]{0,35}(?:열|닫|잠그|풀|밀어젖)/u],
+  ["clear-surface", /(?:책|서류|계약서|잔|컵|병|휴대폰|소품|물건)[^.?!\n]{0,45}(?:밀어내|치우|옮겨|내려놓|집어\s*들|던져|펼쳐|접어)/u],
+  ["surface-position", /(?:테이블|책상|침대|소파|의자|난간)[^.?!\n]{0,45}(?:앉히|눕히|올려|기대|밀어\s*붙)/u],
+] as const
+
+function getMaterialSceneProgressionSignatures(content: string) {
+  return MATERIAL_SCENE_PROGRESSION_PATTERNS
+    .filter(([, pattern]) => pattern.test(content))
+    .map(([signature]) => signature)
+}
+
+function hasNovelMaterialSceneProgression(currentNarration: string, previousNarration: string) {
+  const previousSignatures = new Set(getMaterialSceneProgressionSignatures(previousNarration))
+  return getMaterialSceneProgressionSignatures(currentNarration)
+    .some((signature) => !previousSignatures.has(signature))
+}
+
 function repeatsCompletedSceneBeat(content: string, previousContent: string) {
   const previousNarration = stripQuotedDialogue(previousContent)
   const currentNarration = stripQuotedDialogue(content)
@@ -2079,9 +2106,15 @@ function repeatsCompletedSceneBeat(content: string, previousContent: string) {
     ],
   ]
 
-  return completedAndRepeatedPatterns.some(([completed, repeated, ignoreCompletedState]) =>
+  const repeatsCompletedBeat = completedAndRepeatedPatterns.some(([completed, repeated, ignoreCompletedState]) =>
     !ignoreCompletedState && completed.test(previousNarration) && repeated.test(currentNarration),
   )
+
+  if (!repeatsCompletedBeat) return false
+
+  // Continuing an established touch is not a duplicate when the same response
+  // produces a genuinely new position, prop state, or scene result.
+  return !hasNovelMaterialSceneProgression(currentNarration, previousNarration)
 }
 
 function isRegenerationDuplicate(content: string, ctx: CompiledRoleplayContext) {
