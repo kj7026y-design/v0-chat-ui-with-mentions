@@ -849,6 +849,8 @@ export default function ChatPage() {
               fallbackModel: event.fallback_model,
               providerOutcome: event.provider_outcome,
               timeoutStage: event.timeout_stage,
+              geminiErrorCode: event.gemini_error_code,
+              geminiErrorStatus: event.gemini_error_status,
               savedContent,
               streamedContent: message.content,
             }
@@ -1045,6 +1047,8 @@ export default function ChatPage() {
               fallbackModel: event.fallback_model,
               providerOutcome: event.provider_outcome,
               timeoutStage: event.timeout_stage,
+              geminiErrorCode: event.gemini_error_code,
+              geminiErrorStatus: event.gemini_error_status,
               savedContent,
               streamedContent: message.content,
             }
@@ -1305,6 +1309,8 @@ export default function ChatPage() {
               fallbackModel: event.fallback_model,
               providerOutcome: event.provider_outcome,
               timeoutStage: event.timeout_stage,
+              geminiErrorCode: event.gemini_error_code,
+              geminiErrorStatus: event.gemini_error_status,
             }
           }
           return {
@@ -1366,6 +1372,8 @@ export default function ChatPage() {
                 fallbackModel: rewrittenReply.fallbackModel,
                 providerOutcome: rewrittenReply.providerOutcome,
                 timeoutStage: rewrittenReply.timeoutStage,
+                geminiErrorCode: rewrittenReply.geminiErrorCode,
+                geminiErrorStatus: rewrittenReply.geminiErrorStatus,
                 savedContent: rewrittenReply.savedContent,
                 speakerId: rewrittenReply.speakerId ?? msg.speakerId,
                 speakerName: rewrittenReply.speakerName ?? msg.speakerName,

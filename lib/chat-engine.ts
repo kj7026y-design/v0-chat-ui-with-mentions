@@ -105,6 +105,8 @@ export type ChatStreamEvent = {
   fallback_model?: string
   provider_outcome?: GenerationProviderOutcome
   timeout_stage?: GenerationTimeoutStage
+  gemini_error_code?: number
+  gemini_error_status?: string
   status?: "streaming" | "completed" | "failed"
   error?: string
   room_id?: string
@@ -937,6 +939,8 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
         fallbackModel: event.fallback_model,
         providerOutcome: event.provider_outcome,
         timeoutStage: event.timeout_stage,
+        geminiErrorCode: event.gemini_error_code,
+        geminiErrorStatus: event.gemini_error_status,
         status: event.status === "failed" ? "failed" : "completed",
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
@@ -1141,6 +1145,8 @@ export async function generateAssistantReply(
     fallbackModel: completedEvent?.fallback_model,
     providerOutcome: completedEvent?.provider_outcome,
     timeoutStage: completedEvent?.timeout_stage,
+    geminiErrorCode: completedEvent?.gemini_error_code,
+    geminiErrorStatus: completedEvent?.gemini_error_status,
     savedContent: completedEvent?.saved_content || content,
     speakerId: context?.character?.id,
     speakerName: context?.character?.name || context?.status?.characterName,

@@ -365,6 +365,90 @@ export class ChatApiError extends Error {
   }
 }
 
+export type GeminiErrorMetadata = {
+  code?: number
+  status?: string
+}
+
+const GEMINI_HTTP_STATUS_NAMES: Partial<Record<number, string>> = {
+  400: "INVALID_ARGUMENT",
+  401: "UNAUTHENTICATED",
+  403: "PERMISSION_DENIED",
+  404: "NOT_FOUND",
+  408: "DEADLINE_EXCEEDED",
+  409: "ABORTED",
+  429: "RESOURCE_EXHAUSTED",
+  500: "INTERNAL",
+  502: "BAD_GATEWAY",
+  503: "UNAVAILABLE",
+  504: "DEADLINE_EXCEEDED",
+}
+
+function asErrorRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function parseErrorMessagePayload(message: string) {
+  const trimmed = message.trim()
+  const candidates = [trimmed]
+  const jsonStart = trimmed.indexOf("{")
+  const jsonEnd = trimmed.lastIndexOf("}")
+  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+    candidates.push(trimmed.slice(jsonStart, jsonEnd + 1))
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = asErrorRecord(JSON.parse(candidate))
+      if (parsed) return asErrorRecord(parsed.error) ?? parsed
+    } catch {
+      // Some SDK errors contain a human-readable prefix before the JSON body.
+    }
+  }
+
+  return undefined
+}
+
+function normalizeProviderErrorStatus(value: unknown) {
+  if (typeof value !== "string") return undefined
+  const status = value.trim().toUpperCase().replace(/[\s-]+/g, "_")
+  return /^[A-Z][A-Z0-9_]{1,79}$/.test(status) ? status : undefined
+}
+
+function normalizeProviderErrorCode(value: unknown) {
+  const code = typeof value === "number"
+    ? value
+    : typeof value === "string" && /^\d{3}$/.test(value.trim())
+      ? Number(value)
+      : undefined
+  return code && code >= 400 && code <= 599 ? code : undefined
+}
+
+export function extractGeminiErrorMetadata(error: unknown): GeminiErrorMetadata {
+  const timeoutStage = getTimeoutStage(error)
+  if (timeoutStage?.startsWith("gemini-")) return { status: "TIMEOUT" }
+  if (error instanceof ChatApiError) return {}
+
+  const record = asErrorRecord(error)
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
+  const payload = parseErrorMessagePayload(message)
+  const payloadDetails = asErrorRecord(payload?.error) ?? payload
+  const code = normalizeProviderErrorCode(record?.status)
+    ?? normalizeProviderErrorCode(record?.code)
+    ?? normalizeProviderErrorCode(payloadDetails?.code)
+    ?? normalizeProviderErrorCode(payloadDetails?.status)
+    ?? normalizeProviderErrorCode(message.match(/(?:^|\D)([45]\d{2})(?:\D|$)/)?.[1])
+  const status = normalizeProviderErrorStatus(
+    typeof record?.status === "string" ? record.status : undefined,
+  )
+    ?? normalizeProviderErrorStatus(payloadDetails?.status)
+    ?? (code ? GEMINI_HTTP_STATUS_NAMES[code] : undefined)
+
+  return { code, status }
+}
+
 function rethrowWithTimeoutStage(error: unknown, timeoutStage?: GenerationTimeoutStage): never {
   if (!timeoutStage || getTimeoutStage(error)) throw error
 
@@ -4472,6 +4556,8 @@ async function streamGeminiRoleplay({
   let fallbackModel: string | undefined
   let providerOutcome: "empty-visible-output" | undefined
   let timeoutStage: GenerationTimeoutStage | undefined
+  let geminiErrorCode: number | undefined
+  let geminiErrorStatus: string | undefined
   let finishReason: string | undefined
   let safetyRatings: unknown
   let promptFeedback: unknown
@@ -4495,6 +4581,11 @@ async function streamGeminiRoleplay({
   let hedgedFallbackError: unknown
   let geminiStartError: unknown
   let allInitialCandidatesFailed = false
+  const captureGeminiError = (error: unknown) => {
+    const metadata = extractGeminiErrorMetadata(error)
+    geminiErrorCode = metadata.code ?? geminiErrorCode
+    geminiErrorStatus = metadata.status ?? geminiErrorStatus
+  }
 
   try {
     sendPhase("generating", "답변을 생성하는 중...")
@@ -4554,6 +4645,7 @@ async function streamGeminiRoleplay({
       (stream) => ({ source: "gemini" as const, stream }),
       (error) => {
         geminiStartError = error
+        captureGeminiError(error)
         startHedgedFallback()
         throw error
       },
@@ -4623,6 +4715,7 @@ async function streamGeminiRoleplay({
           (nextChunk) => ({ source: "gemini" as const, nextChunk }),
           (error) => {
             geminiStartError = error
+            captureGeminiError(error)
             throw error
           },
         )
@@ -4707,6 +4800,7 @@ async function streamGeminiRoleplay({
   } catch (error) {
     geminiStreamAbortController.abort()
     hedgeAbortController.abort()
+    captureGeminiError(error)
     originalProviderContent = rawGeminiContent
     timeoutStage = getTimeoutStage(error) ?? timeoutStage
     if (allInitialCandidatesFailed && hedgedFallbackError) {
@@ -4847,6 +4941,7 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
       }
     } catch (error) {
       emptyRetryAbortController.abort()
+      captureGeminiError(error)
       timeoutStage = getTimeoutStage(error) ?? timeoutStage
       if (process.env.NODE_ENV !== "production") {
         console.debug("[Gemini RP empty-visible-output retry failed]", {
@@ -5414,6 +5509,8 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
       fallback_model: fallbackModel,
       provider_outcome: providerOutcome,
       timeout_stage: timeoutStage,
+      gemini_error_code: geminiErrorCode,
+      gemini_error_status: geminiErrorStatus,
       status: "failed",
       error: `RP validation failed: ${failures.join(", ")}`,
       room_id: roomId,
@@ -5476,6 +5573,8 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
       fallbackModel,
       providerOutcome,
       timeoutStage,
+      geminiErrorCode,
+      geminiErrorStatus,
       ttft_ms: ttftMs ?? Date.now() - startedAt,
     })
   }
@@ -5504,6 +5603,8 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
     fallback_model: fallbackModel,
     provider_outcome: providerOutcome,
     timeout_stage: timeoutStage,
+    gemini_error_code: geminiErrorCode,
+    gemini_error_status: geminiErrorStatus,
     status: "completed",
     room_id: roomId,
     user_message_id: userMessageId,
@@ -5652,6 +5753,7 @@ export function runChatEventStream({
       } catch (error) {
         const message = error instanceof Error ? error.message : "Chat stream failed"
         const timeoutStage = getTimeoutStage(error)
+        const geminiError = provider === "gemini" ? extractGeminiErrorMetadata(error) : {}
         const validationFailures = error instanceof ChatApiError ? error.validationFailures : []
         const validationAttempts = error instanceof ChatApiError ? error.validationAttempts : []
         const validationRepairAttempted = error instanceof ChatApiError ? error.repairAttempted : undefined
@@ -5675,6 +5777,8 @@ export function runChatEventStream({
           repair_attempted: roleplayEnabled ? validationRepairAttempted : undefined,
           fallback: roleplayEnabled ? validationFallback : undefined,
           timeout_stage: timeoutStage,
+          gemini_error_code: geminiError.code,
+          gemini_error_status: geminiError.status,
           ttft_ms: ttftMs ?? Date.now() - startedAt,
           mismatch: false,
           status: "failed",

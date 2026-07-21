@@ -50,6 +50,8 @@ export type GenerationRun = {
   fallbackModel?: string
   providerOutcome?: GenerationProviderOutcome
   timeoutStage?: GenerationTimeoutStage
+  geminiErrorCode?: number
+  geminiErrorStatus?: string
   status: GenerationRunStatus
   createdAt: string
   completedAt?: string

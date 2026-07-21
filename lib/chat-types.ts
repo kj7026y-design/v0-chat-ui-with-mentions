@@ -27,6 +27,8 @@ export interface ChatMessage {
   fallbackModel?: string
   providerOutcome?: GenerationProviderOutcome
   timeoutStage?: GenerationTimeoutStage
+  geminiErrorCode?: number
+  geminiErrorStatus?: string
   streamedContent?: string
   savedContent?: string
   imageUrl?: string
