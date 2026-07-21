@@ -100,6 +100,18 @@ async function ensureSchema() {
         AND account.normalized_identifier = LOWER(TRIM(message.admin_id))
         AND room.room_key = message.room_id
     `
+    // Keep the legacy identifier columns populated for admin inspection and
+    // compatibility with existing queries while chat_room_id remains canonical.
+    await sql`
+      UPDATE storychat_messages message
+      SET
+        admin_id = COALESCE(message.admin_id, account.login_id, account.email, account.account_id),
+        room_id = COALESCE(message.room_id, room.room_key)
+      FROM storychat_chat_rooms room
+      JOIN storychat_accounts account ON account.account_id = room.account_id
+      WHERE message.chat_room_id = room.chat_room_id
+        AND (message.admin_id IS NULL OR message.room_id IS NULL)
+    `
     await sql`
       CREATE UNIQUE INDEX IF NOT EXISTS storychat_messages_room_message_idx
       ON storychat_messages (chat_room_id, message_id)
@@ -231,11 +243,13 @@ export async function getChatMessagePage({
 
 export async function upsertChatMessages({
   accountId,
+  accountIdentifier,
   roomId,
   characterName,
   messages,
 }: {
   accountId: string
+  accountIdentifier: string
   roomId: string
   characterName?: string
   messages: StoredChatMessage[]
@@ -245,10 +259,12 @@ export async function upsertChatMessages({
   const chatRoomId = await ensureChatRoom({ accountId, roomId, characterName })
   const queries = messages.map((message) => sql.query(
     `INSERT INTO storychat_messages (
-       chat_room_id, message_id, message_type, content, message_data, client_timestamp
-     ) VALUES ($1::bigint, $2, $3, $4, $5::jsonb, $6::timestamptz)
+       chat_room_id, admin_id, room_id, message_id, message_type, content, message_data, client_timestamp
+     ) VALUES ($1::bigint, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz)
      ON CONFLICT (chat_room_id, message_id) WHERE chat_room_id IS NOT NULL
      DO UPDATE SET
+       admin_id = EXCLUDED.admin_id,
+       room_id = EXCLUDED.room_id,
        message_type = EXCLUDED.message_type,
        content = EXCLUDED.content,
        message_data = EXCLUDED.message_data,
@@ -256,6 +272,8 @@ export async function upsertChatMessages({
        updated_at = NOW()`,
     [
       chatRoomId,
+      accountIdentifier,
+      roomId,
       message.id,
       message.type,
       message.content,

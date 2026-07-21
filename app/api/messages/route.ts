@@ -112,6 +112,7 @@ export async function POST(request: Request) {
   try {
     await upsertChatMessages({
       accountId: session.accountId,
+      accountIdentifier: session.username,
       roomId,
       characterName,
       messages: messages as StoredChatMessage[],
