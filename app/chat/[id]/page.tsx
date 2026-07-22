@@ -18,7 +18,7 @@ import { StoryStatusCard, type StoryStatus } from "@/components/chat/story-statu
 import { AlertModal, ConfirmModal } from "@/components/ui/app-modal"
 import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS, type ChatMessage } from "@/lib/chat-types"
 import {
-  buildUserMessage,
+  buildUserMessages,
   fitAssistantReplyToTurnBudget,
   generateAssistantReply,
   getAssistantReplyLengthBudget,
@@ -26,7 +26,7 @@ import {
   getMessageContentCharCount,
   type ChatStreamEvent,
   type ImageCommandContext,
-  parseChatInput,
+  parseChatInputSegments,
   runCommand,
 } from "@/lib/chat-engine"
 import { getChatMemoryMemo } from "@/lib/chat-memory-storage"
@@ -727,17 +727,13 @@ export default function ChatPage() {
     const displayContent = content.trim()
     const isAutoAdvance = options?.autoAdvance === true && !displayContent && !image
     if (!displayContent && !image && !isAutoAdvance) return
-    const parsedInput = parseChatInput(displayContent, chatInputCharacters, mentions)
-    if (parsedInput.kind === "character_line" && parsedInput.isEmptyLine) {
+    const parsedInputs = isAutoAdvance
+      ? []
+      : parseChatInputSegments(displayContent, chatInputCharacters, mentions)
+    if (parsedInputs.some((input) => input.kind === "character_line" && input.isEmptyLine)) {
       toast.error("대사 내용을 입력하세요.")
       return
     }
-
-    const modelContent = isAutoAdvance
-      ? AUTO_ADVANCE_MODEL_CONTENT
-      : parsedInput.kind === "plain"
-        ? buildModelContentFromUserInput(displayContent)
-        : displayContent
 
     const replyCreditCost = CREDIT_COSTS.message + selectedModel.creditCostPerReply
     if (credits < replyCreditCost) {
@@ -758,14 +754,20 @@ export default function ChatPage() {
     }
 
     const turnId = makeTurnId()
-    const userMessage = isAutoAdvance
-      ? null
-      : {
-          ...buildUserMessage(displayContent, chatInputCharacters, mentions, image),
-          ...(modelContent !== displayContent ? { originalContent: modelContent } : {}),
+    const userMessages = isAutoAdvance
+      ? []
+      : buildUserMessages(displayContent, chatInputCharacters, mentions, image).map((message) => ({
+          ...message,
+          ...(!message.isUserAuthoredCharacterLine
+            ? { originalContent: buildModelContentFromUserInput(message.content) }
+            : {}),
           turnId,
           status: "completed" as const,
-        }
+        }))
+    const latestUserMessage = userMessages.at(-1)
+    const modelContent = isAutoAdvance
+      ? AUTO_ADVANCE_MODEL_CONTENT
+      : latestUserMessage?.originalContent || latestUserMessage?.content || displayContent
     const openingMessageId = selectedIntroScenario
       ? `intro-${chatId}-${selectedIntroScenario.id}`
       : ""
@@ -784,7 +786,9 @@ export default function ChatPage() {
         }
       : null
     const historyBeforeUser = openingMessage ? [openingMessage] : messages
-    const generationHistory = userMessage ? [...historyBeforeUser, userMessage] : historyBeforeUser
+    const generationHistory = userMessages.length > 0
+      ? [...historyBeforeUser, ...userMessages]
+      : historyBeforeUser
     const openingIsInHistory = Boolean(
       openingMessageId && historyBeforeUser.some((message) => message.id === openingMessageId),
     )
@@ -869,7 +873,7 @@ export default function ChatPage() {
     }
     setMessages((prev) => [
       ...(prev.length === 0 && openingMessage ? [openingMessage] : prev),
-      ...(userMessage ? [userMessage] : []),
+      ...userMessages,
       streamingMessage,
     ])
     setIsTyping(true)
@@ -893,7 +897,7 @@ export default function ChatPage() {
           selectedModelId,
           {
             roomId: chatId,
-            userMessageId: userMessage?.id,
+            userMessageId: latestUserMessage?.id,
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
@@ -997,9 +1001,12 @@ export default function ChatPage() {
     const retryIsAutoAdvance = isAutoAdvanceTurn(failedMessage, messages)
     const retryIsRegeneration = Boolean(retryPayload.regenerationAvoidContent?.trim())
     const retryMessages = messages.filter((message) => message.id !== messageId)
+    const retrySourceUserMessage = retryMessages.findLast((message) =>
+      message.type === "user" && message.turnId === retryTurnId && message.content.trim(),
+    ) ?? retryMessages.findLast((message) => message.type === "user" && message.content.trim())
     const retryModelContent = retryIsAutoAdvance
       ? AUTO_ADVANCE_MODEL_CONTENT
-      : retryPayload.content
+      : retrySourceUserMessage?.originalContent || retrySourceUserMessage?.content || retryPayload.content
     const characterMessageId = `assistant-${retryTurnId}`
     const streamingMessage: ChatMessage = {
       id: characterMessageId,
@@ -1283,7 +1290,7 @@ export default function ChatPage() {
       : []
     const sourceUserMessage = isAutoAdvanceRewrite
       ? undefined
-      : turnMessages.find((message) => message.type === "user" && message.content.trim()) ??
+      : turnMessages.findLast((message) => message.type === "user" && message.content.trim()) ??
         messages.slice(0, targetIndex).findLast((message) => message.type === "user" && message.content.trim())
     const userContent = isAutoAdvanceRewrite
       ? AUTO_ADVANCE_MODEL_CONTENT

@@ -107,8 +107,8 @@ const DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v12"
-const NORMALIZER_VERSION = "rp-normalizer-v4"
+const PROMPT_VERSION = "rp-pipeline-v14"
+const NORMALIZER_VERSION = "rp-normalizer-v5"
 const VALIDATOR_VERSION = "rp-validator-v13"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
@@ -221,7 +221,7 @@ function debugGenerationBoundary(
   console.log(`\n${divider}\n[RP GENERATION ${boundary}] ${suffix}\n${divider}`)
 }
 
-type UserInputKind = "dialogue" | "action" | "dialogue_action" | "intent_summary" | "ooc_instruction"
+type UserInputKind = "dialogue" | "action" | "dialogue_action" | "intent_summary" | "ooc_instruction" | "character_line"
 type SceneEscalation = "none" | "verbal" | "romantic" | "physical"
 type FlirtChannel = "dialogue" | "power_play" | "proximity" | "touch"
 type NormalizedInputType = "dialogue" | "action" | "summary" | "mixed" | "auto_advance"
@@ -307,6 +307,7 @@ export interface CompiledRoleplayContext {
   avoidCharacterNameOpening: boolean
   regenerationAvoidContent: string
   previousAssistantContent: string
+  mentionTargets: string[]
 }
 
 let nextAllowedPollinationsAt = 0
@@ -684,8 +685,52 @@ function grantsCharacterInitiatedContact(source: string) {
   return /(?:^|[\s"'‘“])(?:하고\s*싶은\s*대로|원하는\s*대로|마음대로|네가\s*먼저|뭐든|전부|다)\s*(?:해|해도\s*돼|해\s*봐|하라고|해도\s*괜찮|허락)|(?:허락할게|허락해|허락한다|상관없어)|(?:안아|키스해|입맞춰|만져|손대|붙잡아|잡아|다가와)\s*(?:줘|봐|보라고|도\s*돼|도\s*괜찮)?/u.test(normalized)
 }
 
+export function parseUserAuthoredCharacterLine(raw: string) {
+  const payload = raw.trim().match(
+    /^\[사용자 작성 캐릭터 대사\]\s*\n([^\n]+)(?:\s*\n\[상태\][\s\S]*)?$/u,
+  )?.[1]
+  if (!payload) return null
+
+  try {
+    const parsed = JSON.parse(payload) as Record<string, unknown>
+    const speakerName = typeof parsed.speakerName === "string" ? parsed.speakerName.trim().slice(0, 80) : ""
+    const dialogue = typeof parsed.dialogue === "string" ? parsed.dialogue.trim().slice(0, 4_000) : ""
+    return speakerName && dialogue ? { speakerName, dialogue } : null
+  } catch {
+    return null
+  }
+}
+
+export function extractMentionTargets(raw: string) {
+  const targetText = raw.match(/^\[멘션\]\s*\n사용자가\s+(.+?)를\s+언급함(?:\s*\n|$)/u)?.[1]?.trim()
+  if (!targetText) return []
+  return targetText
+    .split(/[,，、]/u)
+    .map((target) => target.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+}
+
 function parseUserInput(raw: string, userName = "사용자"): ParsedUserInput {
   const text = raw.trim()
+  const authoredCharacterLine = parseUserAuthoredCharacterLine(text)
+  if (authoredCharacterLine) {
+    return {
+      kind: "character_line",
+      raw: text,
+      actor: authoredCharacterLine.speakerName,
+      dialogue: authoredCharacterLine.dialogue,
+      intent: `${authoredCharacterLine.speakerName}의 확정 대사 직후부터 장면을 이어간다. 대사를 반복하거나 사용자의 반응을 새로 만들지 않는다.`,
+      physicalContactRequested: false,
+      physicalContactPermitted: false,
+      proximityRequested: false,
+      asksOtherToAct: false,
+      contactLevel: "none",
+      sceneEscalation: "verbal",
+      flirtChannel: "dialogue",
+    }
+  }
+
   const parts = parseRoleplayInputParts(text)
   const actionParts = parts.filter((part) => part.type === "action" || part.type === "summary")
   const dialogueParts = parts.filter((part) => part.type === "dialogue")
@@ -854,7 +899,7 @@ function isUnderNormalizedUserInput(raw: string, normalized: NormalizedUserInput
 }
 
 function asksDirectQuestion(source: string) {
-  return /(?:묻|물어|질문|대답(?:해|하|을)|답해|답을|허락을\s*(?:구|요청)|가능(?:한지|해|할까)|(?:아|어|해)도\s*(?:돼|되는지)|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(source)
+  return /(?:[?？]|묻|물어|질문|대답(?:해|하|을)|답해|답을|허락을\s*(?:구|요청)|가능(?:한지|해|할까)|(?:아|어|해)도\s*(?:돼|되는지)|어디서|왜|무엇|뭐|어떻게|누구|언제)/u.test(source)
 }
 
 function normalizeUserInputFallback(
@@ -864,6 +909,10 @@ function normalizeUserInputFallback(
   characterName = "캐릭터",
 ): NormalizedUserInput {
   const parts = parseRoleplayInputParts(raw)
+  const hasExplicitAction = parts.some((part) => part.type === "action")
+  const hasDialogue = parts.some((part) => part.type === "dialogue")
+  const hasSummary = parts.some((part) => part.type === "summary")
+
   const actionText = parts
     .filter((part) => part.type === "action" || part.type === "summary")
     .map((part) => part.text)
@@ -874,11 +923,20 @@ function normalizeUserInputFallback(
     .map((part) => part.text)
     .join(" ")
     .trim()
-  const inputType: NormalizedInputType = actionText && dialogueText
+
+  const inputType: NormalizedInputType = hasExplicitAction && hasDialogue
     ? "mixed"
-    : actionText
-      ? parts.some((part) => part.type === "summary") ? "summary" : "action"
-      : "dialogue"
+    : hasExplicitAction
+      ? "action"
+      : hasDialogue
+        ? "dialogue"
+        : hasSummary
+          ? "summary"
+          : actionText && dialogueText
+            ? "mixed"
+            : actionText
+              ? "action"
+              : "dialogue"
   const asksOtherToAct =
     /(붙잡아\s*보라고|잡아\s*보라고|해\s*보라고|해\s*봐|하라고|말해\s*보라고|증명해\s*보라고)/u.test(actionText)
   const explicitTouch =
@@ -945,6 +1003,26 @@ async function resolveNormalizedLatestInput({
     return buildAutoAdvanceNormalizedInput(userName)
   }
 
+  const authoredCharacterLine = parseUserAuthoredCharacterLine(rawInput)
+  if (authoredCharacterLine) {
+    return {
+      inputType: "dialogue" as const,
+      actor: authoredCharacterLine.speakerName,
+      action: null,
+      dialogue: authoredCharacterLine.dialogue,
+      intent: `${authoredCharacterLine.speakerName}의 대사는 이미 발화된 확정 장면이다. 같은 대사를 반복하지 않고 직후부터 자연스럽게 이어간다.`,
+      contactLevel: "none" as const,
+      tone: "user-authored-character-line",
+    }
+  }
+
+  // The composer already emits an unambiguous structured form. Running that
+  // through a second AI normalizer can replace a direct question with an
+  // unrelated inferred intent, which makes mentions appear to be ignored.
+  if (/^\[[^\]\n]{1,40}의\s*(?:행동|지문|대사|말)\]\s*$/mu.test(rawInput)) {
+    return normalizeUserInputFallback(rawInput, userName, latestUserIntent, characterName)
+  }
+
   let normalized = (await normalizeUserInputWithAI({
     rawInput,
     userName,
@@ -953,6 +1031,15 @@ async function resolveNormalizedLatestInput({
     latestUserIntent,
     fallbackOpenRouterModel,
   })) ?? normalizeUserInputFallback(rawInput, userName, latestUserIntent, characterName)
+
+  const rawParts = parseRoleplayInputParts(rawInput)
+  const hasExplicitActionMarker = rawParts.some((part) => part.type === "action")
+  const hasDialogueParts = rawParts.some((part) => part.type === "dialogue")
+
+  if (!hasExplicitActionMarker && hasDialogueParts && normalized.inputType === "mixed") {
+    normalized.inputType = "dialogue"
+    normalized.action = null
+  }
 
   if (isUnderNormalizedUserInput(rawInput, normalized)) {
     normalized = (await normalizeUserInputWithAI({
@@ -964,11 +1051,23 @@ async function resolveNormalizedLatestInput({
       fallbackOpenRouterModel,
       strictConcrete: true,
     })) ?? normalizeUserInputFallback(rawInput, userName, latestUserIntent, characterName)
+
+    if (!hasExplicitActionMarker && hasDialogueParts && normalized.inputType === "mixed") {
+      normalized.inputType = "dialogue"
+      normalized.action = null
+    }
   }
 
-  return isUnderNormalizedUserInput(rawInput, normalized)
+  const finalNormalized = isUnderNormalizedUserInput(rawInput, normalized)
     ? normalizeUserInputFallback(rawInput, userName, latestUserIntent, characterName)
     : normalized
+
+  if (!hasExplicitActionMarker && hasDialogueParts && finalNormalized.inputType === "mixed") {
+    finalNormalized.inputType = "dialogue"
+    finalNormalized.action = null
+  }
+
+  return finalNormalized
 }
 
 function buildParsedInputFromNormalized(
@@ -1001,13 +1100,15 @@ function buildParsedInputFromNormalized(
         : "dialogue"
   const hasAction = Boolean(normalized.action)
   const hasDialogue = Boolean(normalized.dialogue)
-  const kind: UserInputKind = hasAction && hasDialogue
-    ? "dialogue_action"
-    : hasDialogue && normalized.inputType === "dialogue"
-      ? "dialogue"
-      : hasAction || normalized.inputType === "summary" || normalized.inputType === "mixed"
-        ? physicalContactRequested || proximityRequested ? "action" : "intent_summary"
-        : "dialogue"
+  const kind: UserInputKind = normalized.tone === "user-authored-character-line"
+    ? "character_line"
+    : hasAction && hasDialogue
+      ? "dialogue_action"
+      : hasDialogue && normalized.inputType === "dialogue"
+        ? "dialogue"
+        : hasAction || normalized.inputType === "summary" || normalized.inputType === "mixed"
+          ? physicalContactRequested || proximityRequested ? "action" : "intent_summary"
+          : "dialogue"
 
   return {
     kind,
@@ -1140,14 +1241,20 @@ function buildResponseGoal(
   }
   if (policy.autoAdvance) {
     if (policy.continuesExistingPhysicalContact) {
-      return withEstablishedState(`직전 답변에서 확정된 위치, 밀착, 접촉과 감정 수위를 그대로 이어받아 ${characterName} 자신의 반응과 행동을 한 단계 자연스럽게 진행한다. 장면을 접촉 이전으로 되돌리거나 다시 허락을 묻지 않으며, ${userName}의 새 행동·대사·감정·반응은 만들지 않는다.`)
+      return withEstablishedState(`직전 답변에서 확정된 위치, 밀착, 접촉과 감정 수위를 그대로 이어받아 ${characterName} 자신의 반응과 행동을 한 단계 자연스럽게 진행한다. 장면을 접촉 이전으로 되돌리거나 다시 허락을 묻지 않으며, ${userName}의 새 행동·대사·감정·반응은 만들지 않는다. 침묵을 관찰하거나 ${userName}의 답을 기다리는 데 턴을 쓰지 말고, 사용자 반응 없이도 성립하는 새로운 행동·결정·정보 중 하나를 실제로 발생시킨다.`)
     }
-    return withEstablishedState(`직전 답변의 확정된 사건, 위치, 분위기와 감정선을 그대로 이어받아 ${characterName} 자신의 반응과 행동으로 스토리를 한 단계 자연스럽게 진행한다. ${userName}의 새 행동·대사·감정·반응은 만들지 않는다.`)
+    return withEstablishedState(`직전 답변의 확정된 사건, 위치, 분위기와 감정선을 그대로 이어받아 ${characterName} 자신의 반응과 행동으로 스토리를 한 단계 자연스럽게 진행한다. ${userName}의 새 행동·대사·감정·반응은 만들지 않는다. 침묵을 관찰하거나 ${userName}의 답을 기다리는 데 턴을 쓰지 말고, 사용자 반응 없이도 성립하는 새로운 행동·결정·정보 중 하나를 실제로 발생시킨다.`)
+  }
+  if (input.kind === "character_line") {
+    const sameSpeaker = input.actor === characterName
+    return withEstablishedState(sameSpeaker
+      ? `${input.actor}이 이미 말한 확정 대사를 반복하거나 다시 인용하지 않는다. 그 대사 직후의 ${characterName} 자신의 새 행동이나 다음 대사로 장면을 한 단계 진행하고, ${userName}의 반응은 대신 만들지 않는다.`
+      : `${input.actor}이 이미 말한 확정 대사를 반복하거나 다시 인용하지 않는다. 그 대사에 대한 ${characterName} 자신의 즉각적인 반응으로 장면을 이어가고, ${userName}이나 ${input.actor}의 다음 행동·대사·감정은 대신 만들지 않는다.`)
   }
   const inputMeaning = [input.raw, input.action, input.dialogue, input.intent].filter(Boolean).join(" ")
   const requestsDirectAnswer = asksDirectQuestion(inputMeaning)
   if (requestsDirectAnswer) {
-    return withEstablishedState(`${userName}이 물은 구체적인 대상에 ${characterName}다운 답, 허락, 거절, 이유 중 하나를 먼저 제시한다. 질문을 되풀이하거나 왜 궁금한지 되묻지 않는다.`)
+    return withEstablishedState(`첫 번째 대사의 첫 문장에서 ${userName}이 물은 구체적인 질문에 ${characterName}다운 직접 답을 먼저 제시한다. 예/아니오로 답할 수 있는 질문이면 긍정 또는 부정을 명확히 밝힌 뒤 필요한 말을 덧붙인다. 질문을 다른 질문으로 바꾸거나, 되풀이하거나, 왜 궁금한지 되묻지 않는다.`)
   }
 
   if (policy.flirtChannel === "power_play") {
@@ -1334,6 +1441,7 @@ export function compileRoleplayContext(
   const historyLatestRawInput = getLatestUserMessageContent(messages)
   const autoAdvance = autoAdvanceOverride || isAutoAdvanceInput(historyLatestRawInput)
   const latestRawInput = autoAdvance ? AUTO_ADVANCE_TRIGGER_CONTENT : historyLatestRawInput
+  const mentionTargets = autoAdvance ? [] : extractMentionTargets(historyLatestRawInput)
   const parsedLatestInput = normalizedLatestInput
     ? buildParsedInputFromNormalized(latestRawInput, userName, normalizedLatestInput)
     : parseUserInput(latestRawInput, userName)
@@ -1409,6 +1517,7 @@ export function compileRoleplayContext(
     avoidCharacterNameOpening,
     regenerationAvoidContent: sanitizedRegenerationAvoidContent,
     previousAssistantContent,
+    mentionTargets,
   }
 }
 
@@ -1557,6 +1666,7 @@ export async function normalizeUserInputWithAI({
 - *...* 또는 **...**: 행동 또는 지문이다. 별표는 UI 문법이므로 제거하고 해석한다.
 - "...": 대사다.
 - "사용자 행동 요약:" 같은 메타 라벨은 만들지 않는다.
+- inputType 규칙: 대사만 1개 이상 들어있고 명시적 행동(*...*)이 없으면 무조건 "dialogue"로 설정한다. 대사가 여러 줄/여러 개 있더라도 행동이 없으면 "mixed"로 분류하지 않는다.
 ${strictConcrete ? `- 이전 정규화가 라벨만 붙인 수준이라 실패했다.
 - action에 사용자 원문을 그대로 복사하지 말고, 눈에 보이는 실제 태도나 표정으로 바꾼다.
 - 요약형 입력이면 dialogue를 1문장으로 구체화한다.
@@ -3001,6 +3111,21 @@ export function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledR
   return remainder
 }
 
+export function trimRoleplayAtCompleteBoundary(content: string, maxChars: number, minChars = 1) {
+  const normalized = content.trim()
+  if (Array.from(normalized).length <= maxChars) return normalized
+
+  const prefix = Array.from(normalized).slice(0, maxChars).join("")
+  const boundaries = [
+    prefix.lastIndexOf("\n\n"),
+    ...[...prefix.matchAll(/[.!?。！？]["”'’]?(?=\s|$)/gu)]
+      .map((match) => (match.index ?? -1) + match[0].length),
+  ].filter((index) => index >= minChars)
+  const boundary = boundaries.length > 0 ? Math.max(...boundaries) : -1
+
+  return boundary >= minChars ? prefix.slice(0, boundary).trim() : normalized
+}
+
 function extractRecentMeaningCandidates(content: string) {
   const normalized = normalizeOpenRouterOutput(content)
   if (!normalized || isSystemLikeAssistantContent(normalized)) return []
@@ -3048,6 +3173,7 @@ ${compiledContext.toneRules.join("\n")}
 
 [최신 입력 해석]
 - 입력 종류: ${latestInput.kind}
+- 멘션 대상: ${compiledContext.mentionTargets.length > 0 ? compiledContext.mentionTargets.join(", ") : "없음"}
 - 자동 진행 요청: ${turnPolicy.autoAdvance ? "예" : "아니오"}
 - 기존 답변 재생성 요청: ${compiledContext.regenerationAvoidContent ? "예" : "아니오"}
 - 직전 접촉 장면 이어가기: ${turnPolicy.continuesExistingPhysicalContact ? "예" : "아니오"}
@@ -3082,7 +3208,13 @@ ${turnPolicy.allowPhysicalContact
 - 사용자의 말을 그대로 되풀이하지 말고 의미에 반응한다.
 ${turnPolicy.autoAdvance ? `- 자동 진행에서는 직전 답변에서 이미 완료된 이동·접촉·밀착을 다시 실행하지 않는다. 확정 상태를 유지한 다음 순간부터 새로운 캐릭터 반응을 쓴다.
 - 자동 진행에는 새로운 사용자 대사나 질문이 없다. 캐릭터가 답할 말이 생긴 것처럼 "대답 대신", "대답하지 않고", "그 말에 답하며"로 시작하지 않는다.
-- 기다림을 생략하는 의미가 필요하면 "상대의 대답을 기다리는 대신"처럼 대답의 주체를 정확히 쓰거나, 설명 없이 다음 행동으로 바로 이어간다.` : ""}
+- 기다림을 생략하는 의미가 필요하면 "상대의 대답을 기다리는 대신"처럼 대답의 주체를 정확히 쓰거나, 설명 없이 다음 행동으로 바로 이어간다.
+- 사용자의 침묵·표정·반응을 관찰하는 묘사만으로 턴을 소비하지 않는다. 사용자 반응이 없어도 완결되는 새 행동·결정·정보를 최소 하나 발생시킨다.
+- "기다릴게", "말해 봐", "대답해"처럼 다시 사용자 입력만 기다리는 말로 답변을 끝내지 않는다.` : ""}
+${latestInput.kind === "character_line" ? `- ${latestInput.actor}의 대사는 사용자가 대신 작성해 이미 발생한 확정 사건이다. 그 대사를 다시 말하거나 요약하지 말고 바로 다음 순간부터 쓴다.
+- 사용자 작성 캐릭터 대사를 새로운 사용자 대사로 바꾸지 않으며, ${compiledContext.userName}의 반응을 임의로 만들지 않는다.` : ""}
+${compiledContext.mentionTargets.length > 0 ? `- 이번 사용자 입력은 ${compiledContext.mentionTargets.join(", ")}에게 직접 향한 멘션이다. 멘션을 장식 문자로 무시하지 말고 대사의 수신 대상과 장면 초점에 반영한다.
+- 단, 현재 배정된 캐릭터가 아닌 다른 인물의 다음 대사나 행동을 대신 확정하지 않는다.` : ""}
 ${compiledContext.regenerationAvoidContent ? "- 재생성에서는 폐기된 기존 답변의 문장, 대사, 행동 순서와 결말을 복사하지 않는다. 폐기 답변 이전의 확정 상태에서 출발해 다른 다음 행동과 대사를 선택한다." : ""}
 
 [이번 응답 목표]
@@ -3115,6 +3247,19 @@ ${buildTurnOpeningInstruction(compiledContext)}
 새 사용자 대사나 질문이 없으므로 캐릭터가 답할 말이 생긴 것처럼 "대답 대신"으로 시작하지 않는다.`
   }
 
+  if (latestInput.kind === "character_line") {
+    return `[사용자 작성 캐릭터 대사 - 확정 장면]
+[화자] ${latestInput.actor}
+[이미 발화된 대사]
+"${latestInput.dialogue || ""}"
+[진행 지시]
+위 대사는 이미 일어났다. 다시 말하거나 인용하지 않고 직후부터 이어간다. ${compiledContext.characterName} 자신의 새 반응만 쓰며 ${compiledContext.userName}의 반응은 만들지 않는다.
+
+응답 목표: ${compiledContext.responseGoal}
+
+${buildTurnOpeningInstruction(compiledContext)}`
+  }
+
   const actorName = latestInput.actor || compiledContext.userName
   const sceneParts = [
     latestInput.action ? `[${actorName}의 행동]\n${latestInput.action}` : "",
@@ -3122,7 +3267,11 @@ ${buildTurnOpeningInstruction(compiledContext)}
     `[${actorName}의 의도]\n${latestInput.intent}`,
   ].filter(Boolean).join("\n\n")
 
-  return `${sceneParts}
+  const mentionSection = compiledContext.mentionTargets.length > 0
+    ? `[멘션 대상]\n${compiledContext.mentionTargets.join(", ")}\n이 입력은 위 인물에게 직접 향한다. 수신 대상과 장면 초점에 반영한다.\n\n`
+    : ""
+
+  return `${mentionSection}${sceneParts}
 
 이번 턴 조건: 긴장도 ${turnPolicy.escalation}, 플러팅 채널 ${turnPolicy.flirtChannel}, 신체 접촉 허용 ${turnPolicy.allowPhysicalContact ? "예" : "아니오"}.
 재생성 조건: ${compiledContext.regenerationAvoidContent ? "폐기된 기존 답변과 다른 행동 및 대사 전개를 작성한다." : "일반 생성"}.
@@ -3213,7 +3362,8 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 최근 사용자 메시지에서 바로 이어간다.
 ${compiledContext?.turnPolicy.autoAdvance ? `- 이번 요청은 자동 진행이다. 직전 assistant 답변 뒤에 새로운 사용자 대사나 질문이 들어오지 않았다.
 - 캐릭터가 새 사용자 발화에 답하는 것처럼 "대답 대신", "대답하지 않고", "그 말에 답하며"라고 쓰지 않는다.
-- 상대의 답변을 기다리지 않고 움직이는 장면이라면 그 주체를 명시하거나, 별도 연결 표현 없이 직전 상태의 다음 행동부터 쓴다.` : ""}
+- 상대의 답변을 기다리지 않고 움직이는 장면이라면 그 주체를 명시하거나, 별도 연결 표현 없이 직전 상태의 다음 행동부터 쓴다.
+- 새 사용자 입력을 요구하며 멈추지 말고, 캐릭터가 독립적으로 할 수 있는 다음 행동·결정·정보 공개 중 하나를 실행한 뒤 턴을 맺는다.` : ""}
 - 사용자가 구체적인 대상, 이유, 허락, 가능 여부를 물으면 그 대상에 대한 캐릭터다운 답을 먼저 제시한다.
 - 질문을 그대로 되풀이하거나 "왜 궁금한데", "그게 왜 궁금해"처럼 질문 이유만 되묻고 끝내지 않는다.
 - 장면은 "${characterName}"의 반응만으로 한 번의 의미 있는 행동 흐름만 진행한다. 이미 시작된 합의된 접촉은 현재 수위에서 구체적으로 이어갈 수 있다.
@@ -3537,12 +3687,22 @@ function splitGeminiRoleplayMessages(finalMessages: ChatMessages) {
     .filter((message) => message.role === "system")
     .map((message) => message.content)
     .join("\n\n")
-  const contents: Content[] = finalMessages
+  const contents = finalMessages
     .filter((message) => message.role !== "system" && message.content.trim())
-    .map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    }))
+    .reduce<Content[]>((merged, message) => {
+      const role = message.role === "assistant" ? "model" : "user"
+      const previous = merged.at(-1)
+      if (previous?.role === role) {
+        const previousText = previous.parts
+          ?.map((part) => "text" in part ? part.text : "")
+          .join("") ?? ""
+        previous.parts = [{ text: `${previousText}\n\n${message.content}` }]
+        return merged
+      }
+
+      merged.push({ role, parts: [{ text: message.content }] })
+      return merged
+    }, [])
 
   return { systemPrompt, contents }
 }
@@ -5345,6 +5505,40 @@ ${savedContent}
   let repairedFinalBlockingFailures = repairedFinalValidation && repairedFinalClassifiedValidation
     ? getTerminalBlockingFailureKeys(repairedFinalValidation, repairedFinalClassifiedValidation)
     : []
+
+  if (
+    savedContent &&
+    repairedFinalBlockingFailures.length === 1 &&
+    repairedFinalBlockingFailures[0] === "tooLong"
+  ) {
+    const trimmedContent = trimRoleplayAtCompleteBoundary(
+      savedContent,
+      compiledContext.turnPolicy.maxChars,
+      compiledContext.turnPolicy.minChars,
+    )
+
+    if (trimmedContent !== savedContent) {
+      const trimmedValidationResult = await validateStreamContent(trimmedContent, outputModel !== attemptedModel)
+      const trimmedValidation = trimmedValidationResult.errors
+      const trimmedSeverityOverrides = trimmedValidationResult.severityOverrides
+      const trimmedClassifiedValidation = classify(trimmedValidation, trimmedSeverityOverrides)
+      validationAttempts.push(buildValidationAttempt("repair", trimmedValidation, trimmedClassifiedValidation))
+
+      if (passesTerminalOutputContract(trimmedValidation, trimmedClassifiedValidation)) {
+        savedContent = trimmedContent
+        repairAttempted = true
+        fallbackProvider = fallbackProvider
+          ? `${fallbackProvider}+length-trim`
+          : "deterministic-length-trim"
+        repairedFinalValidationResult = trimmedValidationResult
+        repairedFinalValidation = trimmedValidation
+        repairedFinalSeverityOverrides = trimmedSeverityOverrides
+        validationSeverityOverrides = trimmedSeverityOverrides
+        repairedFinalClassifiedValidation = trimmedClassifiedValidation
+        repairedFinalBlockingFailures = []
+      }
+    }
+  }
 
   // A provider can fix the semantic problem yet undershoot the mechanical
   // length/dialogue contract. Give that candidate one bounded recovery pass

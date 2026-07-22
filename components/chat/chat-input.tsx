@@ -53,7 +53,13 @@ function escapeRegExp(value: string) {
 function extractTypedMentions(value: string, characters: ChatInputCharacter[]): string[] {
   const mentionNameToId = buildMentionNameToId(characters)
   const mentionIds = new Set<string>()
-  const mentionPattern = /(^|\s)@([^\s@]+)(?=\s|$)/g
+  const mentionNames = [...mentionNameToId.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp)
+    .join("|")
+  if (!mentionNames) return []
+
+  const mentionPattern = new RegExp(`(^|\\s)@(${mentionNames})(?=\\s|$)`, "gu")
   let match: RegExpExecArray | null
 
   while ((match = mentionPattern.exec(value)) !== null) {
@@ -141,6 +147,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
   const [contextMode, setContextMode] = useState<CharacterContextMode | null>(null)
   const [mentionQuery, setMentionQuery] = useState("")
+  const [selectedContextIndex, setSelectedContextIndex] = useState(0)
   const [activeMentionRange, setActiveMentionRange] = useState<{ start: number; end: number } | null>(null)
   const [attachedImage, setAttachedImage] = useState<{ url: string; name?: string } | null>(null)
   const [alertMessage, setAlertMessage] = useState("")
@@ -310,6 +317,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const closeCharacterContext = () => {
     setContextMode(null)
     setMentionQuery("")
+    setSelectedContextIndex(0)
     setActiveMentionRange(null)
   }
 
@@ -322,6 +330,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     }
     setContextMode(mode)
     setMentionQuery("")
+    setSelectedContextIndex(0)
     setActiveMentionRange(null)
   }
 
@@ -375,6 +384,27 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     })
   }
 
+  const insertCharacterLine = (character: ChatInputCharacter) => {
+    const textarea = textareaRef.current
+    const start = textarea?.selectionStart ?? input.length
+    const end = textarea?.selectionEnd ?? input.length
+    const selectedText = input.slice(start, end).trim()
+    const before = input.slice(0, start).trimEnd()
+    const after = input.slice(end).trimStart()
+    const template = `ⓣ${character.name}: ${selectedText}`
+    const leading = before ? `${before}\n\n` : ""
+    const trailing = after ? `\n\n${after}` : ""
+    const nextValue = `${leading}${template}${trailing}`
+    const nextCursor = leading.length + template.length
+
+    setInput(nextValue)
+    closeCharacterContext()
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
+    })
+  }
+
   const handleCharacterSelect = (target: ChatInputCharacter | "all") => {
     if (disabled) return
     if (target === "all") {
@@ -383,7 +413,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     }
 
     if (contextMode === "speech") {
-      insertAtCursor(`ⓣ${target.name}: `)
+      insertCharacterLine(target)
       return
     }
 
@@ -442,6 +472,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     if (mentionToken) {
       setContextMode("mention")
       setMentionQuery(mentionToken.query)
+      setSelectedContextIndex(0)
       setActiveMentionRange({ start: mentionToken.start, end: mentionToken.end })
       return
     }
@@ -483,7 +514,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
 
     const speechNames = mentionCharacters.map((character) => escapeRegExp(character.name)).join("|")
     const speechTemplatePattern = speechNames
-      ? new RegExp(`^ⓣ(${speechNames}):\\s*$`, "u")
+      ? new RegExp(`(?:^|(?:\\r?\\n){2,})ⓣ(?:${speechNames}):\\s*(?=(?:\\r?\\n){2,}|$)`, "u")
       : null
     if (speechTemplatePattern?.test(input.trim())) {
       setAlertMessage("대사 내용을 입력하세요.")
@@ -525,6 +556,29 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       e.preventDefault()
       return
     }
+    if (contextMode !== null && contextTargets.length > 0) {
+      if (e.key === "Escape") {
+        e.preventDefault()
+        closeCharacterContext()
+        return
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedContextIndex((index) => Math.min(index + 1, contextTargets.length - 1))
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedContextIndex((index) => Math.max(index - 1, 0))
+        return
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault()
+        handleCharacterSelect(contextTargets[selectedContextIndex])
+        return
+      }
+    }
+
     // Command navigation
     if (showCommands && filteredCommands.length > 0) {
       if (e.key === "Escape") {
@@ -570,6 +624,10 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
     return character.name.includes(query)
   })
   const shouldShowAllMention = contextMode === "mention" && "모두".includes(mentionQuery.trim())
+  const contextTargets: Array<ChatInputCharacter | "all"> = [
+    ...(shouldShowAllMention ? ["all" as const] : []),
+    ...filteredContextCharacters,
+  ]
   const showHighlightedInput = shouldRenderHighlightedInput(input, mentionCharacters)
 
   return (
@@ -636,6 +694,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         mode={contextMode ?? "mention"}
         characters={filteredContextCharacters}
         showAll={shouldShowAllMention}
+        selectedIndex={selectedContextIndex}
         onSelect={handleCharacterSelect}
         onClose={closeCharacterContext}
       />
@@ -779,7 +838,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
             onScroll={handleInputScroll}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder={isAutoAdvanceEnabled ? "빈 상태로 전송하면 자동 진행" : "메시지를 입력하세요..."}
+            placeholder={isAutoAdvanceEnabled ? "빈 상태로 전송하면 자동 진행" : "줄바꿈 두번으로 말풍선 분리"}
             rows={1}
             className={cn(
               "relative z-10 max-h-24 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
@@ -823,6 +882,7 @@ interface CharacterContextBoxProps {
   mode: CharacterContextMode
   characters: ChatInputCharacter[]
   showAll: boolean
+  selectedIndex: number
   onSelect: (target: ChatInputCharacter | "all") => void
   onClose: () => void
 }
@@ -833,6 +893,7 @@ function CharacterContextBox({
   mode,
   characters,
   showAll,
+  selectedIndex,
   onSelect,
   onClose,
 }: CharacterContextBoxProps) {
@@ -874,7 +935,10 @@ function CharacterContextBox({
           <button
             type="button"
             onClick={() => onSelect("all")}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent",
+              selectedIndex === 0 && "bg-accent",
+            )}
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm">
               @
@@ -885,12 +949,15 @@ function CharacterContextBox({
             </span>
           </button>
         )}
-        {characters.map((character) => (
+        {characters.map((character, index) => (
           <button
             key={character.id}
             type="button"
             onClick={() => onSelect(character)}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent"
+            className={cn(
+              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent",
+              selectedIndex === index + (showAll ? 1 : 0) && "bg-accent",
+            )}
           >
             {character.avatarUrl ? (
               <img

@@ -456,6 +456,8 @@ export type ParsedChatInput =
       isEmptyLine: boolean
     }
 
+export type ParsedChatInputSegment = ParsedChatInput
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -528,9 +530,59 @@ export function parseChatInput(
   }
 }
 
+export function parseChatInputSegments(
+  content: string,
+  characters: ChatInputCharacter[],
+  explicitMentions?: string[],
+): ParsedChatInputSegment[] {
+  const blocks = content
+    .trim()
+    .split(/(?:\r?\n){2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+  if (blocks.length === 0) return []
+
+  const segments: ParsedChatInputSegment[] = []
+  let pendingPlainBlocks: string[] = []
+  const flushPlainBlocks = () => {
+    if (pendingPlainBlocks.length === 0) return
+    segments.push(parseChatInput(pendingPlainBlocks.join("\n\n"), characters, explicitMentions))
+    pendingPlainBlocks = []
+  }
+
+  for (const block of blocks) {
+    const parsed = parseChatInput(block, characters)
+    if (parsed.kind === "character_line") {
+      flushPlainBlocks()
+      segments.push(parsed)
+    } else {
+      pendingPlainBlocks.push(block)
+    }
+  }
+  flushPlainBlocks()
+
+  return segments
+}
+
+function getMentionedCharacterLabel(message: ChatMessage) {
+  const visibleNames = [...message.content.matchAll(/(?:^|\s)@([^\s@]+)(?=\s|$)/gu)]
+    .map((match) => match[1]?.trim())
+    .filter((name): name is string => Boolean(name))
+
+  return message.mentionCharacterNames?.join(", ")
+    || visibleNames.join(", ")
+    || message.mentionCharacterIds?.join(", ")
+    || message.mentions?.join(", ")
+    || ""
+}
+
 export function formatMessageForAIContext(message: ChatMessage) {
   if (message.isUserAuthoredCharacterLine && message.speakerName) {
-    return `사용자가 ${message.speakerName}의 대사로 작성함: ${message.content}`
+    const authoredLine = JSON.stringify({
+      speakerName: message.speakerName,
+      dialogue: message.content,
+    })
+    return `[사용자 작성 캐릭터 대사]\n${authoredLine}\n[상태] 이 대사는 이미 장면에서 발화되었다. 그대로 반복하지 말고 직후부터 이어간다.`
   }
 
   if (message.type === "user") {
@@ -544,7 +596,7 @@ export function formatMessageForAIContext(message: ChatMessage) {
     }
 
     if (message.mentionCharacterIds?.length || message.mentions?.length) {
-      const mentioned = message.mentionCharacterIds?.join(", ") || message.mentions?.join(", ")
+      const mentioned = getMentionedCharacterLabel(message)
       return `[멘션]\n사용자가 ${mentioned}를 언급함\n\n${structuredContent}`
     }
 
@@ -556,7 +608,7 @@ export function formatMessageForAIContext(message: ChatMessage) {
   }
 
   if (message.mentionCharacterIds?.length || message.mentions?.length) {
-    const mentioned = message.mentionCharacterIds?.join(", ") || message.mentions?.join(", ")
+    const mentioned = getMentionedCharacterLabel(message)
     return `사용자가 ${mentioned}를 언급함: ${message.content}`
   }
 
@@ -1117,10 +1169,47 @@ export function buildUserMessage(
     timestamp: new Date(),
     mentions: parsedInput.mentionAll ? ["all"] : parsedInput.mentionCharacterIds,
     mentionCharacterIds: parsedInput.mentionCharacterIds,
+    mentionCharacterNames: parsedInput.mentionCharacterIds
+      ?.map((id) => characters.find((character) => character.id === id)?.name)
+      .filter((name): name is string => Boolean(name)),
     mentionAll: parsedInput.mentionAll,
     imageUrl: image?.url,
     imageName: image?.name,
   }
+}
+
+export function buildUserMessages(
+  content: string,
+  characters: ChatInputCharacter[] = [],
+  mentions?: string[],
+  image?: { url: string; name?: string },
+): ChatMessage[] {
+  const segments = parseChatInputSegments(content, characters, mentions)
+  if (segments.length === 0) {
+    return image ? [buildUserMessage("", characters, mentions, image)] : []
+  }
+
+  return segments.map((segment, index) => {
+    const segmentImage = index === segments.length - 1 ? image : undefined
+
+    if (segment.kind === "character_line") {
+      return {
+        id: makeId(),
+        type: "user",
+        content: segment.content,
+        timestamp: new Date(),
+        speakerType: "character",
+        speakerId: segment.speakerId,
+        speakerName: segment.speakerName,
+        isUserAuthoredCharacterLine: true,
+        originalContent: segment.originalContent,
+        imageUrl: segmentImage?.url,
+        imageName: segmentImage?.name,
+      }
+    }
+
+    return buildUserMessage(segment.content, characters, mentions, segmentImage)
+  })
 }
 
 /**

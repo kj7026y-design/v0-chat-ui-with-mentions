@@ -44,6 +44,7 @@ export interface ChatMessage {
   speakerId?: string
   speakerName?: string
   mentionCharacterIds?: string[]
+  mentionCharacterNames?: string[]
   mentionAll?: boolean
   isUserAuthoredCharacterLine?: boolean
   originalContent?: string

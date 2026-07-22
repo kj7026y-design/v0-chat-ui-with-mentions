@@ -23,6 +23,24 @@ export function looksLikeSummaryInput(content: string) {
   return SUMMARY_LIKE_ENDING_PATTERN.test(trimmed)
 }
 
+function pushTextParts(parts: ParsedInputPart[], text: string) {
+  const blocks = text.split(/(?:\r?\n){2,}/).map((block) => block.trim()).filter(Boolean)
+  for (const block of blocks) {
+    const cleanedText = block
+      .split(/\r?\n/)
+      .map((line) => line.trim().replace(/[ \t]+/g, " "))
+      .filter(Boolean)
+      .join("\n")
+
+    if (!cleanedText) continue
+
+    parts.push({
+      type: looksLikeSummaryInput(cleanedText) ? "summary" : "dialogue",
+      text: cleanedText,
+    })
+  }
+}
+
 export function hasUnclosedActionMarker(content: string) {
   let cursor = 0
 
@@ -102,10 +120,7 @@ export function parseRoleplayInputParts(raw: string): ParsedInputPart[] {
   while ((match = tokenPattern.exec(text)) !== null) {
     const before = text.slice(cursor, match.index).trim()
     if (before) {
-      parts.push({
-        type: looksLikeSummaryInput(before) ? "summary" : "dialogue",
-        text: trimWrappedText(before),
-      })
+      pushTextParts(parts, before)
     }
 
     const token = match[0]
@@ -122,18 +137,14 @@ export function parseRoleplayInputParts(raw: string): ParsedInputPart[] {
 
   const tail = text.slice(cursor).trim()
   if (tail) {
-    parts.push({
-      type: looksLikeSummaryInput(tail) ? "summary" : "dialogue",
-      text: trimWrappedText(tail),
-    })
+    pushTextParts(parts, tail)
   }
 
   if (parts.length > 0) return parts
 
-  return [{
-    type: looksLikeSummaryInput(text) ? "summary" : "dialogue",
-    text: trimWrappedText(text),
-  }]
+  const fallbackParts: ParsedInputPart[] = []
+  pushTextParts(fallbackParts, text)
+  return fallbackParts
 }
 
 export function parseComposerInput(raw: string): ComposerPart[] {
