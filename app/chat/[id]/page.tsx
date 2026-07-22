@@ -1184,6 +1184,10 @@ export default function ChatPage() {
         ...(autoImageMessage ? [autoImageMessage] : []),
       ])
     } catch (error) {
+      const errorText = error instanceof Error ? error.message : "다시 생성하지 못했어요."
+      const failureContent = retryIsRegeneration
+        ? `새 답변을 채택하지 않았어요.\n${errorText}\n다시 생성할 수 있습니다.`
+        : `${errorText}\n다시 생성할 수 있습니다.`
       setMessages((prev) =>
         prev.some((message) => message.id === characterMessageId)
           ? prev.map((message) => message.id === characterMessageId
@@ -1191,17 +1195,26 @@ export default function ChatPage() {
                   ...failedMessage,
                   ...message,
                   type: "status",
-                  content: failedMessage.content,
+                  content: failureContent,
                   timestamp: new Date(),
                   turnId: failedMessage.turnId,
                   isGenerationError: true,
+                  generationErrorMessage: message.generationErrorMessage || errorText,
                   retryPayload: failedMessage.retryPayload,
                   status: "failed",
                 }
               : message)
-          : [...prev, { ...failedMessage, status: "failed" }],
+          : [...prev, {
+              ...failedMessage,
+              type: "status",
+              content: failureContent,
+              timestamp: new Date(),
+              isGenerationError: true,
+              generationErrorMessage: errorText,
+              status: "failed",
+            }],
       )
-      toast.error(error instanceof Error ? error.message : "다시 생성하지 못했어요.")
+      toast.error(errorText)
     } finally {
       setIsTyping(false)
       setTypingLabel(undefined)

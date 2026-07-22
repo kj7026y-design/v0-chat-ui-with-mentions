@@ -108,8 +108,8 @@ const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
 const PROMPT_VERSION = "rp-pipeline-v14"
-const NORMALIZER_VERSION = "rp-normalizer-v5"
-const VALIDATOR_VERSION = "rp-validator-v13"
+const NORMALIZER_VERSION = "rp-normalizer-v6"
+const VALIDATOR_VERSION = "rp-validator-v14"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const SERVICE_INFO_PROTECTION_PROMPT = `[서비스 내부 정보 보호 - 모든 모델 공통]
@@ -3077,38 +3077,47 @@ function normalizeAutoAdvanceResponseOpening(content: string, ctx: CompiledRolep
 
 export function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledRoleplayContext) {
   const normalized = normalizeAutoAdvanceResponseOpening(normalizeOpenRouterOutput(content), ctx)
-  if (!normalized || !ctx.avoidCharacterNameOpening) return normalized
+  if (!normalized) return normalized
 
-  const characterName = ctx.characterName.trim()
-  if (!characterName) return normalized
+  let openingNormalized = normalized
 
-  const repeatedNameSubject = new RegExp(
-    `^(\\s*)${escapeRegExp(characterName)}(?:은|는|이|가)\\s+`,
-    "u",
-  )
-  const match = repeatedNameSubject.exec(normalized)
-  if (!match) return normalized
+  if (ctx.avoidCharacterNameOpening) {
+    const characterName = ctx.characterName.trim()
+    if (characterName) {
+      const repeatedNameSubject = new RegExp(
+        `^(\\s*)${escapeRegExp(characterName)}(?:은|는|이|가)\\s+`,
+        "u",
+      )
+      const match = repeatedNameSubject.exec(normalized)
 
-  const remainder = normalized.slice(match[0].length).trimStart()
-  const userName = ctx.userName.trim()
-  const explicitUserSubjects = [
-    "상대",
-    "사용자",
-    "유저",
-    "너",
-    "네",
-    "나",
-    "내",
-    userName && userName !== "나" ? escapeRegExp(userName) : "",
-  ].filter(Boolean).join("|")
-  if (
-    explicitUserSubjects &&
-    new RegExp(`^(?:${explicitUserSubjects})(?:은|는|이|가)(?=\\s)`, "u").test(remainder)
-  ) {
-    return normalized
+      if (match) {
+        const remainder = normalized.slice(match[0].length).trimStart()
+        const userName = ctx.userName.trim()
+        const explicitUserSubjects = [
+          "상대",
+          "사용자",
+          "유저",
+          "너",
+          "네",
+          "나",
+          "내",
+          userName && userName !== "나" ? escapeRegExp(userName) : "",
+        ].filter(Boolean).join("|")
+        if (
+          !explicitUserSubjects ||
+          !new RegExp(`^(?:${explicitUserSubjects})(?:은|는|이|가)(?=\\s)`, "u").test(remainder)
+        ) {
+          openingNormalized = remainder
+        }
+      }
+    }
   }
 
-  return remainder
+  return trimRoleplayAtCompleteBoundary(
+    openingNormalized,
+    ctx.turnPolicy.maxChars,
+    ctx.turnPolicy.minChars,
+  )
 }
 
 export function trimRoleplayAtCompleteBoundary(content: string, maxChars: number, minChars = 1) {

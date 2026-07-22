@@ -213,6 +213,27 @@ function hasCharacterInterpretationFrame(text: string) {
   return /(듯|처럼|같|알 수 없|보이|읽|짐작|기다리|궁금|기대|바라보|살피)/.test(text)
 }
 
+function hasObservableUserSpeechClause(text: string, userName: string) {
+  const name = userName.trim()
+  const owners = [
+    name ? escapeRegExp(name) : "",
+    "너",
+    "상대",
+    "사용자",
+    "유저",
+  ].filter(Boolean).join("|")
+  if (!owners) return false
+
+  // A relative clause such as "김여자가 내뱉은 승낙" identifies an
+  // observable utterance. The later mental/action predicate in the sentence
+  // still belongs to the character subject and must not be reassigned to the
+  // user merely because the user's name appears first inside the excerpt.
+  return new RegExp(
+    `(?:${owners})(?:은|는|이|가)\\s+[^,.!?\\n]{0,24}(?:내뱉|말하|대답하|답하|질문하|선언하|승낙하|허락하|거절하|건네)(?:은|는|던|한|했던|고|며)`,
+    "u",
+  ).test(text)
+}
+
 function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudgeSanitizeContext) {
   if (isEvidenceInCharacterDialogue(evidence, ctx.output, ctx.characterName)) return false
   if (!isEvidenceInNarration(evidence, ctx.output)) return false
@@ -220,7 +241,10 @@ function isClearObjectiveUserStateAssertion(evidence: string, ctx: AiQualityJudg
   if (
     containingSentence &&
     hasCharacterNarrationSubject(containingSentence, ctx.characterName) &&
-    !hasExplicitUserStateOwner(evidence, ctx.userName)
+    (
+      !hasExplicitUserStateOwner(evidence, ctx.userName) ||
+      hasObservableUserSpeechClause(evidence, ctx.userName)
+    )
   ) return false
   if (hasCharacterStateOwner(evidence, ctx.characterName)) return false
   if (!hasUserReference(evidence, ctx.userName)) return false
