@@ -15,7 +15,10 @@ export interface StoredChatMessage {
 
 interface MessageRow {
   message_seq: string | number
-  message_data: StoredChatMessage | string
+  message_id: string
+  message_type: string
+  content: string
+  message_data: Record<string, unknown> | string
   client_timestamp: string | Date
 }
 
@@ -183,12 +186,39 @@ async function ensureChatRoom({
   return String(rows[0].chat_room_id)
 }
 
+const MESSAGE_COLUMN_KEYS = new Set(["id", "type", "content", "timestamp"])
+
+function parseStoredMetadata(messageData: MessageRow["message_data"]): Record<string, unknown> {
+  if (typeof messageData !== "string") return messageData
+
+  try {
+    const parsed = JSON.parse(messageData) as unknown
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function serializeMessageMetadata(message: StoredChatMessage) {
+  return JSON.stringify(Object.fromEntries(
+    Object.entries(message).filter(([key]) => !MESSAGE_COLUMN_KEYS.has(key)),
+  ))
+}
+
 function parseMessageData(row: MessageRow): StoredChatMessage {
-  const data = typeof row.message_data === "string"
-    ? JSON.parse(row.message_data) as StoredChatMessage
-    : row.message_data
-  const timestamp = data.timestamp || new Date(row.client_timestamp).toISOString()
-  return { ...data, timestamp }
+  const metadata = parseStoredMetadata(row.message_data)
+
+  // The dedicated columns are canonical. Spreading them last also keeps legacy
+  // rows readable when message_data still contains a full message snapshot.
+  return {
+    ...metadata,
+    id: row.message_id,
+    type: row.message_type,
+    content: row.content,
+    timestamp: new Date(row.client_timestamp).toISOString(),
+  }
 }
 
 export async function getChatMessagePage({
@@ -214,7 +244,7 @@ export async function getChatMessagePage({
   const queryLimit = limit + 1
   const rows = cursor
     ? await sql.query(
-        `SELECT message_seq, message_data, client_timestamp
+        `SELECT message_seq, message_id, message_type, content, message_data, client_timestamp
          FROM storychat_messages
          WHERE chat_room_id = $1::bigint AND message_seq < $2::bigint
          ORDER BY message_seq DESC
@@ -222,7 +252,7 @@ export async function getChatMessagePage({
         [chatRoomId, cursor, queryLimit],
       ) as unknown as MessageRow[]
     : await sql.query(
-        `SELECT message_seq, message_data, client_timestamp
+        `SELECT message_seq, message_id, message_type, content, message_data, client_timestamp
          FROM storychat_messages
          WHERE chat_room_id = $1::bigint
          ORDER BY message_seq DESC
@@ -277,7 +307,7 @@ export async function upsertChatMessages({
       message.id,
       message.type,
       message.content,
-      JSON.stringify(message),
+      serializeMessageMetadata(message),
       message.timestamp,
     ],
   ))
