@@ -52,6 +52,9 @@ export type GenerationRun = {
   timeoutStage?: GenerationTimeoutStage
   geminiErrorCode?: number
   geminiErrorStatus?: string
+  generationErrorCode?: number
+  generationErrorStatus?: string
+  generationErrorMessage?: string
   status: GenerationRunStatus
   createdAt: string
   completedAt?: string

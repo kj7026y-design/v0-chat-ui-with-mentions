@@ -29,6 +29,9 @@ export interface ChatMessage {
   timeoutStage?: GenerationTimeoutStage
   geminiErrorCode?: number
   geminiErrorStatus?: string
+  generationErrorCode?: number
+  generationErrorStatus?: string
+  generationErrorMessage?: string
   streamedContent?: string
   savedContent?: string
   imageUrl?: string

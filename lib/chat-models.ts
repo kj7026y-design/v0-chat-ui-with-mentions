@@ -1,4 +1,4 @@
-export type ChatModelId = "free" | "gemini-pro" | "gemini-3-flash-rp" | "openai" | "cohere/command-r-plus-08-2024"
+export type ChatModelId = "free" | "gemini-pro" | "gemini-3-flash-rp" | "openai" | "cohere/command-r-plus-08-2024" | "google/gemini-2.5-flash"
 
 export type ChatModelProvider = "gemini" | "openai" | "openrouter" | "pollinations"
 export type ChatModelMode = "normal" | "premium" | "nsfw"

@@ -851,6 +851,9 @@ export default function ChatPage() {
               timeoutStage: event.timeout_stage,
               geminiErrorCode: event.gemini_error_code,
               geminiErrorStatus: event.gemini_error_status,
+              generationErrorCode: event.generation_error_code,
+              generationErrorStatus: event.generation_error_status,
+              generationErrorMessage: event.generation_error_message ?? event.error,
               savedContent,
               streamedContent: message.content,
             }
@@ -1049,6 +1052,9 @@ export default function ChatPage() {
               timeoutStage: event.timeout_stage,
               geminiErrorCode: event.gemini_error_code,
               geminiErrorStatus: event.gemini_error_status,
+              generationErrorCode: event.generation_error_code,
+              generationErrorStatus: event.generation_error_status,
+              generationErrorMessage: event.generation_error_message ?? event.error,
               savedContent,
               streamedContent: message.content,
             }
@@ -1104,6 +1110,7 @@ export default function ChatPage() {
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
             autoAdvance: retryIsAutoAdvance,
+            retryAttempt: true,
             regenerationAvoidContent: retryPayload.regenerationAvoidContent,
             answerLength,
             onStreamEvent: handleStreamEvent,
@@ -1172,7 +1179,19 @@ export default function ChatPage() {
     } catch (error) {
       setMessages((prev) =>
         prev.some((message) => message.id === characterMessageId)
-          ? prev.map((message) => message.id === characterMessageId ? { ...message, ...failedMessage, status: "failed" } : message)
+          ? prev.map((message) => message.id === characterMessageId
+              ? {
+                  ...failedMessage,
+                  ...message,
+                  type: "status",
+                  content: failedMessage.content,
+                  timestamp: new Date(),
+                  turnId: failedMessage.turnId,
+                  isGenerationError: true,
+                  retryPayload: failedMessage.retryPayload,
+                  status: "failed",
+                }
+              : message)
           : [...prev, { ...failedMessage, status: "failed" }],
       )
       toast.error(error instanceof Error ? error.message : "다시 생성하지 못했어요.")
@@ -1311,6 +1330,9 @@ export default function ChatPage() {
               timeoutStage: event.timeout_stage,
               geminiErrorCode: event.gemini_error_code,
               geminiErrorStatus: event.gemini_error_status,
+              generationErrorCode: event.generation_error_code,
+              generationErrorStatus: event.generation_error_status,
+              generationErrorMessage: event.generation_error_message ?? event.error,
             }
           }
           return {
@@ -1374,6 +1396,9 @@ export default function ChatPage() {
                 timeoutStage: rewrittenReply.timeoutStage,
                 geminiErrorCode: rewrittenReply.geminiErrorCode,
                 geminiErrorStatus: rewrittenReply.geminiErrorStatus,
+                generationErrorCode: rewrittenReply.generationErrorCode,
+                generationErrorStatus: rewrittenReply.generationErrorStatus,
+                generationErrorMessage: rewrittenReply.generationErrorMessage,
                 savedContent: rewrittenReply.savedContent,
                 speakerId: rewrittenReply.speakerId ?? msg.speakerId,
                 speakerName: rewrittenReply.speakerName ?? msg.speakerName,

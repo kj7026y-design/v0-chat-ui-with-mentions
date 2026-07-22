@@ -107,6 +107,9 @@ export type ChatStreamEvent = {
   timeout_stage?: GenerationTimeoutStage
   gemini_error_code?: number
   gemini_error_status?: string
+  generation_error_code?: number
+  generation_error_status?: string
+  generation_error_message?: string
   status?: "streaming" | "completed" | "failed"
   error?: string
   room_id?: string
@@ -118,6 +121,7 @@ export type GenerateAssistantReplyOptions = {
   userMessageId?: string
   characterMessageId?: string
   regenerationAvoidContent?: string
+  retryAttempt?: boolean
   autoAdvance?: boolean
   bypassRoleplayRules?: boolean
   debugRawRoleplayStream?: boolean
@@ -941,6 +945,9 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
         timeoutStage: event.timeout_stage,
         geminiErrorCode: event.gemini_error_code,
         geminiErrorStatus: event.gemini_error_status,
+        generationErrorCode: event.generation_error_code,
+        generationErrorStatus: event.generation_error_status,
+        generationErrorMessage: event.generation_error_message ?? event.error,
         status: event.status === "failed" ? "failed" : "completed",
         createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
@@ -966,7 +973,19 @@ async function readChatEventStream(response: Response, options: GenerateAssistan
       })
     }
 
-    if (event.status === "failed") throw new Error(event.error || "Chat generation failed")
+    if (event.status === "failed") {
+      const isGeminiUnavailable = event.gemini_error_code === 503 || event.gemini_error_status === "UNAVAILABLE"
+      const hasDistinctGenerationError = Boolean(
+        event.generation_error_code ||
+        (event.generation_error_status && event.generation_error_status !== "UNAVAILABLE"),
+      )
+      const userMessage = hasDistinctGenerationError
+        ? event.generation_error_message || event.error || "Chat generation failed"
+        : isGeminiUnavailable
+          ? "AI 서버가 일시적으로 과부하 상태입니다. 잠시 후 다시 시도해 주세요."
+          : event.generation_error_message || event.error || "Chat generation failed"
+      throw new Error(userMessage)
+    }
     if (!savedContent) throw new Error("Chat API returned empty saved_content")
     return savedContent
   }
@@ -1032,6 +1051,7 @@ async function generatePollinationsReply(
     userMessageId: options.userMessageId,
     characterMessageId: options.characterMessageId,
     regenerationAvoidContent: options.regenerationAvoidContent,
+    retryAttempt: options.retryAttempt,
     autoAdvance: options.autoAdvance,
     previousAssistantContent,
     messages: outboundMessages,
@@ -1147,6 +1167,9 @@ export async function generateAssistantReply(
     timeoutStage: completedEvent?.timeout_stage,
     geminiErrorCode: completedEvent?.gemini_error_code,
     geminiErrorStatus: completedEvent?.gemini_error_status,
+    generationErrorCode: completedEvent?.generation_error_code,
+    generationErrorStatus: completedEvent?.generation_error_status,
+    generationErrorMessage: completedEvent?.generation_error_message ?? completedEvent?.error,
     savedContent: completedEvent?.saved_content || content,
     speakerId: context?.character?.id,
     speakerName: context?.character?.name || context?.status?.characterName,

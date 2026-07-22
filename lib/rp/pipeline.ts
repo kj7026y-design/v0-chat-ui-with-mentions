@@ -44,6 +44,7 @@ export interface ChatRequestBody {
   userMessageId?: string
   characterMessageId?: string
   regenerationAvoidContent?: string
+  retryAttempt?: boolean
   previousAssistantContent?: string
   autoAdvance?: boolean
   bypassRoleplayRules?: boolean
@@ -102,7 +103,7 @@ const EMPTY_VISIBLE_OUTPUT_RETRY_TIMEOUT_MS = 90_000
 const EMPTY_RESPONSE_FALLBACK_TIMEOUT_MS = 45_000
 const MAX_REGENERATION_AVOID_CHARS = 12_000
 const MAX_OPENROUTER_RESPONSE_CHARS = DEFAULT_MAX_ANSWER_CHARS
-const DEFAULT_OPENROUTER_MODEL = "cohere/command-r-plus-08-2024"
+const DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
@@ -195,8 +196,11 @@ function debugGenerationBoundary(
     model: string
     autoAdvance: boolean
     regeneration: boolean
+    retryAttempt: boolean
     status?: "completed" | "failed" | "unknown"
     elapsedMs?: number
+    errorCode?: number
+    errorStatus?: string
   },
 ) {
   if (process.env.NODE_ENV === "production") return
@@ -207,8 +211,11 @@ function debugGenerationBoundary(
     `model=${details.model}`,
     `autoAdvance=${details.autoAdvance}`,
     `regeneration=${details.regeneration}`,
+    `retryAttempt=${details.retryAttempt}`,
     details.status ? `status=${details.status}` : "",
     typeof details.elapsedMs === "number" ? `elapsedMs=${details.elapsedMs}` : "",
+    typeof details.errorCode === "number" ? `errorCode=${details.errorCode}` : "",
+    details.errorStatus ? `errorStatus=${details.errorStatus}` : "",
   ].filter(Boolean).join(" | ")
 
   console.log(`\n${divider}\n[RP GENERATION ${boundary}] ${suffix}\n${divider}`)
@@ -370,6 +377,10 @@ export type GeminiErrorMetadata = {
   status?: string
 }
 
+export type GenerationErrorMetadata = GeminiErrorMetadata & {
+  message?: string
+}
+
 const GEMINI_HTTP_STATUS_NAMES: Partial<Record<number, string>> = {
   400: "INVALID_ARGUMENT",
   401: "UNAUTHENTICATED",
@@ -431,6 +442,13 @@ export function extractGeminiErrorMetadata(error: unknown): GeminiErrorMetadata 
   if (timeoutStage?.startsWith("gemini-")) return { status: "TIMEOUT" }
   if (error instanceof ChatApiError) return {}
 
+  const metadata = extractGenerationErrorMetadata(error)
+  return { code: metadata.code, status: metadata.status }
+}
+
+export function extractGenerationErrorMetadata(error: unknown): GenerationErrorMetadata {
+  const timeoutStage = getTimeoutStage(error)
+
   const record = asErrorRecord(error)
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
   const payload = parseErrorMessagePayload(message)
@@ -443,10 +461,18 @@ export function extractGeminiErrorMetadata(error: unknown): GeminiErrorMetadata 
   const status = normalizeProviderErrorStatus(
     typeof record?.status === "string" ? record.status : undefined,
   )
+    ?? normalizeProviderErrorStatus(
+      typeof record?.code === "string" && !/^\d{3}$/.test(record.code.trim()) ? record.code : undefined,
+    )
     ?? normalizeProviderErrorStatus(payloadDetails?.status)
     ?? (code ? GEMINI_HTTP_STATUS_NAMES[code] : undefined)
+    ?? (timeoutStage ? "TIMEOUT" : undefined)
 
-  return { code, status }
+  return {
+    code,
+    status,
+    message: message.trim().slice(0, 1_000) || undefined,
+  }
 }
 
 function rethrowWithTimeoutStage(error: unknown, timeoutStage?: GenerationTimeoutStage): never {
@@ -466,7 +492,17 @@ function rethrowWithTimeoutStage(error: unknown, timeoutStage?: GenerationTimeou
     )
   }
 
-  throw new ChatApiError(message, 504, [], undefined, undefined, undefined, [], timeoutStage)
+  const providerError = extractGenerationErrorMetadata(error)
+  throw new ChatApiError(
+    message,
+    providerError.code ?? 504,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    [],
+    timeoutStage,
+  )
 }
 
 async function runQueued<T>(task: () => Promise<T>) {
@@ -1425,6 +1461,7 @@ export function normalizeBody(body: ChatRequestBody | null) {
     bypassRoleplayRules: isDevRoleplayRulesBypass(body),
     debugRawRoleplayStream: isDevRawRoleplayStreamEnabled(body),
     regenerationAvoidContent: body?.regenerationAvoidContent?.trim().slice(0, MAX_REGENERATION_AVOID_CHARS) || "",
+    retryAttempt: body?.retryAttempt === true,
     previousAssistantContent: body?.previousAssistantContent?.trim().slice(0, MAX_REGENERATION_AVOID_CHARS) || "",
     autoAdvance,
     autoAdvanceSource,
@@ -1588,7 +1625,11 @@ function isGeminiTransientError(error: unknown) {
 function getSupportedOpenRouterModel(...candidates: Array<string | undefined>) {
   for (const candidate of candidates) {
     const modelName = candidate?.trim()
-    if (modelName && !/euryale/i.test(modelName)) return modelName
+    if (modelName && !/euryale/i.test(modelName)) {
+      return modelName === "google/gemini-2.5-flash-preview-05-20"
+        ? DEFAULT_OPENROUTER_MODEL
+        : modelName
+    }
   }
 
   return DEFAULT_OPENROUTER_MODEL
@@ -1604,6 +1645,15 @@ function getOpenRouterModelName(model?: ChatModelConfig) {
 
 function getOpenRouterGenerationParams(model: ChatModelConfig) {
   const modelName = getOpenRouterModelName(model)
+
+  // Gemini 2.5 Flash (OpenRouter 경유 fallback)
+  if (modelName.includes("gemini-2.5-flash")) {
+    return {
+      temperature: 0.72,
+      top_p: 0.9,
+      max_tokens: 4000,
+    }
+  }
 
   // Cohere Command R+ 전용 세팅 (페널티 제거, 텐션 최적화)
   if (modelName.includes("command-r-plus")) {
@@ -2070,6 +2120,8 @@ function hasUnpromptedHandFocus(output: string, ctx: CompiledRoleplayContext) {
   if (
     ctx.latestInput.contactLevel === "touch" ||
     ctx.latestInput.physicalContactPermitted ||
+    ctx.turnPolicy.allowPhysicalContact ||
+    ctx.turnPolicy.flirtChannel === "touch" ||
     latestInputMentionsHand(ctx.latestInput)
   ) return false
 
@@ -2086,8 +2138,8 @@ function hasUnpromptedHandFocus(output: string, ctx: CompiledRoleplayContext) {
   const handTensionSentenceCount = focusedHandSentences.filter(hasHandAsTensionCenter).length
 
   return (
-    handTensionSentenceCount >= 2 ||
-    focusedHandSentences.length >= 3
+    handTensionSentenceCount >= 3 ||
+    focusedHandSentences.length >= 4
   )
 }
 
@@ -3518,8 +3570,8 @@ function buildOpenRouterFallbackModel(): ChatModelConfig {
   )
 
   return {
-    id: "cohere/command-r-plus-08-2024",
-    label: "언셰이프2",
+    id: DEFAULT_OPENROUTER_MODEL,
+    label: "Gemini 2.5 Flash",
     description: "Gemini RP fallback",
     provider: "openrouter",
     mode: "nsfw",
@@ -3849,6 +3901,7 @@ async function handleRoleplayChatFromNormalized(
       autoAdvanceSource: normalizedBody.autoAdvanceSource,
       effectiveAutoAdvance: compiledContext.turnPolicy.autoAdvance,
       regeneration: Boolean(compiledContext.regenerationAvoidContent),
+      retryAttempt: normalizedBody.retryAttempt,
       latestRole: messages.at(-1)?.role,
       modelInputChars: latestRawInput.length,
       normalizedInputType: normalizedLatestInput.inputType,
@@ -4211,6 +4264,7 @@ async function handleOpenRouterNsfwChat(
     bypassRoleplayRules: false,
     debugRawRoleplayStream: false,
     regenerationAvoidContent: "",
+    retryAttempt: false,
     previousAssistantContent: "",
     autoAdvance: false,
     autoAdvanceSource: "none",
@@ -4491,6 +4545,7 @@ async function streamGeminiRoleplay({
       autoAdvanceSource: normalizedBody.autoAdvanceSource,
       effectiveAutoAdvance: compiledContext.turnPolicy.autoAdvance,
       regeneration: Boolean(compiledContext.regenerationAvoidContent),
+      retryAttempt: normalizedBody.retryAttempt,
       latestRole: messages.at(-1)?.role,
       modelInputChars: latestRawInput.length,
       normalizedInputType: normalizedLatestInput.inputType,
@@ -4609,6 +4664,7 @@ async function streamGeminiRoleplay({
               from: modelName,
               to: getOpenRouterModelName(hedgedFallbackModel),
               regeneration: isRegeneration,
+              retryAttempt: normalizedBody.retryAttempt,
               autoAdvance: compiledContext.turnPolicy.autoAdvance,
             })
           }
@@ -4804,6 +4860,20 @@ async function streamGeminiRoleplay({
     originalProviderContent = rawGeminiContent
     timeoutStage = getTimeoutStage(error) ?? timeoutStage
     if (allInitialCandidatesFailed && hedgedFallbackError) {
+      const geminiFailure = geminiStartError
+        ? {
+            ...extractGeminiErrorMetadata(geminiStartError),
+            message: extractGenerationErrorMetadata(geminiStartError).message,
+          }
+        : undefined
+      const fallbackFailure = extractGenerationErrorMetadata(hedgedFallbackError)
+      console.error("[Gemini RP initial providers failed]", {
+        requestId: runId,
+        geminiModel: modelName,
+        geminiFailure,
+        fallbackModel: getOpenRouterModelName(buildOpenRouterFallbackModel()),
+        fallbackFailure,
+      })
       rethrowWithTimeoutStage(hedgedFallbackError, timeoutStage)
     }
     if (!isGeminiTransientError(error)) throw error
@@ -5485,6 +5555,7 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
         repairedPreview: savedContent.slice(0, 400),
       })
     }
+    const generationErrorMessage = `RP validation failed: ${failures.join(", ")}`
     send({
       event_type: "final",
       is_final_event: true,
@@ -5511,8 +5582,10 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
       timeout_stage: timeoutStage,
       gemini_error_code: geminiErrorCode,
       gemini_error_status: geminiErrorStatus,
+      generation_error_status: "VALIDATION_FAILED",
+      generation_error_message: generationErrorMessage,
       status: "failed",
-      error: `RP validation failed: ${failures.join(", ")}`,
+      error: generationErrorMessage,
       room_id: roomId,
       user_message_id: userMessageId,
     })
@@ -5638,6 +5711,8 @@ export function runChatEventStream({
       let streamedContent = ""
       let ttftMs: number | undefined
       let finalStatus: "completed" | "failed" | "unknown" = "unknown"
+      let finalErrorCode: number | undefined
+      let finalErrorStatus: string | undefined
 
       const send = (payload: Record<string, unknown>) => {
         if (payload.is_final_event === true) {
@@ -5646,6 +5721,12 @@ export function runChatEventStream({
             : payload.status === "failed"
               ? "failed"
               : "unknown"
+          finalErrorCode = typeof payload.generation_error_code === "number"
+            ? payload.generation_error_code
+            : finalErrorCode
+          finalErrorStatus = typeof payload.generation_error_status === "string"
+            ? payload.generation_error_status
+            : finalErrorStatus
         }
         controller.enqueue(encoder.encode(encodeStreamEvent({ event_id: eventId++, ...payload })))
       }
@@ -5666,6 +5747,7 @@ export function runChatEventStream({
         model: providerModel,
         autoAdvance: normalizedBody.autoAdvance,
         regeneration: Boolean(normalizedBody.regenerationAvoidContent),
+        retryAttempt: normalizedBody.retryAttempt,
       })
 
       try {
@@ -5754,10 +5836,24 @@ export function runChatEventStream({
         const message = error instanceof Error ? error.message : "Chat stream failed"
         const timeoutStage = getTimeoutStage(error)
         const geminiError = provider === "gemini" ? extractGeminiErrorMetadata(error) : {}
+        const generationError = extractGenerationErrorMetadata(error)
+        finalErrorCode = generationError.code
+        finalErrorStatus = generationError.status
         const validationFailures = error instanceof ChatApiError ? error.validationFailures : []
         const validationAttempts = error instanceof ChatApiError ? error.validationAttempts : []
         const validationRepairAttempted = error instanceof ChatApiError ? error.repairAttempted : undefined
         const validationFallback = error instanceof ChatApiError ? Boolean(error.fallback) : false
+        console.error("[RP GENERATION FAILED]", {
+          requestId: runId,
+          provider,
+          model: providerModel,
+          autoAdvance: normalizedBody.autoAdvance,
+          regeneration: Boolean(normalizedBody.regenerationAvoidContent),
+          retryAttempt: normalizedBody.retryAttempt,
+          timeoutStage,
+          geminiError,
+          generationError,
+        })
         send({
           event_type: "final",
           is_final_event: true,
@@ -5779,6 +5875,9 @@ export function runChatEventStream({
           timeout_stage: timeoutStage,
           gemini_error_code: geminiError.code,
           gemini_error_status: geminiError.status,
+          generation_error_code: generationError.code,
+          generation_error_status: generationError.status,
+          generation_error_message: generationError.message ?? message,
           ttft_ms: ttftMs ?? Date.now() - startedAt,
           mismatch: false,
           status: "failed",
@@ -5792,8 +5891,11 @@ export function runChatEventStream({
           model: providerModel,
           autoAdvance: normalizedBody.autoAdvance,
           regeneration: Boolean(normalizedBody.regenerationAvoidContent),
+          retryAttempt: normalizedBody.retryAttempt,
           status: finalStatus,
           elapsedMs: Date.now() - startedAt,
+          errorCode: finalErrorCode,
+          errorStatus: finalErrorStatus,
         })
         controller.close()
       }
