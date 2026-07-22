@@ -539,21 +539,35 @@ function BubbleMessageBubble({
 
   if (isStatus || isInnerThought) {
     const statusTextSize = Math.min(14, Math.max(11, textSize))
+    const isPhoneCommand = isStatus && message.commandId === "phone"
 
     return (
       <div className="flex flex-col items-start gap-2">
         <div className="flex justify-start">
           <div
-            className="max-w-[92%] rounded-xl border px-3 py-2.5 shadow-sm"
-            style={{
-              backgroundColor: themeTextPalette.panelBg,
-              borderColor: themeTextPalette.panelBorder,
-              color: themeTextPalette.text,
-              fontSize: statusTextSize,
-              lineHeight: Math.max(1.45, lineHeight),
-            }}
+            className={cn(
+              isPhoneCommand
+                ? "w-[min(92vw,360px)] rounded-[2rem] border-[5px] border-neutral-800 bg-neutral-950 px-4 py-5 shadow-xl shadow-black/30"
+                : "max-w-[92%] rounded-xl border px-3 py-2.5 shadow-sm",
+            )}
+            style={isPhoneCommand
+              ? {
+                  color: "#F8FAFC",
+                  fontSize: statusTextSize,
+                  lineHeight: Math.max(1.45, lineHeight),
+                }
+              : {
+                  backgroundColor: themeTextPalette.panelBg,
+                  borderColor: themeTextPalette.panelBorder,
+                  color: themeTextPalette.text,
+                  fontSize: statusTextSize,
+                  lineHeight: Math.max(1.45, lineHeight),
+                }}
           >
-            <p className="whitespace-pre-wrap break-words [word-break:keep-all]">
+            <p className={cn(
+              "whitespace-pre-wrap break-words [word-break:keep-all]",
+              isPhoneCommand && "font-mono text-[11px] leading-[1.55] tracking-[-0.025em] sm:text-xs",
+            )}>
               {message.content}
             </p>
           </div>

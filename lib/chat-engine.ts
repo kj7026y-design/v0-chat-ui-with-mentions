@@ -41,9 +41,6 @@ const DUMMY_INNER_THOUGHTS = [
   "이 감정을 뭐라고 불러야 할까. 처음 느껴보는 거라 두렵기도 하다.",
 ]
 
-const DUMMY_SUMMARY =
-  "지금까지: 당신은 이무기와 호수 공원에서 벚꽃을 보며 가까워졌고, 그는 조금씩 마음을 열기 시작했다."
-
 export interface ImageCommandStatusContext {
   currentChapterTitle?: string
   chapterProgress?: number
@@ -208,7 +205,7 @@ export function getAssistantReplyLengthBudget(dialogueAssistChars: number): Assi
     1,
     Math.min(DEFAULT_MAX_ANSWER_CHARS, totalMaxChars - normalizedAssistChars),
   )
-  const minChars = Math.min(DEFAULT_MIN_ANSWER_CHARS, Math.max(300, maxChars - 400), maxChars)
+  const minChars = Math.min(DEFAULT_MIN_ANSWER_CHARS, maxChars)
 
   return {
     minChars,
@@ -336,6 +333,155 @@ function buildFreeSampleImageUrl(characterName: string, context: ImageCommandCon
   return `https://image.pollinations.ai/prompt/${prompt}?${params.toString()}`
 }
 
+type CommandRandom = () => number
+
+interface RecentCommandScene {
+  latestUser: string
+  latestCharacter: string
+  recentLines: string[]
+}
+
+let commandInvocationCounter = 0
+
+function cleanCommandText(value?: string, maxChars = 44) {
+  const cleaned = (value ?? "")
+    .replace(/\[[^\]\n]{1,40}\]/gu, " ")
+    .replace(/[*_`#>]/gu, " ")
+    .replace(/(^|\s)@[\p{L}\p{N}_-]+/gu, " ")
+    .replace(/["“”]/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim()
+  if (!cleaned) return ""
+  const chars = Array.from(cleaned)
+  return chars.length > maxChars ? `${chars.slice(0, maxChars - 1).join("")}…` : cleaned
+}
+
+function getRecentCommandScene(context?: ImageCommandContext): RecentCommandScene {
+  const narrativeMessages = (context?.recentMessages ?? [])
+    .filter((message) => (message.type === "user" || message.type === "ai") && message.content.trim())
+    .slice(-8)
+  const latestUserMessage = [...narrativeMessages].reverse().find((message) => message.type === "user")
+  const latestCharacterMessage = [...narrativeMessages].reverse().find((message) => message.type === "ai")
+
+  return {
+    latestUser: cleanCommandText(latestUserMessage?.content, 38),
+    latestCharacter: cleanCommandText(latestCharacterMessage?.content, 38),
+    recentLines: narrativeMessages
+      .slice(-4)
+      .map((message) => cleanCommandText(message.content, 46))
+      .filter(Boolean),
+  }
+}
+
+function createCommandRandom(label: string, context?: ImageCommandContext): CommandRandom {
+  const recentKey = (context?.recentMessages ?? [])
+    .slice(-5)
+    .map((message) => `${message.id}:${message.content.slice(0, 40)}`)
+    .join("|")
+  const seedText = `${label}|${Date.now()}|${++commandInvocationCounter}|${recentKey}`
+  let state = 2166136261
+  for (const char of seedText) {
+    state ^= char.codePointAt(0) ?? 0
+    state = Math.imul(state, 16777619)
+  }
+  state >>>= 0
+
+  return () => {
+    state += 0x6d2b79f5
+    let value = state
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function commandPick<T>(random: CommandRandom, values: readonly T[]): T {
+  return values[Math.floor(random() * values.length)] ?? values[0]
+}
+
+function getCommandBaseDate(context?: ImageCommandContext) {
+  const date = new Date()
+  const worldDate = context?.status?.worldDate || context?.work?.worldDate || context?.world?.worldDate || ""
+  const timeMatch = worldDate.match(/(?:(오전|오후)\s*)?(\d{1,2}):(\d{2})/u)
+  if (!timeMatch) return date
+
+  let hour = Number(timeMatch[2])
+  const minute = Number(timeMatch[3])
+  if (timeMatch[1] === "오후" && hour < 12) hour += 12
+  if (timeMatch[1] === "오전" && hour === 12) hour = 0
+  if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+    date.setHours(hour, minute, 0, 0)
+  }
+  return date
+}
+
+function offsetCommandTime(baseDate: Date, minutesAgo: number) {
+  return new Date(baseDate.getTime() - minutesAgo * 60_000)
+}
+
+function formatPhoneStatusTime(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+}
+
+function formatPhoneListTime(date: Date) {
+  const hour = date.getHours()
+  const period = hour < 12 ? "오전" : "오후"
+  const displayHour = hour % 12 || 12
+  return `${period} ${displayHour}:${String(date.getMinutes()).padStart(2, "0")}`
+}
+
+function inferContextContact(characterName: string, context: ImageCommandContext | undefined, random: CommandRandom) {
+  const personaName = context?.persona?.name || context?.status?.personaName || "나"
+  const explicitNames = (context?.recentMessages ?? [])
+    .flatMap((message) => [message.speakerName, ...(message.mentionCharacterNames ?? [])])
+    .map((name) => name?.trim())
+    .filter((name): name is string => Boolean(name) && name !== characterName && name !== personaName)
+  if (explicitNames.length > 0) return commandPick(random, explicitNames)
+
+  const setting = [
+    context?.character?.role,
+    context?.character?.genre,
+    context?.work?.genre,
+    context?.world?.genre,
+    context?.work?.coreSetting,
+    context?.world?.coreSetting,
+  ].filter(Boolean).join(" ")
+
+  if (/아이돌|배우|가수|연예|모델/u.test(setting)) return commandPick(random, ["매니저", "스타일리스트", "현장 팀장"])
+  if (/학교|학생|교사|대학/u.test(setting)) return commandPick(random, ["담임 선생님", "반장", "과대표"])
+  if (/회사|직장|사무|재벌|비서/u.test(setting)) return commandPick(random, ["팀장", "비서실", "프로젝트 동료"])
+  if (/수사|형사|경찰|탐정/u.test(setting)) return commandPick(random, ["수사팀", "감식반", "당직 형사"])
+  if (/판타지|왕국|길드|마법|기사/u.test(setting)) return commandPick(random, ["길드 접수원", "왕실 전령", "동료 기사"])
+  return commandPick(random, ["업무 연락", "오래된 친구", "약속 상대"])
+}
+
+const COMMAND_KEYWORD_STOP_WORDS = new Set([
+  "그리고", "하지만", "그래서", "그렇게", "이렇게", "저렇게", "지금", "정말", "그냥", "다시",
+  "대답", "상대", "사용자", "캐릭터", "자신", "그는", "그녀는", "나는", "있는", "없는", "했다",
+])
+
+function getCommandKeywords(characterName: string, context?: ImageCommandContext) {
+  const scene = getRecentCommandScene(context)
+  const source = [
+    scene.latestUser,
+    scene.latestCharacter,
+    context?.status?.currentLocation,
+    context?.status?.currentGoal,
+    context?.status?.currentMission,
+    context?.status?.nextEventCondition,
+    context?.work?.title,
+    context?.work?.genre,
+    context?.world?.genre,
+    context?.character?.role,
+  ].filter(Boolean).join(" ")
+  const keywords = source
+    .match(/[가-힣A-Za-z0-9]{2,}/gu)
+    ?.map((word) => word.replace(/(?:에게서|에게|에서|으로|하고|하는|했다|한다|였다|이다|은|는|이|가|을|를|의|에|로|와|과|도|만)$/u, ""))
+    .filter((word) => word.length >= 2 && word !== characterName && !COMMAND_KEYWORD_STOP_WORDS.has(word)) ?? []
+
+  return [...new Set(keywords)].slice(0, 6)
+}
+
 function buildCharacterInnerThought(characterName: string, context?: ImageCommandContext) {
   const status = context?.status
   const recentMessages = context?.recentMessages ?? []
@@ -371,54 +517,171 @@ function buildCharacterInnerThought(characterName: string, context?: ImageComman
   return `${characterName}은 겉으로는 아무렇지 않은 척하지만, 방금 대화가 계속 마음에 걸린다.`
 }
 
-function buildStatusBar(characterName: string, context?: ImageCommandContext): string {
+export function buildStatusBar(characterName: string, context?: ImageCommandContext): string {
   const status = context?.status
-  const location = status?.currentLocation || "장소명"
-  const worldDate = status?.worldDate || "yy.mm.dd hh:mm"
-  const weather = status?.weather || "20˚/31˚ 맑음"
+  const random = createCommandRandom("status", context)
+  const scene = getRecentCommandScene(context)
+  const location = status?.currentLocation || context?.character?.residence || "현재 장면"
+  const worldDate = status?.worldDate || context?.work?.worldDate || context?.world?.worldDate || formatPhoneStatusTime(getCommandBaseDate(context))
+  const weather = status?.weather || commandPick(random, ["맑음", "흐림", "고요함"])
   const characterEmotion = status?.characterEmotion || "알 수 없음"
   const personaEmotion = status?.personaEmotion || "알 수 없음"
   const innerThought = buildCharacterInnerThought(characterName, context)
+  const progress = Math.max(0, Math.min(100, Math.round(status?.chapterProgress ?? context?.world?.progress ?? 50)))
+  const relationshipSignal = commandPick(random, ["↗ 미세 상승", "→ 유지", "⚡ 변화 감지"])
+  const currentFocus = cleanCommandText(
+    status?.currentMission || status?.currentGoal || status?.nextEventCondition || scene.latestUser || scene.latestCharacter,
+    48,
+  ) || "다음 대화의 방향 확인"
 
   return [
-    "📊 상태창",
-    `📍장소: ${location} | 📅일시: ${worldDate} | 🌡️날씨 : ${weather}`,
-    "💓호감도: 62000/100000",
-    `🎭감정: ${characterName} ${characterEmotion} · ${status?.personaName || "나"} ${personaEmotion}`,
-    "💬속마음",
-    `- ${innerThought}`,
+    `📊 LIVE STATUS · ${formatPhoneStatusTime(getCommandBaseDate(context))}`,
+    `📍 ${location}  │  📅 ${worldDate}  │  🌤️ ${weather}`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `🎬 진행도  ${"█".repeat(Math.round(progress / 10))}${"░".repeat(10 - Math.round(progress / 10))} ${progress}%`,
+    `💞 관계 신호  ${relationshipSignal}`,
+    `🎭 ${characterName}: ${characterEmotion}  ·  ${status?.personaName || context?.persona?.name || "나"}: ${personaEmotion}`,
+    `🎯 현재 초점  ${currentFocus}`,
+    `💭 ${cleanCommandText(innerThought, 70)}`,
   ].join("\n")
 }
 
-function buildPhoneCommandContent(characterName: string, context?: ImageCommandContext): string {
+export function buildPhoneCommandContent(characterName: string, context?: ImageCommandContext): string {
   const status = context?.status
+  const random = createCommandRandom("phone", context)
+  const now = getCommandBaseDate(context)
+  const scene = getRecentCommandScene(context)
+  const displayCharacterName = cleanCommandText(characterName, 16) || "캐릭터"
+  const personaName = cleanCommandText(context?.persona?.name || status?.personaName, 16) || "나"
+  const relatedContact = cleanCommandText(inferContextContact(characterName, context, random), 18)
+  const settingText = [context?.work?.genre, context?.world?.genre, context?.character?.role].filter(Boolean).join(" ")
+  const familyContact = cleanCommandText(/판타지|왕국|길드|마법|기사/u.test(settingText)
+    ? commandPick(random, ["본가", "동료 기사", "왕실 연락관"])
+    : commandPick(random, ["어머니", "가족", "오래된 친구"]), 18)
+  const keywords = getCommandKeywords(characterName, context)
+  const keywordA = keywords[0] || cleanCommandText(status?.currentLocation, 14) || "오늘 약속"
+  const keywordB = keywords[1] || cleanCommandText(status?.characterEmotion, 14) || "상대의 진심"
+  const latestUserPreview = scene.latestUser || commandPick(random, ["지금 어디야?", "아까 그 말, 진심이야?", "도착하면 연락해."])
+  const latestCharacterPreview = scene.latestCharacter || commandPick(random, ["확인했어. 조금 뒤에 연락할게.", "일정 끝나는 대로 갈게.", "그 얘기는 직접 하자."])
+  const contactPreview = cleanCommandText(status?.currentMission || status?.currentGoal || status?.nextEventCondition, 34)
+    || commandPick(random, ["다음 일정 확인 부탁드립니다.", "약속 시간 변경됐어요.", "확인 후 연락 주세요."])
+  const location = cleanCommandText(status?.currentLocation || context?.character?.residence, 18) || "현재 위치"
+  const merchant = /카페|커피/u.test(location)
+    ? "카페"
+    : /학교|대학/u.test(location)
+      ? "교내 매점"
+      : /회사|사무|오피스/u.test(location)
+        ? "오피스 편의점"
+        : /판타지|왕국|길드|마법/u.test(settingText)
+          ? "길드 잡화점"
+          : commandPick(random, ["편의점", "택시", "동네 카페"])
+  const secondMerchant = commandPick(random, ["뮤직 스트리밍", "배달 앱", "온라인 스토어", "교통카드"])
+  const amountA = (Math.floor(random() * 8) + 3) * 1_000 + commandPick(random, [0, 500, 900])
+  const amountB = (Math.floor(random() * 16) + 5) * 1_000
+  const battery = commandPick(random, [63, 72, 84, 91])
+  const signal = commandPick(random, ["▂▄▆█", "▂▄▆▇", "▂▃▅█"])
+  const quietIcon = commandPick(random, ["🔕", "🔇"])
+  const apps = commandPick(random, [
+    "💬 메시지  🌐 브라우저  ▶️ YouTube  💳 카드  🗺️ 지도",
+    "📞 전화  💬 메시지  📷 카메라  🎵 음악  🌐 브라우저",
+    "💬 메시지  📅 캘린더  📝 메모  ▶️ YouTube  💳 카드",
+  ])
+
   return [
-    "📱 휴대폰",
-    `알림: ${characterName}의 새 메시지를 기다리는 중`,
-    status?.currentLocation ? `현재 위치: ${status.currentLocation}` : "",
-    status?.worldDate ? `시간: ${status.worldDate}` : "",
-  ].filter(Boolean).join("\n")
+    `${formatPhoneStatusTime(now)}          ${quietIcon} HD 5G ${signal} 🔋${battery}%`,
+    `             📱 ${displayCharacterName}`,
+    "━━━━━━━━━━━━━━━━━━━━━━━━",
+    "[최근 통화 기록]",
+    `📵 ${relatedContact}  ${formatPhoneListTime(offsetCommandTime(now, 64 + Math.floor(random() * 90)))}`,
+    `📥 ${personaName}  ${formatPhoneListTime(offsetCommandTime(now, 132 + Math.floor(random() * 80)))}`,
+    `📤 ${familyContact}  ${formatPhoneListTime(offsetCommandTime(now, 310 + Math.floor(random() * 180)))}`,
+    "",
+    "[최근 문자 목록]",
+    `🟢 ${personaName} · 방금  ${latestUserPreview}`,
+    `⚪ ${relatedContact} · ${12 + Math.floor(random() * 38)}분 전  ${contactPreview}`,
+    `🔵 ${displayCharacterName} · 임시저장  ${latestCharacterPreview}`,
+    "",
+    "[최근 브라우저 검색 기록]",
+    `🔍 ${keywordA} ${commandPick(random, ["의미", "일정", "근처", "확인 방법"])}`,
+    `🔍 ${keywordB} ${commandPick(random, ["숨기는 이유", "대화법", "관련 정보", "후기"])}`,
+    "",
+    "[최근 유튜브 시청 기록]",
+    `▶️ ${keywordA} ${commandPick(random, ["10분 요약", "플레이리스트", "브이로그", "핵심 정리"])}`,
+    `▶️ ${keywordB} ${commandPick(random, ["집중 음악", "인터뷰", "상황별 대처", "다시보기"])}`,
+    "",
+    "[최근 결제 내역]",
+    `💳 ${merchant}  ${amountA.toLocaleString("ko-KR")}원  ${formatPhoneListTime(offsetCommandTime(now, 37 + Math.floor(random() * 50)))}`,
+    `💳 ${secondMerchant}  ${amountB.toLocaleString("ko-KR")}원  어제`,
+    "",
+    "[최근 실행 앱]",
+    apps,
+  ].join("\n")
 }
 
-function buildSnsCommandContent(characterName: string, context?: ImageCommandContext): string {
+export function buildSnsCommandContent(characterName: string, context?: ImageCommandContext): string {
   const status = context?.status
-  const mood = status?.characterEmotion || "묘한 분위기"
+  const random = createCommandRandom("sns", context)
+  const scene = getRecentCommandScene(context)
+  const keywords = getCommandKeywords(characterName, context)
+  const personaName = context?.persona?.name || status?.personaName || "나"
+  const mood = status?.characterEmotion || commandPick(random, ["묘한 긴장", "차분함", "신경 쓰임"])
+  const location = cleanCommandText(status?.currentLocation, 18) || "현재 장면"
+  const handle = characterName.replace(/\s+/gu, "_").toLowerCase()
+  const post = scene.latestCharacter || cleanCommandText(status?.currentGoal || status?.nextEventCondition, 48)
+    || commandPick(random, ["말보다 오래 남는 순간이 있다.", "오늘은 생각이 조금 많아졌다.", "쉽게 지나칠 수 없는 하루."])
+  const dm = scene.latestUser || commandPick(random, ["읽으면 답장해.", "아까 하던 얘기 마저 해.", "지금 어디야?"])
+  const tags = (keywords.length > 0 ? keywords : [location, mood])
+    .slice(0, 3)
+    .map((keyword) => `#${keyword.replace(/\s+/gu, "")}`)
+    .join(" ")
   return [
-    "💬 SNS",
-    `${characterName} 관련 게시글이 조용히 올라오고 있다.`,
-    `실시간 분위기: ${mood}`,
-    status?.nextEventCondition ? `화제: ${status.nextEventCondition}` : "",
-  ].filter(Boolean).join("\n")
+    `💬 SOCIAL · ${formatPhoneStatusTime(getCommandBaseDate(context))}`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `📍 ${location}  ·  ${mood}`,
+    `👤 @${handle}  ${post}`,
+    `   ♡ ${24 + Math.floor(random() * 280)}  💬 ${2 + Math.floor(random() * 32)}  ↗ 공유`,
+    `✉️ ${personaName}  ${dm}`,
+    `🔥 실시간  ${tags}`,
+  ].join("\n")
 }
 
-function buildAudienceReactionContent(context?: ImageCommandContext): string {
+export function buildAudienceReactionContent(context?: ImageCommandContext): string {
   const status = context?.status
+  const characterName = context?.character?.name || status?.characterName || "캐릭터"
+  const random = createCommandRandom("audience", context)
+  const keywords = getCommandKeywords(characterName, context)
+  const keyword = keywords[0] || status?.characterEmotion || "지금 분위기"
+  const viewers = ["scene_17", "과몰입중", "새벽정주행", "복선수집가", "다음화주세요"]
+    .sort(() => random() - 0.5)
   return [
-    "👀 시청자 반응",
-    `- 지금 장면 분위기 좋다.`,
-    status?.characterEmotion ? `- 캐릭터 감정이 ${status.characterEmotion} 쪽으로 움직이는 중.` : "",
-    status?.currentGoal || status?.currentMission ? `- 목표가 분명해서 다음 대화가 궁금해진다.` : "",
-  ].filter(Boolean).join("\n")
+    `👀 LIVE CHAT · ${(1_200 + Math.floor(random() * 8_800)).toLocaleString("ko-KR")}명 시청 중`,
+    `━━━━━━━━━━━━━━━━━━━━`,
+    `💬 ${viewers[0]}  ${keyword} 여기서 나오는 거 미쳤다`,
+    `💬 ${viewers[1]}  ${characterName} 표정 지금 진심 같은데?`,
+    `💬 ${viewers[2]}  방금 대사 다시 보고 옴. 복선 맞는 듯`,
+    `💬 ${viewers[3]}  ${cleanCommandText(status?.nextEventCondition || "다음 장면", 28)} 빨리 보고 싶다`,
+  ].join("\n")
+}
+
+export function buildSummaryCommandContent(characterName: string, context?: ImageCommandContext) {
+  const random = createCommandRandom("summary", context)
+  const scene = getRecentCommandScene(context)
+  const status = context?.status
+  const location = cleanCommandText(status?.currentLocation, 24) || "현재 장면"
+  const lines = scene.recentLines.length > 0
+    ? scene.recentLines
+    : [cleanCommandText(context?.memoryMemo, 52), cleanCommandText(status?.currentGoal, 52)].filter(Boolean)
+  const selectedLines = lines.slice(-3)
+  const next = cleanCommandText(status?.nextEventCondition || status?.currentMission || status?.currentGoal, 52)
+    || commandPick(random, ["두 사람의 다음 선택이 장면을 바꾼다.", "방금 대화의 여파가 이어질 차례다."])
+
+  return [
+    `📝 STORY LOG · ${formatPhoneStatusTime(getCommandBaseDate(context))}`,
+    `📍 ${location}  ·  ${characterName}`,
+    "━━━━━━━━━━━━━━━━━━━━",
+    ...selectedLines.map((line, index) => `${index === selectedLines.length - 1 ? "🔸" : "▫️"} ${line}`),
+    `➡️ 다음 흐름  ${next}`,
+  ].join("\n")
 }
 
 function pick<T>(arr: T[]): T {
@@ -1285,6 +1548,7 @@ export async function runCommand(
       message: {
         id: makeId(),
         type: "status",
+        commandId: "phone",
         content: buildPhoneCommandContent(characterName, context),
         timestamp: new Date(),
       },
@@ -1297,6 +1561,7 @@ export async function runCommand(
       message: {
         id: makeId(),
         type: "status",
+        commandId: "sns",
         content: buildSnsCommandContent(characterName, context),
         timestamp: new Date(),
       },
@@ -1309,6 +1574,7 @@ export async function runCommand(
       message: {
         id: makeId(),
         type: "status",
+        commandId: "audience",
         content: buildAudienceReactionContent(context),
         timestamp: new Date(),
       },
@@ -1321,6 +1587,7 @@ export async function runCommand(
       message: {
         id: makeId(),
         type: "status",
+        commandId: "status",
         content: buildStatusBar(characterName, context),
         timestamp: new Date(),
       },
@@ -1333,7 +1600,8 @@ export async function runCommand(
       message: {
         id: makeId(),
         type: "status",
-        content: DUMMY_SUMMARY,
+        commandId: "summary",
+        content: buildSummaryCommandContent(characterName, context),
         timestamp: new Date(),
       },
     }

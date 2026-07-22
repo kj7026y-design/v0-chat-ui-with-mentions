@@ -51,6 +51,7 @@ export interface ChatMessage {
   turnId?: string
   isGenerationError?: boolean
   isAutoAdvance?: boolean
+  commandId?: "phone" | "sns" | "status" | "audience" | "summary"
   retryPayload?: {
     content: string
     mentions?: string[]

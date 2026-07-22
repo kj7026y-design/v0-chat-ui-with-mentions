@@ -1305,6 +1305,19 @@ export default function ChatPage() {
     // assistant message as context makes the model treat it as the preferred
     // continuation and often reproduce it verbatim.
     const rewriteHistory = rewriteHistoryBase
+    const rewriteCommandIds = [...new Set(
+      turnMessages
+        .map((message) => message.commandId)
+        .filter((commandId): commandId is NonNullable<ChatMessage["commandId"]> =>
+          Boolean(commandId && AUTO_COMMAND_IDS.includes(commandId)),
+        ),
+    )]
+    const plannedDialogueAssistChars = getDialogueAssistCharCount(
+      rewriteCommandIds,
+      characterName,
+      buildImageCommandContext(rewriteHistory),
+    )
+    const answerLength = getAssistantReplyLengthBudget(plannedDialogueAssistChars)
     const handleRewriteStreamEvent = (event: ChatStreamEvent) => {
       if (event.event_type === "phase") {
         // 재생성 중에는 공급자 단계 문구가 재생성 상태를 덮어쓰지 않게 한다.
@@ -1374,44 +1387,70 @@ export default function ChatPage() {
           onStreamEvent: handleRewriteStreamEvent,
           regenerationAvoidContent: targetMessage.content,
           autoAdvance: isAutoAdvanceRewrite,
+          answerLength,
         },
       )
-      rejectDuplicateAssistantResponse(rewrittenReply.content, targetMessage.content)
+      const regeneratedAutoCommandMessages = rewriteCommandIds.length > 0 && targetMessage.turnId
+        ? await buildAutoCommandMessages({
+            turnId: targetMessage.turnId,
+            contextMessages: [...rewriteHistory, rewrittenReply],
+            statusOverride: chatStoryStatus,
+            commandIds: rewriteCommandIds,
+          })
+        : []
+      const fittedRewriteContent = fitAssistantReplyToTurnBudget(
+        rewrittenReply.content,
+        getMessageContentCharCount(regeneratedAutoCommandMessages),
+      )
+      const finalRewrittenReply = fittedRewriteContent === rewrittenReply.content
+        ? rewrittenReply
+        : { ...rewrittenReply, content: fittedRewriteContent, savedContent: fittedRewriteContent }
+      rejectDuplicateAssistantResponse(finalRewrittenReply.content, targetMessage.content)
+      const regeneratedCommandsByMessageId = new Map(
+        regeneratedAutoCommandMessages.flatMap((freshMessage) => {
+          const existingMessage = turnMessages.find((message) => message.commandId === freshMessage.commandId)
+          return existingMessage
+            ? [[existingMessage.id, { ...freshMessage, id: existingMessage.id, turnId: existingMessage.turnId }] as const]
+            : []
+        }),
+      )
 
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
+        prev.map((msg) => {
+          const regeneratedCommand = regeneratedCommandsByMessageId.get(msg.id)
+          if (regeneratedCommand) return regeneratedCommand
+          return msg.id === messageId
             ? {
                 ...msg,
-                content: rewrittenReply.content,
+                content: finalRewrittenReply.content,
                 timestamp: new Date(),
                 status: "completed",
                 isAutoAdvance: isAutoAdvanceRewrite || msg.isAutoAdvance,
-                generationRunId: rewrittenReply.generationRunId,
-                provider: rewrittenReply.provider,
-                model: rewrittenReply.model,
-                attemptedModel: rewrittenReply.attemptedModel,
-                outputModel: rewrittenReply.outputModel,
-                validationStatus: rewrittenReply.validationStatus,
-                validationFailures: rewrittenReply.validationFailures,
-                validationAttempts: rewrittenReply.validationAttempts,
-                repairAttempted: rewrittenReply.repairAttempted,
-                fallback: rewrittenReply.fallback,
-                fallbackProvider: rewrittenReply.fallbackProvider,
-                fallbackModel: rewrittenReply.fallbackModel,
-                providerOutcome: rewrittenReply.providerOutcome,
-                timeoutStage: rewrittenReply.timeoutStage,
-                geminiErrorCode: rewrittenReply.geminiErrorCode,
-                geminiErrorStatus: rewrittenReply.geminiErrorStatus,
-                generationErrorCode: rewrittenReply.generationErrorCode,
-                generationErrorStatus: rewrittenReply.generationErrorStatus,
-                generationErrorMessage: rewrittenReply.generationErrorMessage,
-                savedContent: rewrittenReply.savedContent,
-                speakerId: rewrittenReply.speakerId ?? msg.speakerId,
-                speakerName: rewrittenReply.speakerName ?? msg.speakerName,
+                generationRunId: finalRewrittenReply.generationRunId,
+                provider: finalRewrittenReply.provider,
+                model: finalRewrittenReply.model,
+                attemptedModel: finalRewrittenReply.attemptedModel,
+                outputModel: finalRewrittenReply.outputModel,
+                validationStatus: finalRewrittenReply.validationStatus,
+                validationFailures: finalRewrittenReply.validationFailures,
+                validationAttempts: finalRewrittenReply.validationAttempts,
+                repairAttempted: finalRewrittenReply.repairAttempted,
+                fallback: finalRewrittenReply.fallback,
+                fallbackProvider: finalRewrittenReply.fallbackProvider,
+                fallbackModel: finalRewrittenReply.fallbackModel,
+                providerOutcome: finalRewrittenReply.providerOutcome,
+                timeoutStage: finalRewrittenReply.timeoutStage,
+                geminiErrorCode: finalRewrittenReply.geminiErrorCode,
+                geminiErrorStatus: finalRewrittenReply.geminiErrorStatus,
+                generationErrorCode: finalRewrittenReply.generationErrorCode,
+                generationErrorStatus: finalRewrittenReply.generationErrorStatus,
+                generationErrorMessage: finalRewrittenReply.generationErrorMessage,
+                savedContent: finalRewrittenReply.savedContent,
+                speakerId: finalRewrittenReply.speakerId ?? msg.speakerId,
+                speakerName: finalRewrittenReply.speakerName ?? msg.speakerName,
               }
-            : msg,
-        ),
+            : msg
+        }),
       )
       setEditedMessageIds((prev) => new Set(prev).add(messageId))
       toast.success("메시지를 다시 작성했어요.")
