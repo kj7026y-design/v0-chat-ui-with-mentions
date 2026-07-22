@@ -61,9 +61,7 @@ async function ensureSchema() {
     await sql`
       CREATE TABLE IF NOT EXISTS storychat_messages (
         message_seq BIGSERIAL PRIMARY KEY,
-        chat_room_id BIGINT REFERENCES storychat_chat_rooms(chat_room_id) ON DELETE CASCADE,
-        admin_id TEXT,
-        room_id TEXT,
+        chat_room_id BIGINT NOT NULL REFERENCES storychat_chat_rooms(chat_room_id) ON DELETE CASCADE,
         message_id TEXT NOT NULL,
         message_type TEXT NOT NULL,
         content TEXT NOT NULL,
@@ -76,44 +74,6 @@ async function ensureSchema() {
     await sql`
       ALTER TABLE storychat_messages
       ADD COLUMN IF NOT EXISTS chat_room_id BIGINT REFERENCES storychat_chat_rooms(chat_room_id) ON DELETE CASCADE
-    `
-    await sql`ALTER TABLE storychat_messages ALTER COLUMN admin_id DROP NOT NULL`
-    await sql`ALTER TABLE storychat_messages ALTER COLUMN room_id DROP NOT NULL`
-
-    // Backfill the previous identifier/room-key storage into stable account-owned rooms.
-    await sql`
-      INSERT INTO storychat_chat_rooms (account_id, room_key, character_name)
-      SELECT DISTINCT account.account_id, message.room_id, '알 수 없는 캐릭터'
-      FROM storychat_messages message
-      JOIN storychat_accounts account
-        ON account.normalized_identifier = LOWER(TRIM(message.admin_id))
-      WHERE message.chat_room_id IS NULL
-        AND message.admin_id IS NOT NULL
-        AND message.room_id IS NOT NULL
-      ON CONFLICT (account_id, room_key) DO NOTHING
-    `
-    await sql`
-      UPDATE storychat_messages message
-      SET chat_room_id = room.chat_room_id
-      FROM storychat_accounts account
-      JOIN storychat_chat_rooms room ON room.account_id = account.account_id
-      WHERE message.chat_room_id IS NULL
-        AND message.admin_id IS NOT NULL
-        AND message.room_id IS NOT NULL
-        AND account.normalized_identifier = LOWER(TRIM(message.admin_id))
-        AND room.room_key = message.room_id
-    `
-    // Keep the legacy identifier columns populated for admin inspection and
-    // compatibility with existing queries while chat_room_id remains canonical.
-    await sql`
-      UPDATE storychat_messages message
-      SET
-        admin_id = COALESCE(message.admin_id, account.login_id, account.email, account.account_id),
-        room_id = COALESCE(message.room_id, room.room_key)
-      FROM storychat_chat_rooms room
-      JOIN storychat_accounts account ON account.account_id = room.account_id
-      WHERE message.chat_room_id = room.chat_room_id
-        AND (message.admin_id IS NULL OR message.room_id IS NULL)
     `
     await sql`
       CREATE UNIQUE INDEX IF NOT EXISTS storychat_messages_room_message_idx
@@ -273,13 +233,11 @@ export async function getChatMessagePage({
 
 export async function upsertChatMessages({
   accountId,
-  accountIdentifier,
   roomId,
   characterName,
   messages,
 }: {
   accountId: string
-  accountIdentifier: string
   roomId: string
   characterName?: string
   messages: StoredChatMessage[]
@@ -289,12 +247,10 @@ export async function upsertChatMessages({
   const chatRoomId = await ensureChatRoom({ accountId, roomId, characterName })
   const queries = messages.map((message) => sql.query(
     `INSERT INTO storychat_messages (
-       chat_room_id, admin_id, room_id, message_id, message_type, content, message_data, client_timestamp
-     ) VALUES ($1::bigint, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz)
+       chat_room_id, message_id, message_type, content, message_data, client_timestamp
+     ) VALUES ($1::bigint, $2, $3, $4, $5::jsonb, $6::timestamptz)
      ON CONFLICT (chat_room_id, message_id) WHERE chat_room_id IS NOT NULL
      DO UPDATE SET
-       admin_id = EXCLUDED.admin_id,
-       room_id = EXCLUDED.room_id,
        message_type = EXCLUDED.message_type,
        content = EXCLUDED.content,
        message_data = EXCLUDED.message_data,
@@ -302,8 +258,6 @@ export async function upsertChatMessages({
        updated_at = NOW()`,
     [
       chatRoomId,
-      accountIdentifier,
-      roomId,
       message.id,
       message.type,
       message.content,
