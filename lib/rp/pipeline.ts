@@ -4645,7 +4645,11 @@ async function streamGeminiRoleplay({
   try {
     sendPhase("generating", "답변을 생성하는 중...")
     const geminiStreamStartedAt = Date.now()
-    const canUseHedgedFallback = Boolean(process.env.OPENROUTER_API_KEY) && allowsOpenRouterFallbackForGemini(model)
+    // A slow primary response is not a provider failure. Keep Gemini 3 Flash as
+    // the output model unless it actually errors or reaches a defined timeout.
+    // The old 8-second hedge made a faster Gemini 2.5 fallback replace a healthy
+    // but slower primary response.
+    const canUseHedgedFallback = false
     const hedgedFallbackModel = canUseHedgedFallback ? buildOpenRouterFallbackModel() : undefined
     let hedgeTimer: ReturnType<typeof setTimeout> | undefined
     let startHedgedFallback = () => {}
@@ -4880,7 +4884,9 @@ async function streamGeminiRoleplay({
     if (!allowsOpenRouterFallbackForGemini(model)) throw error
     const openRouterFallbackModel = buildOpenRouterFallbackModel()
     usedFallback = true
-    fallbackProvider = "openrouter-after-gemini-unavailable"
+    fallbackProvider = timeoutStage?.startsWith("gemini-")
+      ? "openrouter-after-gemini-timeout"
+      : "openrouter-after-gemini-unavailable"
     fallbackModel = getOpenRouterModelName(openRouterFallbackModel)
     sendPhase("fallback", "대체 응답을 준비하는 중...")
     const fallbackMessages = originalProviderContent.trim()
