@@ -36,7 +36,7 @@ export function ChatHeader({
   ].filter(Boolean).join(" · ")
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-40 border-b border-border/70 bg-background/82 px-2.5 py-1.5 backdrop-blur-xl">
+    <header className="fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background">
       <div className="flex h-8 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
         <button

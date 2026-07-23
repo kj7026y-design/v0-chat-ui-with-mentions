@@ -1,0 +1,38 @@
+{
+    "sourceFile": "components/chat/chat-header.tsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 5,
+            "patches": [
+                {
+                    "date": 1784780291896,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1784780332486,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -35,9 +35,9 @@\n     level !== undefined ? `Lv.${level}` : undefined,\n   ].filter(Boolean).join(\" · \")\n \n   return (\n-    <header className=\"fixed left-0 right-0 top-0 z-40 bg-background/82 px-2.5 py-1.5 backdrop-blur-xl\">\n+    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 backdrop-blur-xl\">\n       <div className=\"flex h-8 items-center justify-between gap-2\">\n         <div className=\"flex min-w-0 items-center gap-2\">\n         <button\n           onClick={() => router.back()}\n"
+                },
+                {
+                    "date": 1784788444487,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -35,9 +35,9 @@\n     level !== undefined ? `Lv.${level}` : undefined,\n   ].filter(Boolean).join(\" · \")\n \n   return (\n-    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 backdrop-blur-xl\">\n+    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background\">\n       <div className=\"flex h-8 items-center justify-between gap-2\">\n         <div className=\"flex min-w-0 items-center gap-2\">\n         <button\n           onClick={() => router.back()}\n"
+                },
+                {
+                    "date": 1784788487207,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -35,9 +35,9 @@\n     level !== undefined ? `Lv.${level}` : undefined,\n   ].filter(Boolean).join(\" · \")\n \n   return (\n-    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background\">\n+    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background/100\">\n       <div className=\"flex h-8 items-center justify-between gap-2\">\n         <div className=\"flex min-w-0 items-center gap-2\">\n         <button\n           onClick={() => router.back()}\n"
+                },
+                {
+                    "date": 1784788503063,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -35,9 +35,9 @@\n     level !== undefined ? `Lv.${level}` : undefined,\n   ].filter(Boolean).join(\" · \")\n \n   return (\n-    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background/100\">\n+    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-white\">\n       <div className=\"flex h-8 items-center justify-between gap-2\">\n         <div className=\"flex min-w-0 items-center gap-2\">\n         <button\n           onClick={() => router.back()}\n"
+                },
+                {
+                    "date": 1784788529536,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -35,9 +35,9 @@\n     level !== undefined ? `Lv.${level}` : undefined,\n   ].filter(Boolean).join(\" · \")\n \n   return (\n-    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-white\">\n+    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background\">\n       <div className=\"flex h-8 items-center justify-between gap-2\">\n         <div className=\"flex min-w-0 items-center gap-2\">\n         <button\n           onClick={() => router.back()}\n"
+                }
+            ],
+            "date": 1784780291896,
+            "name": "Commit-0",
+            "content": "\"use client\"\n\nimport { useRouter } from \"next/navigation\"\nimport { ArrowLeft, ChevronDown, MoreVertical } from \"lucide-react\"\nimport { cn } from \"@/lib/utils\"\n\ninterface ChatHeaderProps {\n  characterName: string\n  characterEmoji?: string\n  level?: number\n  modelLabel?: string\n  statusSummary?: string\n  isStatusOpen?: boolean\n  onMenuClick?: () => void\n  onProfileClick?: () => void\n  onModelClick?: () => void\n  onStatusClick?: () => void\n}\n\nexport function ChatHeader({\n  characterName,\n  characterEmoji = \"🐉\",\n  level,\n  modelLabel,\n  statusSummary,\n  isStatusOpen = false,\n  onMenuClick,\n  onProfileClick,\n  onModelClick,\n  onStatusClick,\n}: ChatHeaderProps) {\n  const router = useRouter()\n  const titleText = [\n    characterName,\n    level !== undefined ? `Lv.${level}` : undefined,\n  ].filter(Boolean).join(\" · \")\n\n  return (\n    <header className=\"fixed left-0 right-0 top-0 z-40 bg-background/82 px-2.5 py-1.5 backdrop-blur-xl\">\n      <div className=\"flex h-8 items-center justify-between gap-2\">\n        <div className=\"flex min-w-0 items-center gap-2\">\n        <button\n          onClick={() => router.back()}\n            className=\"flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-accent transition-colors\"\n          aria-label=\"뒤로 가기\"\n        >\n            <ArrowLeft className=\"h-[18px] w-[18px] text-foreground\" />\n        </button>\n\n        <button\n          type=\"button\"\n          onClick={onProfileClick}\n            className=\"min-w-0 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-accent\"\n        >\n            <div className=\"flex min-w-0 items-baseline gap-1.5\">\n              <span className=\"shrink-0 text-sm font-semibold leading-tight text-foreground\">\n                {titleText}\n              </span>\n              {statusSummary && (\n                <span className=\"min-w-0 truncate text-[11px] font-medium leading-tight text-muted-foreground\">\n                  · {statusSummary}\n                </span>\n              )}\n            </div>\n        </button>\n      </div>\n\n        <div className=\"flex shrink-0 items-center gap-1\">\n          {statusSummary && (\n            <button\n              type=\"button\"\n              onClick={onStatusClick}\n              data-chat-status-trigger=\"true\"\n              className=\"flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground\"\n              aria-label=\"상태 상세 보기\"\n              aria-expanded={isStatusOpen}\n            >\n              <ChevronDown className={cn(\"h-3.5 w-3.5 transition-transform\", isStatusOpen && \"rotate-180\")} />\n            </button>\n          )}\n        {modelLabel && (\n          <button\n            type=\"button\"\n            onClick={(event) => {\n              event.currentTarget.blur()\n              ;(onModelClick ?? onMenuClick)?.()\n            }}\n              className=\"rounded-full border border-border/80 bg-muted/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground\"\n          >\n              {modelLabel}\n          </button>\n        )}\n        <button\n          onClick={onMenuClick}\n            className=\"flex h-7 w-7 items-center justify-center rounded-full hover:bg-accent transition-colors\"\n          aria-label=\"설정 메뉴\"\n        >\n            <MoreVertical className=\"h-[18px] w-[18px] text-muted-foreground\" />\n        </button>\n        </div>\n      </div>\n    </header>\n  )\n}\n"
+        }
+    ]
+}

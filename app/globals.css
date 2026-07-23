@@ -40,7 +40,7 @@
 }
 
 .light {
-  --background: oklch(0.98 0 0);
+  --background: oklch(1 0 0);
   --foreground: oklch(0.15 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.15 0 0);
@@ -200,4 +200,17 @@
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* blur effect */
+.back-blur {
+  background: linear-gradient(0deg,rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0) 100%);
+}
+
+
+/* Hide Next.js Dev Overlay Indicator badge to prevent blocking UI headers */
+nextjs-portal,
+[data-nextjs-toast-wrapper],
+[data-next-badge] {
+  display: none !important;
 }

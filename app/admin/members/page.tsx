@@ -204,7 +204,7 @@ export default function MemberAdminPage() {
   }
 
   return (
-    <main className="min-h-full min-w-0 max-w-full bg-background pb-8">
+    <main className="flex flex-col h-full min-w-0 max-w-full bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-3 px-4 sm:px-6">
           <button
@@ -232,7 +232,7 @@ export default function MemberAdminPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-[1440px] w-full overflow-hidden overflow-y-auto space-y-5 px-4 py-5 sm:px-6">
         <form onSubmit={handleSearch} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 focus-within:border-ring">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -412,7 +412,7 @@ export default function MemberAdminPage() {
                   <th className="px-3 py-3 font-medium">접근</th>
                   <th className="px-3 py-3 font-medium">Unsafe</th>
                   <th className="px-3 py-3 font-medium">권한</th>
-                  <th className="w-14 px-3 py-3"><span className="sr-only">수정</span></th>
+                  <th className="w-14 px-3 py-3 relative"><span className="sr-only">수정</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

@@ -623,7 +623,8 @@ function BubbleMessageBubble({
   const segments = parseMessageSegments(displayMessage)
   const shouldRenderSegments = !message.imageUrl && shouldRenderMessageSegments(displayMessage, segments)
   const composerParts = isUser && !message.imageUrl ? parseComposerInput(displayContent) : []
-  const shouldRenderComposerParts = isUser && composerParts.some((part) => part.type === "action")
+  const shouldRenderComposerParts =
+    isUser && (composerParts.some((part) => part.type === "action") || composerParts.length > 1)
 
   if (shouldRenderComposerParts) {
     return (
@@ -796,7 +797,7 @@ function BubbleMessageBubble({
           )}
           {displayContent && (
             <p
-              className="whitespace-pre-wrap break-words [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+              className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
               style={{ fontSize: textSize, lineHeight }}
             >
               {renderHighlightedMentions(displayContent, mentionNames)}
@@ -951,7 +952,7 @@ function AssistantSegmentedMessage({
         </div>
       </div>
 
-      <div className="assistant-message-body flex w-full flex-col gap-2.5">
+      <div className="assistant-message-body flex w-full flex-col gap-1">
         {segments.map((segment, index) => (
           <MessageSegmentBlock
             key={`${message.id}-segment-${index}`}
@@ -1023,7 +1024,7 @@ function UserSegmentedMessage({
               style={bubbleStyle}
             >
               <p
-                className="whitespace-pre-wrap break-words [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+                className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
                 style={{ fontSize: textSize, lineHeight }}
               >
                 {renderHighlightedMentions(part.text, mentionNames)}
@@ -1144,7 +1145,7 @@ function MessageSegmentBlock({
 
     return (
       <p
-        className="max-w-[92%] whitespace-pre-wrap break-words px-1.5 py-1.5 [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+        className="max-w-[92%] whitespace-pre-wrap break-words px-1.5 py-1.5 [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
         style={narrationStyle}
       >
         {renderHighlightedMentions(segment.content, mentionNames)}
@@ -1170,7 +1171,7 @@ function MessageSegmentBlock({
         style={bubbleStyle}
       >
         <p
-          className="whitespace-pre-wrap break-words [word-break:keep-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+          className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
           style={{ fontSize: textSize, lineHeight }}
         >
           {renderHighlightedMentions(segment.content, mentionNames)}

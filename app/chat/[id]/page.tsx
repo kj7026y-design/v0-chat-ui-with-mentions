@@ -1782,7 +1782,7 @@ export default function ChatPage() {
         onScroll={(event) => {
           if (event.currentTarget.scrollTop <= 120) void loadOlderHistory()
         }}
-        className="min-h-0 flex-1 overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))] pt-11 transition-colors duration-200"
+        className="min-h-0 flex-1 overflow-y-auto pb-[calc(6rem+env(safe-area-inset-bottom))] pt-11 transition-colors duration-200"
         style={{ backgroundColor: chatBackgroundColor }}
       >
         {isHistoryLoading ? (
@@ -1828,7 +1828,7 @@ export default function ChatPage() {
       </main>
 
       {/* Input Area - immersive floating dock */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
+      <div className="fixed bottom-0 left-0 right-0 z-40 back-blur">
         <ChatInput
           onSendMessage={handleSendMessage}
           onCommand={handleCommand}

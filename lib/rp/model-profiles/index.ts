@@ -38,6 +38,9 @@ export function getRoleplayModelProfile(model: ChatModelConfig): RoleplayModelPr
   }
   if (model.provider === "openrouter") {
     const modelName = process.env.OPENROUTER_UNSHAPED2_MODEL || model.openRouterModel || commandRRpProfile.modelName
+    if (modelName.includes("gemini")) {
+      return withModelOutputLimit(geminiFlashRpProfile, model, modelName)
+    }
     return withModelOutputLimit(commandRRpProfile, model, modelName)
   }
 

@@ -40,6 +40,18 @@ export function ThemeProvider({
   const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("dark")
 
   React.useEffect(() => {
+    // Next.js Dev Overlay 및 외부 포인터 캡처 이벤트 시 발생할 수 있는 releasePointerCapture 예외를 안전하게 가로챔
+    if (typeof window !== "undefined" && Element.prototype.releasePointerCapture) {
+      const originalRelease = Element.prototype.releasePointerCapture
+      Element.prototype.releasePointerCapture = function (pointerId: number) {
+        try {
+          originalRelease.call(this, pointerId)
+        } catch {
+          // 이미 포인터 캡처가 해제되었거나 유효하지 않은 포인터인 경우 예외를 무시하여 동작 보장
+        }
+      }
+    }
+
     setThemeState(getStoredTheme(defaultTheme))
     setSystemTheme(getSystemTheme())
 

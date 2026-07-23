@@ -1,0 +1,26 @@
+{
+    "sourceFile": "app/layout.tsx",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 2,
+            "patches": [
+                {
+                    "date": 1784611271868,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1784611308922,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -49,9 +49,9 @@\n         >\r\n           <CreditHydrator />\r\n           {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}\r\n           <div className=\"flex h-full w-full min-h-0 flex-col overflow-hidden\">\r\n-            <div className=\"min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto\">\r\n+            <div className=\"min-h-0 min-w-0 flex-1 overflow-hidden\">\r\n               {children}\r\n             </div>\r\n \r\n             {/* Global Bottom Navigation - Mobile Only */}\r\n"
+                },
+                {
+                    "date": 1784694614674,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -48,10 +48,10 @@\n           disableTransitionOnChange\r\n         >\r\n           <CreditHydrator />\r\n           {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}\r\n-          <div className=\"flex h-full w-full min-h-0 flex-col overflow-hidden\">\r\n-            <div className=\"min-h-0 min-w-0 flex-1 overflow-hidden\">\r\n+          <div className=\"flex h-[100dvh] w-full min-w-0 max-w-full flex-col overflow-hidden\">\r\n+            <div className=\"min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto\">\r\n               {children}\r\n             </div>\r\n \r\n             {/* Global Bottom Navigation - Mobile Only */}\r\n"
+                }
+            ],
+            "date": 1784611271868,
+            "name": "Commit-0",
+            "content": "import type { Metadata } from 'next'\r\nimport { Geist, Geist_Mono } from 'next/font/google'\r\nimport { Analytics } from '@vercel/analytics/next'\r\nimport { BottomNavBar } from '@/components/chat/bottom-nav-bar'\r\nimport { CreditHydrator } from '@/components/credit-hydrator'\r\nimport { ThemeProvider } from '@/components/theme-provider'\r\nimport { Toaster } from '@/components/ui/sonner'\r\nimport './globals.css'\r\n\r\nconst _geist = Geist({ subsets: [\"latin\"] });\r\nconst _geistMono = Geist_Mono({ subsets: [\"latin\"] });\r\n\r\nexport const metadata: Metadata = {\r\n  title: 'StoryChat AI',\r\n  description: 'AI 캐릭터와 함께하는 인터랙티브 스토리 채팅',\r\n  generator: 'v0.app',\r\n  icons: {\r\n    icon: [\r\n      {\r\n        url: '/icon-light-32x32.png',\r\n        media: '(prefers-color-scheme: light)',\r\n      },\r\n      {\r\n        url: '/icon-dark-32x32.png',\r\n        media: '(prefers-color-scheme: dark)',\r\n      },\r\n      {\r\n        url: '/icon.svg',\r\n        type: 'image/svg+xml',\r\n      },\r\n    ],\r\n    apple: '/apple-icon.png',\r\n  },\r\n}\r\n\r\nexport default function RootLayout({\r\n  children,\r\n}: Readonly<{\r\n  children: React.ReactNode\r\n}>) {\r\n  return (\r\n    <html lang=\"ko\" className=\"h-full w-full overflow-hidden bg-background\" suppressHydrationWarning>\r\n      <body className=\"h-full w-full max-w-full overflow-hidden font-sans antialiased\">\r\n        <ThemeProvider\r\n          attribute=\"class\"\r\n          defaultTheme=\"dark\"\r\n          enableSystem={true}\r\n          disableTransitionOnChange\r\n        >\r\n          <CreditHydrator />\r\n          {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}\r\n          <div className=\"flex h-full w-full min-h-0 flex-col overflow-hidden\">\r\n            <div className=\"min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto\">\r\n              {children}\r\n            </div>\r\n\r\n            {/* Global Bottom Navigation - Mobile Only */}\r\n            <div className=\"shrink-0 sm:hidden\">\r\n              <BottomNavBar />\r\n            </div>\r\n          </div>\r\n\r\n          <Toaster position=\"top-center\" swipeDirections={[\"left\", \"right\", \"top\"]} />\r\n        </ThemeProvider>\r\n        \r\n        {process.env.NODE_ENV === 'production' && <Analytics />}\r\n      </body>\r\n    </html>\r\n  )\r\n}\r\n"
+        }
+    ]
+}

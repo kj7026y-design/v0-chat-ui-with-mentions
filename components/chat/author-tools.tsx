@@ -43,14 +43,14 @@ export function AuthorTools({
   ]
 
   return (
-    <div className="flex items-center gap-1 p-1 rounded-lg bg-popover border border-border shadow-lg mb-1.5">
+    <div className="flex items-center gap-1 px-1 rounded-lg bg-popover border border-border mb-1.5">
       {tools.filter((tool) => tool.visible).map((tool) => (
         <button
           key={tool.label}
           onClick={tool.action}
           disabled={disabled}
           className={cn(
-            "flex items-center gap-1.5 px-2 py-1.5 rounded-md",
+            "flex items-center gap-1.5 px-1.5 py-1 rounded-md",
             "text-muted-foreground text-[11px] font-medium",
             "transition-all duration-150",
             "disabled:cursor-not-allowed disabled:opacity-50",

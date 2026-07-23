@@ -154,6 +154,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const [isMobile, setIsMobile] = useState(false)
   const [isQuickBarDragging, setIsQuickBarDragging] = useState(false)
   const [inputScrollTop, setInputScrollTop] = useState(0)
+  const [isInputMultiline, setIsInputMultiline] = useState(false)
   const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -205,7 +206,8 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       const maxLines = 4
       const maxHeight = lineHeight * maxLines
       const newHeight = Math.min(textarea.scrollHeight, maxHeight)
-      textarea.style.height = `${newHeight}px`
+      textarea.style.height = `${newHeight + 2}px`
+      setIsInputMultiline(newHeight > lineHeight + 2)
       setInputScrollTop(textarea.scrollTop)
     }
   }, [input])
@@ -631,7 +633,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
   const showHighlightedInput = shouldRenderHighlightedInput(input, mentionCharacters)
 
   return (
-    <div className="relative mx-3 mb-[calc(0.75rem+env(safe-area-inset-bottom))] rounded-lg border border-border/80 bg-background/88 px-3 pb-3 pt-2 shadow-2xl shadow-black/20 backdrop-blur-xl">
+    <div className="relative mx-3 mb-[calc(0.75rem+env(safe-area-inset-bottom))] rounded-lg pt-2">
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -647,7 +649,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           ref={commandPopupRef}
           role="dialog"
           aria-label="명령어"
-          className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
+          className="absolute bottom-full left-0 right-0 z-40 mb-2 overflow-hidden rounded-2xl bg-popover shadow-2xl shadow-black/25"
         >
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <p className="text-xs font-semibold text-foreground">명령어</p>
@@ -709,7 +711,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         onMouseLeave={stopQuickBarDrag}
         onClickCapture={handleQuickBarClickCapture}
         className={cn(
-          "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none",
+          "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none bg-white/70 rounded-xl w-fit",
           isQuickBarDragging ? "cursor-grabbing" : "cursor-grab",
         )}
       >
@@ -718,14 +720,14 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={handleImageClick}
           disabled={disabled}
-          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="이미지 첨부"
           title="이미지 첨부"
         >
-          <ImageIcon className="w-4 h-4" />
+          <ImageIcon className="w-3.5 h-3.5" />
         </button>
         {imageGenerationNotice && (
-          <span className="shrink-0 rounded-full border border-border bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
+          <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
             {imageGenerationNotice}
           </span>
         )}
@@ -734,21 +736,21 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={handleCommandClick}
           disabled={disabled}
-          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="명령어"
           title="명령어"
         >
-          <Zap className="w-4 h-4" />
+          <Zap className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
           onClick={insertActionMarker}
           disabled={disabled}
-          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="지문 삽입"
           title="지문 삽입"
         >
-          <Asterisk className="w-4 h-4" />
+          <Asterisk className="w-3.5 h-3.5" />
         </button>
         <button
           type="button"
@@ -758,13 +760,13 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           aria-label={isAutoAdvanceEnabled ? "자동 진행 끄기" : "자동 진행 켜기"}
           title={isAutoAdvanceEnabled ? "자동 진행 켜짐 · 빈 메시지를 전송하면 이야기가 진행됩니다" : "자동 진행 켜기"}
           className={cn(
-            "flex h-7 w-9 shrink-0 items-center justify-center rounded-full border p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
             isAutoAdvanceEnabled
-              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-              : "border-border bg-secondary/80 text-secondary-foreground hover:bg-accent",
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-secondary/90 text-secondary-foreground hover:bg-accent",
           )}
         >
-          <FastForward className="h-4 w-4" />
+          <FastForward className="h-3.5 w-3.5" />
         </button>
 
         {/* Divider */}
@@ -775,27 +777,27 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           type="button"
           onClick={() => openCharacterContext("mention")}
           disabled={disabled}
-          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="캐릭터 멘션하기"
           title="캐릭터 멘션하기"
         >
-          <AtSign className="h-4 w-4" />
+          <AtSign className="h-3.5 w-3.5" />
         </button>
         <button
           ref={speechButtonRef}
           type="button"
           onClick={() => openCharacterContext("speech")}
           disabled={disabled}
-          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/80 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label="캐릭터 대사 삽입하기"
           title="캐릭터 대사 삽입하기"
         >
-          <MessageCircle className="h-4 w-4" />
+          <MessageCircle className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {attachedImage && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-secondary p-2">
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-secondary p-2">
           <img
             src={attachedImage.url}
             alt={attachedImage.name ?? "첨부 이미지"}
@@ -808,18 +810,23 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
             type="button"
             onClick={() => setAttachedImage(null)}
             disabled={disabled}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="이미지 제거"
             title="이미지 제거"
           >
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       )}
 
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
-        <div className="relative flex flex-1 items-end gap-2 rounded-2xl border border-border/80 bg-input/95 px-3 py-2.5">
+        <div
+          className={cn(
+            "relative flex flex-1 items-end gap-5 bg-input/65 pr-1 pl-3 py-1",
+            isInputMultiline ? "rounded-2xl" : "rounded-4xl",
+          )}
+        >
           {showHighlightedInput && (
             <div
               aria-hidden="true"
@@ -841,29 +848,29 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
             placeholder={isAutoAdvanceEnabled ? "빈 상태로 전송하면 자동 진행" : "줄바꿈 두번으로 말풍선 분리"}
             rows={1}
             className={cn(
-              "relative z-10 max-h-24 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
+              "relative z-10 max-h-26 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
               showHighlightedInput ? "text-transparent" : "text-foreground",
               disabled && "cursor-not-allowed opacity-60",
             )}
           />
+          
+          {/* Send Button */}
+          <button
+            type="submit"
+            disabled={disabled || (!input.trim() && !attachedImage && !isAutoAdvanceEnabled)}
+            className={cn(
+              "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-colors",
+              input.trim() || attachedImage || isAutoAdvanceEnabled
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-secondary text-muted-foreground"
+            )}
+            aria-label={!input.trim() && !attachedImage && isAutoAdvanceEnabled ? "스토리 자동 진행" : "전송"}
+          >
+            {!input.trim() && !attachedImage && isAutoAdvanceEnabled
+              ? <FastForward className="h-4 w-4" />
+              : <Send className="h-4 w-4" />}
+          </button>
         </div>
-        
-        {/* Send Button */}
-        <button
-          type="submit"
-          disabled={disabled || (!input.trim() && !attachedImage && !isAutoAdvanceEnabled)}
-          className={cn(
-            "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors",
-            input.trim() || attachedImage || isAutoAdvanceEnabled
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-secondary text-muted-foreground border border-border"
-          )}
-          aria-label={!input.trim() && !attachedImage && isAutoAdvanceEnabled ? "스토리 자동 진행" : "전송"}
-        >
-          {!input.trim() && !attachedImage && isAutoAdvanceEnabled
-            ? <FastForward className="h-5 w-5" />
-            : <Send className="h-5 w-5" />}
-        </button>
       </form>
       <AlertModal
         open={Boolean(alertMessage)}
@@ -915,7 +922,7 @@ function CharacterContextBox({
       ref={popoverRef}
       role="dialog"
       aria-label={mode === "mention" ? "멘션할 캐릭터" : "말하게 할 캐릭터"}
-      className="absolute bottom-full left-4 right-4 z-40 mb-2 overflow-hidden rounded-2xl border border-border bg-popover shadow-2xl shadow-black/25"
+      className="absolute bottom-full left-4 right-4 z-40 mb-2 overflow-hidden rounded-2xl bg-popover shadow-2xl shadow-black/25"
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <p className="text-xs font-semibold text-foreground">
