@@ -161,3 +161,15 @@ test("AC08 image-only messages survive segmented input handling", () => {
   assert.equal(messages[0].imageUrl, "data:image/png;base64,qa")
   assert.equal(messages[0].imageName, "qa.png")
 })
+
+test("AC09 regeneration uses edited visible input instead of stale model metadata", () => {
+  const currentInput = "준비는 됐어. 근데 다음 단계가 뭔데? 알려줄 수 있어?"
+  const message = buildUserMessages(currentInput, characters)[0]
+  message.originalContent = '[김여자의 대사]\n"준비는 됐어 알려줄 수 있어?"'
+
+  const modelContext = formatMessageForAIContext(message)
+
+  assert.match(modelContext, /근데 다음 단계가 뭔데\?/u)
+  assert.match(modelContext, /준비는 됐어\. 근데 다음 단계가 뭔데\? 알려줄 수 있어\?/u)
+  assert.doesNotMatch(modelContext, /^\[김여자의 대사\]\s*"준비는 됐어 알려줄 수 있어\?"$/mu)
+})

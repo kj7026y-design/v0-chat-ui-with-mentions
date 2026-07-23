@@ -849,10 +849,17 @@ export function formatMessageForAIContext(message: ChatMessage) {
   }
 
   if (message.type === "user") {
-    const originalContent = message.originalContent?.trim()
-    const structuredContent = originalContent?.match(/^\[[^\]\n]{1,40}의\s*(?:행동|지문|대사|말|의도)\]\s*\n/u)
-      ? originalContent
-      : buildModelUserMessageFromInput(message.content, message.speakerName || "사용자")
+    // `content` is the visible, editable source of truth. `originalContent` is
+    // persisted model metadata and can be stale when an old failed generation
+    // is retried after the user edits the message. Rebuild from the current
+    // text so regeneration never answers an earlier version of the input.
+    const storedActorName = message.originalContent
+      ?.trim()
+      .match(/^\[([^\]\n]{1,40})의\s*(?:행동|지문|대사|말|의도)\]\s*\n/u)?.[1]
+    const structuredContent = buildModelUserMessageFromInput(
+      message.content,
+      storedActorName || message.speakerName || "사용자",
+    )
 
     if (message.mentionAll) {
       return `[멘션]\n사용자가 모든 캐릭터를 언급함\n\n${structuredContent}`

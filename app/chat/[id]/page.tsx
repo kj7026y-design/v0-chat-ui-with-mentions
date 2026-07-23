@@ -993,20 +993,35 @@ export default function ChatPage() {
   }
 
   const handleRetryFailedMessage = async (messageId: string) => {
-    const failedMessage = messages.find((message) => message.id === messageId)
+    const failedMessageIndex = messages.findIndex((message) => message.id === messageId)
+    const failedMessage = messages[failedMessageIndex]
     const retryPayload = failedMessage?.retryPayload
     if (!failedMessage || !retryPayload) return
 
-    const retryTurnId = retryPayload.turnId || failedMessage.turnId || makeTurnId()
     const retryIsAutoAdvance = isAutoAdvanceTurn(failedMessage, messages)
     const retryIsRegeneration = Boolean(retryPayload.regenerationAvoidContent?.trim())
-    const retryMessages = messages.filter((message) => message.id !== messageId)
+    // Retry the conversation as it existed immediately before this failure.
+    // Looking through the entire current history can select a later user turn;
+    // trusting a persisted turn id alone can select an older edited version.
+    const retryMessages = failedMessageIndex >= 0
+      ? messages.slice(0, failedMessageIndex)
+      : messages.filter((message) => message.id !== messageId)
+    const payloadTurnId = retryPayload.turnId || failedMessage.turnId
     const retrySourceUserMessage = retryMessages.findLast((message) =>
-      message.type === "user" && message.turnId === retryTurnId && message.content.trim(),
+      message.type === "user" && message.turnId === payloadTurnId && message.content.trim(),
     ) ?? retryMessages.findLast((message) => message.type === "user" && message.content.trim())
+    const retryTurnId = retryIsAutoAdvance
+      ? payloadTurnId || makeTurnId()
+      : retrySourceUserMessage?.turnId || payloadTurnId || makeTurnId()
+    const retryUserContent = retrySourceUserMessage?.content.trim() || retryPayload.content
     const retryModelContent = retryIsAutoAdvance
       ? AUTO_ADVANCE_MODEL_CONTENT
-      : retrySourceUserMessage?.originalContent || retrySourceUserMessage?.content || retryPayload.content
+      : retryUserContent
+    const refreshedRetryPayload = {
+      ...retryPayload,
+      content: retryUserContent,
+      turnId: retryTurnId,
+    }
     const characterMessageId = `assistant-${retryTurnId}`
     const streamingMessage: ChatMessage = {
       id: characterMessageId,
@@ -1112,7 +1127,7 @@ export default function ChatPage() {
             roomId: chatId,
             userMessageId: retryIsAutoAdvance
               ? undefined
-              : retryMessages.findLast((message) => message.type === "user")?.id,
+              : retrySourceUserMessage?.id,
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
@@ -1136,7 +1151,7 @@ export default function ChatPage() {
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
         previousStatus: runtimeStoryStatus,
-        userContent: retryIsAutoAdvance ? "" : retryPayload.content,
+        userContent: retryIsAutoAdvance ? "" : retryUserContent,
         replyContent: reply.content,
       })
       const nextChatStoryStatus = {
@@ -1161,7 +1176,7 @@ export default function ChatPage() {
       const contextMessages = [...retryMessages, finalReply, ...autoCommandMessages]
       const shouldGenerateAutoImage = shouldAutoGenerateImage(
         chatId,
-        retryPayload.content,
+        retryUserContent,
         reply.content,
         nextChatStoryStatus,
       )
@@ -1200,7 +1215,7 @@ export default function ChatPage() {
                   turnId: failedMessage.turnId,
                   isGenerationError: true,
                   generationErrorMessage: message.generationErrorMessage || errorText,
-                  retryPayload: failedMessage.retryPayload,
+                  retryPayload: refreshedRetryPayload,
                   status: "failed",
                 }
               : message)
@@ -1211,6 +1226,7 @@ export default function ChatPage() {
               timestamp: new Date(),
               isGenerationError: true,
               generationErrorMessage: errorText,
+              retryPayload: refreshedRetryPayload,
               status: "failed",
             }],
       )
@@ -1301,19 +1317,21 @@ export default function ChatPage() {
     const turnMessages = targetMessage.turnId
       ? messages.filter((message) => message.turnId === targetMessage.turnId)
       : []
+    const messagesBeforeTarget = messages.slice(0, targetIndex)
     const sourceUserMessage = isAutoAdvanceRewrite
       ? undefined
-      : turnMessages.findLast((message) => message.type === "user" && message.content.trim()) ??
-        messages.slice(0, targetIndex).findLast((message) => message.type === "user" && message.content.trim())
+      : messagesBeforeTarget.findLast((message) =>
+          message.type === "user" && message.turnId === targetMessage.turnId && message.content.trim()
+        ) ?? messagesBeforeTarget.findLast((message) => message.type === "user" && message.content.trim())
     const userContent = isAutoAdvanceRewrite
       ? AUTO_ADVANCE_MODEL_CONTENT
-      : (sourceUserMessage?.originalContent || sourceUserMessage?.content || "").trim()
+      : (sourceUserMessage?.content || "").trim()
     if (!userContent) {
       toast.error("다시 생성할 사용자 메시지를 찾지 못했어요.")
       return
     }
 
-    const rewriteHistoryBase = messages.slice(0, targetIndex)
+    const rewriteHistoryBase = messagesBeforeTarget
     // Regeneration must not include the answer being replaced. Supplying the old
     // assistant message as context makes the model treat it as the preferred
     // continuation and often reproduce it verbatim.
