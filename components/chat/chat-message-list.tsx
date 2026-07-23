@@ -324,10 +324,15 @@ export function ChatMessageList({
   const themeConfig = getActualThemeConfig()
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
   const latestEditableMessageId = getLatestEditableMessageId(messages)
+  // Keep the larger bottom inset only for the initial scene/first turn.
+  // Once a second turn exists, the composer no longer needs the opening-scene
+  // spacing; applying pb-44 to the whole history leaves a large empty tail.
+  const turnIds = new Set(messages.map((message) => message.turnId).filter(Boolean))
+  const isInitialScene = turnIds.size <= 1
   // Bubble style rendering
   return (
     <div
-      className="flex flex-col gap-3 px-4 py-4 pb-44"
+      className={cn("flex flex-col gap-3 px-4 py-4", isInitialScene ? "pb-44" : "pb-4")}
       style={{
         color: themeTextPalette.text,
         "--chat-theme-text": themeTextPalette.text,
