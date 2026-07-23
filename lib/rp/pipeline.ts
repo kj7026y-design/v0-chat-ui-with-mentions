@@ -169,19 +169,27 @@ function debugRoleplayContent({
   model: string
   content: string
 }) {
-  if (process.env.NODE_ENV === "production") return
   const stageLabel: Record<RoleplayContentLogStage, string> = {
     original: "original provider output",
     repaired: "repaired provider output",
     fallback: "fallback provider output",
     final: "final output",
   }
-  debugRoleplayJson(`[RP ${stageLabel[stage]}]`, {
+  const payload = {
     requestId: requestId || "untracked",
     model,
     contentLength: content.length,
     content: content || "(empty)",
-  })
+  }
+
+  // Provider drafts stay development-only, but the accepted final output is a
+  // production operations log and must remain visible on Vercel as well.
+  if (stage === "final") {
+    console.log(`[RP ${stageLabel[stage]}]`, JSON.stringify(payload, null, 2))
+    return
+  }
+
+  debugRoleplayJson(`[RP ${stageLabel[stage]}]`, payload)
 }
 
 function debugRoleplayJson(label: string, payload: unknown) {
