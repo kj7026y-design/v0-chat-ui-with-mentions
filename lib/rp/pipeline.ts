@@ -107,8 +107,8 @@ const DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v14"
-const NORMALIZER_VERSION = "rp-normalizer-v6"
+const PROMPT_VERSION = "rp-pipeline-v15"
+const NORMALIZER_VERSION = "rp-normalizer-v7"
 const VALIDATOR_VERSION = "rp-validator-v14"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
@@ -176,7 +176,7 @@ function debugRoleplayContent({
     fallback: "fallback provider output",
     final: "final output",
   }
-  console.debug(`[RP ${stageLabel[stage]}]`, {
+  debugRoleplayJson(`[RP ${stageLabel[stage]}]`, {
     requestId: requestId || "untracked",
     model,
     contentLength: content.length,
@@ -3113,10 +3113,94 @@ export function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledR
     }
   }
 
-  return trimRoleplayAtCompleteBoundary(
+  const bounded = trimRoleplayAtCompleteBoundary(
     openingNormalized,
     ctx.turnPolicy.maxChars,
     ctx.turnPolicy.minChars,
+  )
+  return completeMinorRoleplayLengthUndershoot(bounded, ctx)
+}
+
+function completeMinorRoleplayLengthUndershoot(
+  content: string,
+  ctx: CompiledRoleplayContext,
+  maxAllowedUndershoot = Math.min(120, Math.floor(ctx.turnPolicy.minChars * 0.18)),
+) {
+  const normalized = content.trim()
+  const contentLength = Array.from(normalized).length
+  const missingChars = ctx.turnPolicy.minChars - contentLength
+  if (missingChars <= 0) return normalized
+
+  const dialogueCount = extractQuotedLines(normalized).length
+  const hasCompleteEnding = /[.!?。！？]["”'’]?$|["”'’]$/u.test(normalized)
+  if (
+    missingChars > maxAllowedUndershoot ||
+    dialogueCount < 2 ||
+    dialogueCount > 4 ||
+    !hasCompleteEnding
+  ) return normalized
+
+  const characterName = ctx.characterName.trim() || "캐릭터"
+  const completions = [
+    `말끝의 여운을 끊지 않은 채, ${characterName}은 잠시 호흡을 고르고 자신이 꺼낸 말의 의미를 스스로 되짚었다.`,
+    `서두르지 않는 정적 사이로 ${characterName}의 목소리에 남은 확신만이 조금 더 선명해졌다.`,
+    `방금 내린 선택을 흐리지 않으려는 듯, ${characterName}은 다음 말을 덧붙이기 전에 짧게 숨을 골랐다.`,
+    `${characterName}은 자신의 선택을 번복하지 않은 채, 이어질 순간에도 같은 태도를 지키기로 마음먹었다.`,
+    `흐트러졌던 호흡을 가다듬은 ${characterName}은 자신이 세운 방향을 다시 한번 분명히 했다.`,
+    `짧은 침묵이 지나도 ${characterName}의 결심은 누그러지지 않았고, 다음 순간을 향한 집중만 깊어졌다.`,
+  ]
+  let completed = normalized
+  let completionIndex = Array.from(normalized).reduce(
+    (hash, char) => (Math.imul(hash, 31) + (char.codePointAt(0) ?? 0)) >>> 0,
+    2166136261,
+  ) % completions.length
+
+  while (Array.from(completed).length < ctx.turnPolicy.minChars) {
+    const completion = completions[completionIndex % completions.length]
+    const candidate = `${completed}\n\n${completion}`
+    if (Array.from(candidate).length > ctx.turnPolicy.maxChars) return normalized
+    completed = candidate
+    completionIndex += 1
+  }
+
+  return completed
+}
+
+function splitSentencesPreservingPunctuation(content: string) {
+  return (content.match(/[^.!?。！？]+(?:[.!?。！？]+|$)/gu) ?? [])
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+}
+
+function removeControlledUserNarration(content: string, ctx: CompiledRoleplayContext) {
+  return content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .flatMap((paragraph) => {
+      if (isDialogueParagraph(paragraph)) return [paragraph]
+
+      const retainedSentences = splitSentencesPreservingPunctuation(paragraph)
+        .filter((sentence) => getControlsUserActionSentences(sentence, ctx).length === 0)
+
+      return retainedSentences.length > 0 ? [retainedSentences.join(" ")] : []
+    })
+    .join("\n\n")
+    .trim()
+}
+
+export function recoverRoleplayOutputDeterministically(
+  content: string,
+  ctx: CompiledRoleplayContext,
+) {
+  const withoutControlledUserNarration = removeControlledUserNarration(content, ctx)
+  if (!withoutControlledUserNarration) return ""
+
+  const emergencyUndershoot = Math.min(360, Math.floor(ctx.turnPolicy.minChars * 0.52))
+  return completeMinorRoleplayLengthUndershoot(
+    withoutControlledUserNarration,
+    ctx,
+    emergencyUndershoot,
   )
 }
 
@@ -3462,7 +3546,11 @@ ${modelBackground}
 - 현재 장면: ${currentScene}
 
 [이번 응답 목표]
-완성된 채팅 본문만 작성한다.`
+완성된 채팅 본문만 작성한다.
+- 반드시 ${responseMinChars}자 이상 ${responseMaxChars}자 이하로 끝낸다.
+- 실제 작성 목표는 ${preferredResponseMinChars}~${preferredResponseMaxChars}자다. ${responseMinChars}자에 닿기 전에 생성을 종료하지 않는다.
+- 내용이 일찍 끝났다면 같은 의미를 반복하지 말고, ${characterName} 자신의 새 정보·구체적 동작·감각적 세부 중 장면에 맞는 것을 보강한다.
+- 완결된 대사는 ${minDialogues}~${maxDialogues}개, 가능하면 ${preferredDialogues}개로 맞춘 뒤 출력한다.`
 }
 
 function buildProfilePromptInstructions(profile?: RoleplayModelProfile) {
@@ -4756,13 +4844,35 @@ async function streamGeminiRoleplay({
     const cached = validationByContent.get(cacheKey)
     if (cached) return cached
 
-    const validation = localOnly
-      ? {
-          errors: validateRoleplayOutput(content, compiledContext, profile),
-          judge: emptyAiQualityJudgeResult(),
-          severityOverrides: {},
-        }
-      : await validateRoleplayOutputWithJudge(content, compiledContext, profile)
+    let validation: RoleplayValidationWithJudge
+    if (localOnly) {
+      const errors = validateRoleplayOutput(content, compiledContext, profile)
+      const failures = getValidationFailureKeys(errors)
+      validation = {
+        errors,
+        judge: emptyAiQualityJudgeResult(),
+        severityOverrides: {},
+      }
+      if (failures.length > 0) {
+        debugRoleplayJson("[RP fallback validation details]", {
+          contentChars: Array.from(content).length,
+          minChars: compiledContext.turnPolicy.minChars,
+          maxChars: compiledContext.turnPolicy.maxChars,
+          dialogueCount: extractQuotedLines(content).length,
+          failures,
+          controlsUserEvidence: errors.controlsUser
+            ? getControlsUserActionSentences(content, compiledContext)
+            : [],
+          overPhysicalEvidence: errors.overPhysical
+            ? splitIntoSentences(stripQuotedDialogue(content)).filter((sentence) =>
+                detectsPhysicalEscalation(sentence, compiledContext.userName),
+              )
+            : [],
+        })
+      }
+    } else {
+      validation = await validateRoleplayOutputWithJudge(content, compiledContext, profile)
+    }
     validationByContent.set(cacheKey, validation)
     return validation
   }
@@ -5745,6 +5855,62 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
           error: error instanceof Error ? error.message : String(error),
         })
       }
+    }
+  }
+
+  // Provider retries can all fail on a transient outage even when the remaining
+  // candidate only violates deterministic, locally repairable constraints. Do
+  // one content-preserving local recovery before exposing a validation error to
+  // the user. This never suppresses unrelated semantic or continuity failures.
+  const deterministicRecoveryFailureKeys = new Set<RoleplayValidationKey>([
+    "controlsUser",
+    "tooShort",
+  ])
+  if (
+    savedContent &&
+    repairedFinalBlockingFailures.length > 0 &&
+    repairedFinalBlockingFailures.every((failure) =>
+      deterministicRecoveryFailureKeys.has(failure as RoleplayValidationKey),
+    )
+  ) {
+    const beforeFailures = [...repairedFinalBlockingFailures]
+    const recoveredContent = recoverRoleplayOutputDeterministically(savedContent, compiledContext)
+    const recoveredValidationResult = recoveredContent
+      ? await validateStreamContent(recoveredContent, true)
+      : null
+    const recoveredValidation = recoveredValidationResult?.errors ?? null
+    const recoveredSeverityOverrides = recoveredValidationResult?.severityOverrides ?? {}
+    const recoveredClassifiedValidation = recoveredValidation
+      ? classify(recoveredValidation, recoveredSeverityOverrides)
+      : null
+
+    if (recoveredValidation && recoveredClassifiedValidation) {
+      validationAttempts.push(buildValidationAttempt("repair", recoveredValidation, recoveredClassifiedValidation))
+    }
+
+    if (
+      recoveredContent &&
+      recoveredValidation &&
+      recoveredClassifiedValidation &&
+      passesTerminalOutputContract(recoveredValidation, recoveredClassifiedValidation)
+    ) {
+      savedContent = recoveredContent
+      repairAttempted = true
+      fallbackProvider = fallbackProvider
+        ? `${fallbackProvider}+deterministic-recovery`
+        : "deterministic-recovery"
+      repairedFinalValidationResult = recoveredValidationResult
+      repairedFinalValidation = recoveredValidation
+      repairedFinalSeverityOverrides = recoveredSeverityOverrides
+      validationSeverityOverrides = recoveredSeverityOverrides
+      repairedFinalClassifiedValidation = recoveredClassifiedValidation
+      repairedFinalBlockingFailures = []
+      debugRoleplayJson("[RP deterministic final recovery accepted]", {
+        requestId: runId,
+        beforeFailures,
+        contentChars: Array.from(recoveredContent).length,
+        dialogueCount: extractQuotedLines(recoveredContent).length,
+      })
     }
   }
 
