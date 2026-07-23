@@ -1782,7 +1782,7 @@ export default function ChatPage() {
         onScroll={(event) => {
           if (event.currentTarget.scrollTop <= 120) void loadOlderHistory()
         }}
-        className="min-h-0 flex-1 overflow-y-auto pb-[calc(9.5rem+env(safe-area-inset-bottom))] pt-11 transition-colors duration-200"
+        className="min-h-0 flex-1 overflow-y-auto pb-[calc(8rem+env(safe-area-inset-bottom))] pt-11 transition-colors duration-200"
         style={{ backgroundColor: chatBackgroundColor }}
       >
         {isHistoryLoading ? (
