@@ -110,14 +110,81 @@ test("phone command renders a contextual phone screen and changes on each invoca
 })
 
 test("remaining text commands use the current scene instead of fixed dummy copy", async () => {
-  const sns = buildSnsCommandContent("강태현", commandContext)
-  const status = buildStatusBar("강태현", commandContext)
+  const originalFetch = globalThis.fetch
+  let snsRequestBody = ""
+  let statusRequestBody = ""
+  globalThis.fetch = async (_input, init) => {
+    const requestBody = String(init?.body ?? "")
+    const parsedRequest = JSON.parse(requestBody) as {
+      messages?: Array<{ content?: string }>
+    }
+    const isStatusRequest = parsedRequest.messages?.[0]?.content?.includes("역할극 상태창") === true
+    if (isStatusRequest) {
+      statusRequestBody = requestBody
+      return new Response(JSON.stringify({
+        result: JSON.stringify({
+          sceneSummary: "윤재가 공연이 끝난 뒤에도 대화를 이어갈 것인지 물었다. 강태현은 인터뷰 일정표를 접고 공연 뒤에는 다른 사람을 만나지 않겠다고 답했다.",
+          thoughtEmoji: "😶",
+          innerThought: "일정표를 접는 손은 멀쩡했는데 윤재의 질문에는 바로 답하기 어려웠다. 공연이 끝나면 이번에는 피하지 말아야 한다.",
+        }),
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+
+    snsRequestBody = requestBody
+    return new Response(JSON.stringify({
+      result: JSON.stringify({
+        dailyPost: {
+          image: "대기실 화장대 위에 접어 둔 인터뷰 일정표와 무대 조명 사진",
+          caption: "무대에 오르기 전에는 순서부터 정리한다.",
+          likes: 218,
+          comments: [
+            { nickname: "min.scene", elapsedTime: "8분", content: "오늘도 무대 찢겠다", isReply: false },
+            { nickname: "j._.h", elapsedTime: "2시간", content: "일정표 접은 거 보니 준비 끝났네", isReply: false },
+            { nickname: "east-yeon", elapsedTime: "24초", content: "조명 벌써 예쁘다", isReply: false },
+          ],
+        },
+        userPost: {
+          image: "인터뷰 일정표 아래 나란히 놓인 공연 뒤 출입증 두 장",
+          caption: "끝난 뒤의 약속은 미루지 않는다.",
+          likes: 164,
+          comments: [
+            { nickname: "d0y00n", elapsedTime: "30분", content: "두 장이면 누구랑 가는 건데", isReply: false },
+            { nickname: "ch_lean", elapsedTime: "5일", content: "오늘은 공연 뒤가 더 중요해 보인다", isReply: false },
+            { nickname: "tae.hyun", elapsedTime: "1분", content: "약속한 사람이 있어.", isReply: true },
+          ],
+        },
+      }),
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })
+  }
+
+  let sns = ""
+  let status = ""
+  try {
+    sns = await buildSnsCommandContent("강태현", commandContext)
+    status = await buildStatusBar("강태현", commandContext)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
   const audience = buildAudienceReactionContent(commandContext)
   const summary = buildSummaryCommandContent("강태현", commandContext)
 
-  assert.match(sns, /SOCIAL/u)
-  assert.match(sns, /강태현|윤재/u)
+  assert.match(sns, /^<ig>/u)
+  assert.match(sns, /nickname="min\.scene"/u)
+  assert.doesNotMatch(sns, /<ig-comment author=/u)
+  assert.match(sns, /공연 뒤 출입증 두 장/u)
+  assert.match(snsRequestBody, /최근 두 차례 대화/u)
+  assert.match(snsRequestBody, /오늘 공연 끝나고도 나랑 이야기할 거지/u)
   assert.match(status, /콘서트홀 대기실/u)
+  assert.match(status, /\[윤재가 공연이 끝난 뒤에도/u)
+  assert.match(status, /😶 일정표를 접는 손은/u)
+  assert.match(statusRequestBody, /미리 정해진 문장/u)
+  assert.match(statusRequestBody, /오늘 공연 끝나고도 나랑 이야기할 거지/u)
   assert.doesNotMatch(status, /장소명|yy\.mm\.dd/u)
   assert.match(audience, /LIVE CHAT/u)
   assert.match(summary, /STORY LOG/u)

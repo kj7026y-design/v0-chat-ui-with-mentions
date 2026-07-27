@@ -40,11 +40,193 @@ function getChatThemeTextPalette(backgroundColor: string) {
       }
     : {
         text: "#1F2937",
-        mutedText: "rgba(31,41,55,0.72)",
+        mutedText: "var(--color-gray-400)",
         panelBg: "rgba(255,255,255,0.58)",
         panelBorder: "rgba(17,24,39,0.12)",
         indicator: "rgba(31,41,55,0.52)",
       }
+}
+
+function decodeSnsMarkup(value: string) {
+  return value
+    .replace(/&quot;/gu, "\"")
+    .replace(/&apos;/gu, "'")
+    .replace(/&gt;/gu, ">")
+    .replace(/&lt;/gu, "<")
+    .replace(/&amp;/gu, "&")
+}
+
+function InstagramCommandContent({
+  content,
+  textColor,
+  mutedTextColor,
+}: {
+  content: string
+  textColor: string
+  mutedTextColor: string
+}) {
+  const lines = content.split(/\r?\n/)
+  const renderedLines: ReactNode[] = []
+  const isTaggedContent = content.trimStart().startsWith("<ig>")
+
+  const renderComment = ({
+    nickname,
+    elapsedTime,
+    comment,
+    isReply,
+    key,
+  }: {
+    nickname: string
+    elapsedTime: string
+    comment: string
+    isReply: boolean
+    key: string
+  }) => (
+    <div key={key} className={cn("mt-1", isReply && "mt-0")}>
+      <>
+        {isReply && (
+          <span className="text-xs font-medium mr-1" style={{ color: mutedTextColor }}>
+            └─
+          </span>
+        )}
+        <strong className="font-bold mr-2" style={{ color: textColor }}>
+          {nickname}
+        </strong>
+        {comment && (
+        <>
+          <span className="mt-0.5 whitespace-pre-wrap break-words" style={{ color: textColor }}>
+            {comment}
+          </span>
+          <span className="text-[11px] font-medium ml-2" style={{ color: mutedTextColor }}>
+            {elapsedTime}
+          </span>
+        </>
+        )}
+      </>
+    </div>
+  )
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim()
+
+    if (isTaggedContent) {
+      const commentTag = line.match(/^<ig-comment (?:nickname|author)="([^"]*)" time="([^"]*)" reply="(true|false)">(.*)<\/ig-comment>$/u)
+      if (commentTag) {
+        renderedLines.push(renderComment({
+          nickname: decodeSnsMarkup(commentTag[1]),
+          elapsedTime: decodeSnsMarkup(commentTag[2]),
+          comment: decodeSnsMarkup(commentTag[4]),
+          isReply: commentTag[3] === "true",
+          key: `instagram-tagged-comment-${index}`,
+        }))
+        continue
+      }
+
+      const contentTag = line.match(/^<ig-(title|divider|image|caption|stats)>(.*)<\/ig-\1>$/u)
+      if (contentTag) {
+        const className = contentTag[1] === 'divider' ? "border-b mt-2 mb-4 border-black" : contentTag[1] === 'caption' ? "my-1" : contentTag[1] === 'stats' ? "mb-2" : ""
+        renderedLines.push(
+          <div key={`instagram-tagged-${contentTag[1]}-${index}`} className={cn("whitespace-pre-wrap break-words [word-break:keep-all]", className)}>
+            {decodeSnsMarkup(contentTag[2])}
+          </div>,
+        )
+        continue
+      }
+
+      if (line === "<ig-gap />") {
+        renderedLines.push(<div key={`instagram-tagged-gap-${index}`} className="border-b my-4" />)
+        continue
+      }
+
+      if (/^<\/?ig(?:>|-post>)/u.test(line)) continue
+    }
+
+    const commentHeader = line.match(/^(ㄴ\s+)?(.+?)\s+·\s+(\d+(?:주|일|시간|분|초))$/u)
+    if (commentHeader) {
+      renderedLines.push(renderComment({
+        nickname: commentHeader[2].trim(),
+        elapsedTime: commentHeader[3],
+        comment: lines[index + 1]?.trim() ?? "",
+        isReply: Boolean(commentHeader[1]),
+        key: `instagram-comment-${index}`,
+      }))
+      index += 1
+      continue
+    }
+
+    if (!line) {
+      renderedLines.push(<div key={`instagram-space-${index}`} className="h-2" />)
+      continue
+    }
+
+    if (line === "댓글") {
+      renderedLines.push(
+        <div key={`instagram-label-${index}`} className="mt-2 font-semibold" style={{ color: textColor }}>
+          댓글
+        </div>,
+      )
+      continue
+    }
+
+    renderedLines.push(
+      <div key={`instagram-line-${index}`} className="whitespace-pre-wrap break-words [word-break:keep-all]">
+        {line}
+      </div>,
+    )
+  }
+
+  return <div style={{ color: textColor }}>{renderedLines}</div>
+}
+
+function StatusCommandContent({
+  content,
+  textColor,
+  mutedTextColor,
+}: {
+  content: string
+  textColor: string
+  mutedTextColor: string
+}) {
+  if (!content.trimStart().startsWith("<status>")) {
+    return <div className="whitespace-pre-wrap break-words [word-break:keep-all]">{content}</div>
+  }
+
+  const renderedLines: ReactNode[] = []
+
+  content.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim()
+    if (/^<\/?status>$/u.test(line)) return
+
+    const dividerTag = line.match(/^<status-divider tone="(strong|muted)"><\/status-divider>$/u)
+    if (dividerTag) {
+      renderedLines.push(
+        <div
+          key={`status-divider-${index}`}
+          className={dividerTag[1] === "strong" ? "mt-2 mb-3 border-b border-black" : "my-3 border-b"}
+        />,
+      )
+      return
+    }
+
+    const contentTag = line.match(/^<status-(title|date|meta|summary|thought)>(.*)<\/status-\1>$/u)
+    if (!contentTag) return
+
+    const type = contentTag[1]
+    renderedLines.push(
+      <div
+        key={`status-${type}-${index}`}
+        className={cn(
+          "whitespace-pre-wrap break-words [word-break:keep-all]",
+          type === "title" && "font-semibold",
+          type === "thought" && "mt-3",
+        )}
+      >
+        {decodeSnsMarkup(contentTag[2])}
+      </div>,
+    )
+  })
+
+  return <div style={{ color: textColor }}>{renderedLines}</div>
 }
 
 // Mention target name mapping
@@ -167,10 +349,11 @@ function normalizeMessageNewlines(content: string) {
 function getLatestEditableMessageId(messages: ChatMessage[]) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
-    if (isAssistantExtraMessage(message)) continue
+    if (isAssistantExtraMessage(message) && !message.commandId) continue
     const editTarget = getEditTargetMessage(message, messages)
     const isCharacterLine = editTarget.isUserAuthoredCharacterLine && editTarget.speakerType === "character"
-    const isEditable = editTarget.type === "user" || editTarget.type === "ai" || isCharacterLine
+    const isCommandMessage = Boolean(editTarget.commandId)
+    const isEditable = editTarget.type === "user" || editTarget.type === "ai" || isCharacterLine || isCommandMessage
     if (isEditable && editTarget.content.trim()) return editTarget.id
   }
   return null
@@ -178,7 +361,7 @@ function getLatestEditableMessageId(messages: ChatMessage[]) {
 
 function isAssistantExtraMessage(message: ChatMessage) {
   if (message.type !== "status" || message.isGenerationError || !message.turnId) return false
-  return /^(📱 휴대폰|💬 SNS|📊 상태창|📍장소:)/.test(message.content.trim())
+  return /^(📱 휴대폰|💬 SNS|INSTAGRAM|<ig>|<status>|📊 상태창|📍장소:)/.test(message.content.trim())
 }
 
 function getAssistantExtraMessages(message: ChatMessage, messages: ChatMessage[], index: number) {
@@ -347,6 +530,9 @@ export function ChatMessageList({
           if (isGroupedAssistantExtra(message, messages, index)) return null
           const editTarget = getEditTargetMessage(message, messages)
           const extraMessages = getAssistantExtraMessages(message, messages, index)
+          const isLatestEditableTarget =
+            editTarget.id === latestEditableMessageId ||
+            (editTarget.type === "ai" && extraMessages.some((extraMessage) => extraMessage.id === latestEditableMessageId))
           return (
             <BubbleMessageBubble
               key={message.id}
@@ -358,25 +544,36 @@ export function ChatMessageList({
               onDelete={onDeleteMessage}
               onBranch={onBranchFromMessage}
               isEdited={editedMessageIds.has(editTarget.id)}
+              editedMessageIds={editedMessageIds}
               themeConfig={themeConfig}
               textSize={textSize}
               lineHeight={lineHeight}
               characters={characters}
-              isLatest={editTarget.id === latestEditableMessageId}
+              isLatest={isLatestEditableTarget}
+              latestEditableMessageId={latestEditableMessageId}
               canBranch={
                 (message.type === "ai" || message.type === "status" || message.type === "inner-thought") &&
                 (!message.turnId || messages[index + 1 + extraMessages.length]?.turnId !== message.turnId)
               }
               editInitialContent={editTarget.content}
               isEditing={editingMessageId === message.id}
+              editingMessageId={editingMessageId}
               disabled={disabled}
               onStartEdit={() => {
                 if (disabled) return
                 setEditingMessageId(message.id)
               }}
+              onStartMessageEdit={(targetMessageId) => {
+                if (disabled) return
+                setEditingMessageId(targetMessageId)
+              }}
               onCancelEdit={() => setEditingMessageId(null)}
               onSaveEdit={(nextContent) => {
                 onEditMessage?.(editTarget.id, nextContent)
+                setEditingMessageId(null)
+              }}
+              onSaveMessageEdit={(targetMessageId, nextContent) => {
+                onEditMessage?.(targetMessageId, nextContent)
                 setEditingMessageId(null)
               }}
             />
@@ -406,18 +603,23 @@ interface BubbleMessageBubbleProps {
   onDelete?: (messageId: string) => void
   onBranch?: (messageId: string) => void
   isEdited?: boolean
+  editedMessageIds: Set<string>
   themeConfig: ChatThemeConfig
   textSize: number
   lineHeight: number
   characters: ChatMessageCharacterProfile[]
   isLatest: boolean
+  latestEditableMessageId: string | null
   canBranch: boolean
   editInitialContent: string
   isEditing: boolean
+  editingMessageId: string | null
   disabled?: boolean
   onStartEdit: () => void
+  onStartMessageEdit: (messageId: string) => void
   onCancelEdit: () => void
   onSaveEdit: (nextContent: string) => void
+  onSaveMessageEdit: (messageId: string, nextContent: string) => void
 }
 
 function BubbleMessageBubble({
@@ -429,18 +631,23 @@ function BubbleMessageBubble({
   onDelete,
   onBranch,
   isEdited,
+  editedMessageIds,
   themeConfig,
   textSize,
   lineHeight,
   characters,
   isLatest,
+  latestEditableMessageId,
   canBranch,
   editInitialContent,
   isEditing,
+  editingMessageId,
   disabled = false,
   onStartEdit,
+  onStartMessageEdit,
   onCancelEdit,
   onSaveEdit,
+  onSaveMessageEdit,
 }: BubbleMessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false)
   const [editDraft, setEditDraft] = useState(() => normalizeMessageNewlines(editInitialContent))
@@ -545,6 +752,9 @@ function BubbleMessageBubble({
   if (isStatus || isInnerThought) {
     const statusTextSize = Math.min(14, Math.max(11, textSize))
     const isPhoneCommand = isStatus && message.commandId === "phone"
+    const isInstagramCommand = isStatus && message.commandId === "sns"
+    const isStatusCommand = isStatus && message.commandId === "status"
+    const isCommandMessage = Boolean(message.commandId)
 
     return (
       <div className="flex flex-col items-start gap-2">
@@ -552,12 +762,11 @@ function BubbleMessageBubble({
           <div
             className={cn(
               isPhoneCommand
-                ? "w-[min(92vw,360px)] rounded-[2rem] border-[5px] border-neutral-800 bg-neutral-950 px-4 py-5 shadow-xl shadow-black/30"
-                : "max-w-[92%] rounded-xl border px-3 py-2.5 shadow-sm",
+                ? "w-[min(92vw,360px)] rounded-[2rem] border-[5px] border-neutral-300 bg-white px-4 py-5 text-neutral-950 dark:border-neutral-800 dark:bg-neutral-950 dark:text-slate-50"
+                : "max-w-[92%] rounded-xl border px-3 py-2.5",
             )}
             style={isPhoneCommand
               ? {
-                  color: "#F8FAFC",
                   fontSize: statusTextSize,
                   lineHeight: Math.max(1.45, lineHeight),
                 }
@@ -569,14 +778,51 @@ function BubbleMessageBubble({
                   lineHeight: Math.max(1.45, lineHeight),
                 }}
           >
-            <p className={cn(
-              "whitespace-pre-wrap break-words [word-break:keep-all]",
-              isPhoneCommand && "font-mono text-[11px] leading-[1.55] tracking-[-0.025em] sm:text-xs",
-            )}>
-              {message.content}
-            </p>
+            {isInstagramCommand ? (
+              <InstagramCommandContent
+                content={message.content}
+                textColor={themeTextPalette.text}
+                mutedTextColor={themeTextPalette.mutedText}
+              />
+            ) : isStatusCommand ? (
+              <StatusCommandContent
+                content={message.content}
+                textColor={themeTextPalette.text}
+                mutedTextColor={themeTextPalette.mutedText}
+              />
+            ) : (
+              <p className={cn(
+                "whitespace-pre-wrap break-words [word-break:keep-all]",
+                isPhoneCommand && "font-mono text-[11px] leading-[1.55] tracking-[-0.025em] sm:text-xs",
+              )}>
+                {message.content}
+              </p>
+            )}
           </div>
         </div>
+        {isEditing && (
+          <EditMessageForm
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            disabled={disabled}
+            isUser={false}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
+          />
+        )}
+        {isLatest && isCommandMessage && !isEditing && !disabled && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+            <AuthorTools
+              messageId={message.id}
+              onRewrite={onRewrite}
+              onEdit={onStartEdit}
+              onDelete={onDelete}
+              isEdited={isEdited}
+              canRewrite
+              disabled={disabled}
+            />
+          </div>
+        )}
         {canBranch && (
           <BranchButton
             disabled={disabled}
@@ -696,6 +942,15 @@ function BubbleMessageBubble({
           extraMessages={extraMessages}
           avatarUrl={speakerProfile?.avatarUrl}
           avatarFallback={speakerProfile?.emoji}
+          latestEditableMessageId={latestEditableMessageId}
+          editingMessageId={editingMessageId}
+          editedMessageIds={editedMessageIds}
+          disabled={disabled}
+          onRewrite={onRewrite}
+          onEdit={onStartMessageEdit}
+          onDelete={onDelete}
+          onCancelEdit={onCancelEdit}
+          onSaveEdit={onSaveMessageEdit}
         />
 
         {isEditing && (
@@ -853,6 +1108,15 @@ function BubbleMessageBubble({
             textSize={textSize}
             lineHeight={lineHeight}
             themeConfig={themeConfig}
+            latestEditableMessageId={latestEditableMessageId}
+            editingMessageId={editingMessageId}
+            editedMessageIds={editedMessageIds}
+            disabled={disabled}
+            onRewrite={onRewrite}
+            onEdit={onStartMessageEdit}
+            onDelete={onDelete}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveMessageEdit}
           />
         </div>
       )}
@@ -903,6 +1167,15 @@ function AssistantSegmentedMessage({
   lineHeight,
   isEdited,
   isCharacterLine,
+  latestEditableMessageId,
+  editingMessageId,
+  editedMessageIds,
+  disabled,
+  onRewrite,
+  onEdit,
+  onDelete,
+  onCancelEdit,
+  onSaveEdit,
 }: {
   message: ChatMessage
   segments: MessageSegment[]
@@ -915,6 +1188,15 @@ function AssistantSegmentedMessage({
   lineHeight: number
   isEdited?: boolean
   isCharacterLine: boolean
+  latestEditableMessageId: string | null
+  editingMessageId: string | null
+  editedMessageIds: Set<string>
+  disabled: boolean
+  onRewrite?: (messageId: string) => void
+  onEdit: (messageId: string) => void
+  onDelete?: (messageId: string) => void
+  onCancelEdit: () => void
+  onSaveEdit: (messageId: string, nextContent: string) => void
 }) {
   const firstDialogue = segments.find(
     (segment): segment is Extract<MessageSegment, { type: "dialogue" }> => segment.type === "dialogue",
@@ -969,6 +1251,15 @@ function AssistantSegmentedMessage({
             textSize={textSize}
             lineHeight={lineHeight}
             themeConfig={themeConfig}
+            latestEditableMessageId={latestEditableMessageId}
+            editingMessageId={editingMessageId}
+            editedMessageIds={editedMessageIds}
+            disabled={disabled}
+            onRewrite={onRewrite}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
           />
         )}
       </div>
@@ -1042,11 +1333,29 @@ function AssistantExtraSection({
   textSize,
   lineHeight,
   themeConfig,
+  latestEditableMessageId,
+  editingMessageId,
+  editedMessageIds,
+  disabled,
+  onRewrite,
+  onEdit,
+  onDelete,
+  onCancelEdit,
+  onSaveEdit,
 }: {
   messages: ChatMessage[]
   textSize: number
   lineHeight: number
   themeConfig: ChatThemeConfig
+  latestEditableMessageId: string | null
+  editingMessageId: string | null
+  editedMessageIds: Set<string>
+  disabled: boolean
+  onRewrite?: (messageId: string) => void
+  onEdit: (messageId: string) => void
+  onDelete?: (messageId: string) => void
+  onCancelEdit: () => void
+  onSaveEdit: (messageId: string, nextContent: string) => void
 }) {
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
 
@@ -1061,6 +1370,15 @@ function AssistantExtraSection({
             textSize={Math.max(12, textSize - 2)}
             lineHeight={Math.max(1.35, lineHeight)}
             themeConfig={themeConfig}
+            isLatest={message.id === latestEditableMessageId}
+            isEditing={message.id === editingMessageId}
+            isEdited={editedMessageIds.has(message.id)}
+            disabled={disabled}
+            onRewrite={onRewrite}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
           />
         ))}
       </div>
@@ -1073,12 +1391,31 @@ function AssistantExtraCard({
   textSize,
   lineHeight,
   themeConfig,
+  isLatest,
+  isEditing,
+  isEdited,
+  disabled,
+  onRewrite,
+  onEdit,
+  onDelete,
+  onCancelEdit,
+  onSaveEdit,
 }: {
   message: ChatMessage
   textSize: number
   lineHeight: number
   themeConfig: ChatThemeConfig
+  isLatest: boolean
+  isEditing: boolean
+  isEdited: boolean
+  disabled: boolean
+  onRewrite?: (messageId: string) => void
+  onEdit: (messageId: string) => void
+  onDelete?: (messageId: string) => void
+  onCancelEdit: () => void
+  onSaveEdit: (messageId: string, nextContent: string) => void
 }) {
+  const [editDraft, setEditDraft] = useState(() => normalizeMessageNewlines(message.content))
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
   const lines = message.content
     .split(/\r?\n/)
@@ -1089,29 +1426,84 @@ function AssistantExtraCard({
   const icon = iconMatch?.[1] ?? "•"
   const title = iconMatch?.[2] || titleLine
   const bodyLines = lines.slice(1)
+  const isInstagramCommand = message.commandId === "sns"
+  const isStatusCommand = message.commandId === "status"
+
+  useEffect(() => {
+    if (isEditing) setEditDraft(normalizeMessageNewlines(message.content))
+  }, [isEditing, message.content])
 
   return (
-    <div
-      className="w-full rounded-lg border px-3 py-2"
-      style={{
-        backgroundColor: themeTextPalette.panelBg,
-        borderColor: themeTextPalette.panelBorder,
-        color: themeTextPalette.mutedText,
-        fontSize: textSize,
-        lineHeight,
-      }}
-    >
-      <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: themeTextPalette.text }}>
-        <span className="text-sm leading-none">{icon}</span>
-        <span>{title}</span>
+    <div className="space-y-1.5">
+      <div
+        className="relative w-full rounded-lg border px-3 py-2"
+        style={{
+          backgroundColor: themeTextPalette.panelBg,
+          borderColor: themeTextPalette.panelBorder,
+          color: themeTextPalette.mutedText,
+          fontSize: textSize,
+          lineHeight,
+        }}
+      >
+        {isInstagramCommand || isStatusCommand ? (
+          <>
+            {isInstagramCommand ? (
+              <InstagramCommandContent
+                content={message.content}
+                textColor={themeTextPalette.text}
+                mutedTextColor={themeTextPalette.mutedText}
+              />
+            ) : (
+              <StatusCommandContent
+                content={message.content}
+                textColor={themeTextPalette.text}
+                mutedTextColor={themeTextPalette.mutedText}
+              />
+            )}
+            {isEdited && (
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-purple-500" aria-label="수정됨" />
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: themeTextPalette.text }}>
+              <span className="text-sm leading-none">{icon}</span>
+              <span>{title}</span>
+              {isEdited && <span className="h-2 w-2 rounded-full bg-purple-500" aria-label="수정됨" />}
+            </div>
+            {bodyLines.length > 0 && (
+              <div className="space-y-0.5">
+                {bodyLines.map((line, index) => (
+                  <p key={`${message.id}-extra-line-${index}`} className="break-words [word-break:keep-all]">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
-      {bodyLines.length > 0 && (
-        <div className="space-y-0.5">
-          {bodyLines.map((line, index) => (
-            <p key={`${message.id}-extra-line-${index}`} className="break-words [word-break:keep-all]">
-              {line}
-            </p>
-          ))}
+      {isEditing && (
+        <EditMessageForm
+          editDraft={editDraft}
+          setEditDraft={setEditDraft}
+          disabled={disabled}
+          isUser={false}
+          onCancelEdit={onCancelEdit}
+          onSaveEdit={(nextContent) => onSaveEdit(message.id, nextContent)}
+        />
+      )}
+      {isLatest && message.commandId && !isEditing && !disabled && (
+        <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+          <AuthorTools
+            messageId={message.id}
+            onRewrite={onRewrite}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            isEdited={isEdited}
+            canRewrite
+            disabled={disabled}
+          />
         </div>
       )}
     </div>

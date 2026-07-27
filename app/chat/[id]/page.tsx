@@ -77,11 +77,22 @@ function getChatThemeBackground(chatTheme: ChatThemeId, resolvedTheme: "light" |
   return CHAT_THEME_BACKGROUNDS[chatTheme]
 }
 
+function getTransparentChatThemeBackground(backgroundColor: string) {
+  return /^#[0-9a-f]{6}$/i.test(backgroundColor) ? `${backgroundColor}00` : "transparent"
+}
+
 const CHARACTER_NAME = "이무기"
 const CHARACTER_EMOJI = "🐉"
 const AUTO_IMAGE_GENERATION_CHANCE = 0
 const AUTO_IMAGE_GENERATION_LIMIT = 3
 const AUTO_ADVANCE_MODEL_CONTENT = `[System: 사용자가 새 행동이나 대사를 입력하지 않고 침묵하고 있습니다. 직전 장면의 확정 상태를 유지한 채 캐릭터의 행동이나 다음 대사로 스토리를 자연스럽게 한 단계 이어가세요. 사용자의 새 행동, 대사, 감정, 동의나 반응을 대신 만들지 마세요.]`
+const COMMAND_NAME_BY_ID: Record<NonNullable<ChatMessage["commandId"]>, string> = {
+  phone: "휴대폰",
+  sns: "SNS",
+  status: "상태창",
+  audience: "시청자반응",
+  summary: "요약",
+}
 
 const storyStatus: StoryStatus = {
   useChapters: true,
@@ -529,9 +540,13 @@ export default function ChatPage() {
     ).slice(0, MAX_COMMAND_SUGGESTIONS)
 
     for (const command of selectedCommands) {
-      const result = await runCommand(command.name, characterName, buildImageCommandContext(contextMessages, statusOverride))
-      if (result.kind === "message") {
-        autoMessages.push({ ...result.message, turnId })
+      try {
+        const result = await runCommand(command.name, characterName, buildImageCommandContext(contextMessages, statusOverride))
+        if (result.kind === "message") {
+          autoMessages.push({ ...result.message, turnId })
+        }
+      } catch (error) {
+        console.error(`[auto command] ${command.id} generation failed`, error)
       }
     }
     return autoMessages
@@ -1239,7 +1254,10 @@ export default function ChatPage() {
   }
 
   const handleCommand = async (command: string) => {
-    const isImageCommand = command.replace(/^\//, "").trim() === "이미지"
+    const normalizedCommand = command.replace(/^\//, "").trim()
+    const isImageCommand = normalizedCommand === "이미지"
+    const isSnsCommand = normalizedCommand === "SNS"
+    const isStatusCommand = normalizedCommand === "상태창" || normalizedCommand === "상태바"
     const userId = getCurrentUserId()
     const usage = getImageGenerationUsage(userId)
     const shouldUseFreeImage = isImageCommand && usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
@@ -1250,7 +1268,15 @@ export default function ChatPage() {
     }
 
     setIsTyping(true)
-    setTypingLabel(isImageCommand ? "이미지 생성중..." : undefined)
+    setTypingLabel(
+      isImageCommand
+        ? "이미지 생성중..."
+        : isSnsCommand
+          ? "SNS 생성중..."
+          : isStatusCommand
+            ? "상태창 생성중..."
+            : undefined,
+    )
     setTypingVariant(isImageCommand ? "image" : "text")
 
     try {
@@ -1292,11 +1318,19 @@ export default function ChatPage() {
         toast.success(shouldUseFreeImage ? "무료 이미지 생성 1회를 사용했어요." : "크레딧으로 이미지를 생성했어요.")
       }
       setMessages((prev) => [...prev, nextMessage])
-    } catch {
+    } catch (error) {
+      console.error(`[command] ${normalizedCommand} generation failed`, error)
       const errorMessage: ChatMessage = {
-        id: `image-error-${Date.now()}`,
+        id: `command-error-${Date.now()}`,
         type: "status",
-        content: "이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.",
+        commandId: isSnsCommand ? "sns" : isStatusCommand ? "status" : undefined,
+        content: isImageCommand
+          ? "이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요."
+          : isSnsCommand
+            ? "SNS 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
+            : isStatusCommand
+              ? "상태창 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
+              : "명령어 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요.",
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])
@@ -1311,7 +1345,54 @@ export default function ChatPage() {
   const handleRewriteMessage = async (messageId: string) => {
     const targetIndex = messages.findIndex((message) => message.id === messageId)
     const targetMessage = messages[targetIndex]
-    if (targetIndex < 0 || !targetMessage || targetMessage.type !== "ai") return
+    if (targetIndex < 0 || !targetMessage) return
+
+    if (targetMessage.commandId) {
+      const commandName = COMMAND_NAME_BY_ID[targetMessage.commandId]
+      if (!commandName) {
+        toast.error("다시 생성할 명령어를 찾지 못했어요.")
+        return
+      }
+
+      setIsTyping(true)
+      setTypingLabel("명령어 재생성 중")
+      setTypingVariant("text")
+
+      try {
+        const result = await runCommand(commandName, characterName, buildImageCommandContext(messages.slice(0, targetIndex)))
+        if (result.kind !== "message") {
+          toast(result.message)
+          return
+        }
+
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  ...result.message,
+                  id: message.id,
+                  turnId: message.turnId,
+                  commandId: targetMessage.commandId,
+                  timestamp: new Date(),
+                  status: "completed",
+                }
+              : message,
+          ),
+        )
+        setEditedMessageIds((prev) => new Set(prev).add(messageId))
+        toast.success("명령어 메시지를 다시 생성했어요.")
+      } catch {
+        toast.error("명령어 메시지를 다시 생성하지 못했어요.")
+      } finally {
+        setIsTyping(false)
+        setTypingLabel(undefined)
+        setTypingVariant("text")
+      }
+      return
+    }
+
+    if (targetMessage.type !== "ai") return
 
     const isAutoAdvanceRewrite = isAutoAdvanceTurn(targetMessage, messages)
     const turnMessages = targetMessage.turnId
@@ -1663,6 +1744,7 @@ export default function ChatPage() {
 
   const hasMessages = messages.length > 0
   const chatBackgroundColor = getChatThemeBackground(chatTheme, resolvedTheme)
+  const chatBottomOverlay = `linear-gradient(0deg, ${chatBackgroundColor} 50%, ${getTransparentChatThemeBackground(chatBackgroundColor)} 100%)`
 
   const handleClearChat = () => {
     setIsClearConfirmOpen(true)
@@ -1688,6 +1770,7 @@ export default function ChatPage() {
         onStatusClick={() => setIsStatusPanelOpen((current) => !current)}
         onModelClick={() => setIsModelDrawerOpen(true)}
         onMenuClick={() => setIsSettingsOpen(true)}
+        backgroundColor={chatBackgroundColor}
       />
 
       {canShowProgressStatus && readingSettings.showStoryStatus && (
@@ -1828,7 +1911,7 @@ export default function ChatPage() {
       </main>
 
       {/* Input Area - immersive floating dock */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 back-blur">
+      <div className="fixed bottom-0 left-0 right-0 z-40 back-blur" style={{ background: chatBottomOverlay }}>
         <ChatInput
           onSendMessage={handleSendMessage}
           onCommand={handleCommand}
