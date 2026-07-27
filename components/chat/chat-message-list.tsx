@@ -7,6 +7,11 @@ import { parseMessageSegments, shouldRenderMessageSegments, type MessageSegment 
 import { parseComposerInput, type ComposerPart } from "@/lib/rp-input-parser"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
+import {
+  InstagramCommandContent,
+  PhoneCommandContent,
+  StatusCommandContent,
+} from "./command-content"
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
 
@@ -45,188 +50,6 @@ function getChatThemeTextPalette(backgroundColor: string) {
         panelBorder: "rgba(17,24,39,0.12)",
         indicator: "rgba(31,41,55,0.52)",
       }
-}
-
-function decodeSnsMarkup(value: string) {
-  return value
-    .replace(/&quot;/gu, "\"")
-    .replace(/&apos;/gu, "'")
-    .replace(/&gt;/gu, ">")
-    .replace(/&lt;/gu, "<")
-    .replace(/&amp;/gu, "&")
-}
-
-function InstagramCommandContent({
-  content,
-  textColor,
-  mutedTextColor,
-}: {
-  content: string
-  textColor: string
-  mutedTextColor: string
-}) {
-  const lines = content.split(/\r?\n/)
-  const renderedLines: ReactNode[] = []
-  const isTaggedContent = content.trimStart().startsWith("<ig>")
-
-  const renderComment = ({
-    nickname,
-    elapsedTime,
-    comment,
-    isReply,
-    key,
-  }: {
-    nickname: string
-    elapsedTime: string
-    comment: string
-    isReply: boolean
-    key: string
-  }) => (
-    <div key={key} className={cn("mt-1", isReply && "mt-0")}>
-      <>
-        {isReply && (
-          <span className="text-xs font-medium mr-1" style={{ color: mutedTextColor }}>
-            └─
-          </span>
-        )}
-        <strong className="font-bold mr-2" style={{ color: textColor }}>
-          {nickname}
-        </strong>
-        {comment && (
-        <>
-          <span className="mt-0.5 whitespace-pre-wrap break-words" style={{ color: textColor }}>
-            {comment}
-          </span>
-          <span className="text-[11px] font-medium ml-2" style={{ color: mutedTextColor }}>
-            {elapsedTime}
-          </span>
-        </>
-        )}
-      </>
-    </div>
-  )
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim()
-
-    if (isTaggedContent) {
-      const commentTag = line.match(/^<ig-comment (?:nickname|author)="([^"]*)" time="([^"]*)" reply="(true|false)">(.*)<\/ig-comment>$/u)
-      if (commentTag) {
-        renderedLines.push(renderComment({
-          nickname: decodeSnsMarkup(commentTag[1]),
-          elapsedTime: decodeSnsMarkup(commentTag[2]),
-          comment: decodeSnsMarkup(commentTag[4]),
-          isReply: commentTag[3] === "true",
-          key: `instagram-tagged-comment-${index}`,
-        }))
-        continue
-      }
-
-      const contentTag = line.match(/^<ig-(title|divider|image|caption|stats)>(.*)<\/ig-\1>$/u)
-      if (contentTag) {
-        const className = contentTag[1] === 'divider' ? "border-b mt-2 mb-4 border-black" : contentTag[1] === 'caption' ? "my-1" : contentTag[1] === 'stats' ? "mb-2" : ""
-        renderedLines.push(
-          <div key={`instagram-tagged-${contentTag[1]}-${index}`} className={cn("whitespace-pre-wrap break-words [word-break:keep-all]", className)}>
-            {decodeSnsMarkup(contentTag[2])}
-          </div>,
-        )
-        continue
-      }
-
-      if (line === "<ig-gap />") {
-        renderedLines.push(<div key={`instagram-tagged-gap-${index}`} className="border-b my-4" />)
-        continue
-      }
-
-      if (/^<\/?ig(?:>|-post>)/u.test(line)) continue
-    }
-
-    const commentHeader = line.match(/^(ㄴ\s+)?(.+?)\s+·\s+(\d+(?:주|일|시간|분|초))$/u)
-    if (commentHeader) {
-      renderedLines.push(renderComment({
-        nickname: commentHeader[2].trim(),
-        elapsedTime: commentHeader[3],
-        comment: lines[index + 1]?.trim() ?? "",
-        isReply: Boolean(commentHeader[1]),
-        key: `instagram-comment-${index}`,
-      }))
-      index += 1
-      continue
-    }
-
-    if (!line) {
-      renderedLines.push(<div key={`instagram-space-${index}`} className="h-2" />)
-      continue
-    }
-
-    if (line === "댓글") {
-      renderedLines.push(
-        <div key={`instagram-label-${index}`} className="mt-2 font-semibold" style={{ color: textColor }}>
-          댓글
-        </div>,
-      )
-      continue
-    }
-
-    renderedLines.push(
-      <div key={`instagram-line-${index}`} className="whitespace-pre-wrap break-words [word-break:keep-all]">
-        {line}
-      </div>,
-    )
-  }
-
-  return <div style={{ color: textColor }}>{renderedLines}</div>
-}
-
-function StatusCommandContent({
-  content,
-  textColor,
-  mutedTextColor,
-}: {
-  content: string
-  textColor: string
-  mutedTextColor: string
-}) {
-  if (!content.trimStart().startsWith("<status>")) {
-    return <div className="whitespace-pre-wrap break-words [word-break:keep-all]">{content}</div>
-  }
-
-  const renderedLines: ReactNode[] = []
-
-  content.split(/\r?\n/).forEach((rawLine, index) => {
-    const line = rawLine.trim()
-    if (/^<\/?status>$/u.test(line)) return
-
-    const dividerTag = line.match(/^<status-divider tone="(strong|muted)"><\/status-divider>$/u)
-    if (dividerTag) {
-      renderedLines.push(
-        <div
-          key={`status-divider-${index}`}
-          className={dividerTag[1] === "strong" ? "mt-2 mb-3 border-b border-black" : "my-3 border-b"}
-        />,
-      )
-      return
-    }
-
-    const contentTag = line.match(/^<status-(title|date|meta|summary|thought)>(.*)<\/status-\1>$/u)
-    if (!contentTag) return
-
-    const type = contentTag[1]
-    renderedLines.push(
-      <div
-        key={`status-${type}-${index}`}
-        className={cn(
-          "whitespace-pre-wrap break-words [word-break:keep-all]",
-          type === "title" && "font-semibold",
-          type === "thought" && "mt-3",
-        )}
-      >
-        {decodeSnsMarkup(contentTag[2])}
-      </div>,
-    )
-  })
-
-  return <div style={{ color: textColor }}>{renderedLines}</div>
 }
 
 // Mention target name mapping
@@ -760,23 +583,14 @@ function BubbleMessageBubble({
       <div className="flex flex-col items-start gap-2">
         <div className="flex justify-start">
           <div
-            className={cn(
-              isPhoneCommand
-                ? "w-[min(92vw,360px)] rounded-[2rem] border-[5px] border-neutral-300 bg-white px-4 py-5 text-neutral-950 dark:border-neutral-800 dark:bg-neutral-950 dark:text-slate-50"
-                : "max-w-[92%] rounded-xl border px-3 py-2.5",
-            )}
-            style={isPhoneCommand
-              ? {
-                  fontSize: statusTextSize,
-                  lineHeight: Math.max(1.45, lineHeight),
-                }
-              : {
-                  backgroundColor: themeTextPalette.panelBg,
-                  borderColor: themeTextPalette.panelBorder,
-                  color: themeTextPalette.text,
-                  fontSize: statusTextSize,
-                  lineHeight: Math.max(1.45, lineHeight),
-                }}
+            className="max-w-[92%] rounded-xl border px-3 py-2.5"
+            style={{
+              backgroundColor: themeTextPalette.panelBg,
+              borderColor: themeTextPalette.panelBorder,
+              color: themeTextPalette.text,
+              fontSize: statusTextSize,
+              lineHeight: Math.max(1.45, lineHeight),
+            }}
           >
             {isInstagramCommand ? (
               <InstagramCommandContent
@@ -788,13 +602,14 @@ function BubbleMessageBubble({
               <StatusCommandContent
                 content={message.content}
                 textColor={themeTextPalette.text}
-                mutedTextColor={themeTextPalette.mutedText}
+              />
+            ) : isPhoneCommand ? (
+              <PhoneCommandContent
+                content={message.content}
+                textColor={themeTextPalette.text}
               />
             ) : (
-              <p className={cn(
-                "whitespace-pre-wrap break-words [word-break:keep-all]",
-                isPhoneCommand && "font-mono text-[11px] leading-[1.55] tracking-[-0.025em] sm:text-xs",
-              )}>
+              <p className="whitespace-pre-wrap break-words [word-break:keep-all]">
                 {message.content}
               </p>
             )}
@@ -1428,6 +1243,7 @@ function AssistantExtraCard({
   const bodyLines = lines.slice(1)
   const isInstagramCommand = message.commandId === "sns"
   const isStatusCommand = message.commandId === "status"
+  const isPhoneCommand = message.commandId === "phone"
 
   useEffect(() => {
     if (isEditing) setEditDraft(normalizeMessageNewlines(message.content))
@@ -1445,7 +1261,7 @@ function AssistantExtraCard({
           lineHeight,
         }}
       >
-        {isInstagramCommand || isStatusCommand ? (
+        {isInstagramCommand || isStatusCommand || isPhoneCommand ? (
           <>
             {isInstagramCommand ? (
               <InstagramCommandContent
@@ -1453,11 +1269,15 @@ function AssistantExtraCard({
                 textColor={themeTextPalette.text}
                 mutedTextColor={themeTextPalette.mutedText}
               />
-            ) : (
+            ) : isStatusCommand ? (
               <StatusCommandContent
                 content={message.content}
                 textColor={themeTextPalette.text}
-                mutedTextColor={themeTextPalette.mutedText}
+              />
+            ) : (
+              <PhoneCommandContent
+                content={message.content}
+                textColor={themeTextPalette.text}
               />
             )}
             {isEdited && (
