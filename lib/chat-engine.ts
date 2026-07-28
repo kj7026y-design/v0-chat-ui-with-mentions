@@ -18,6 +18,7 @@ import { buildModelBackground } from "@/lib/model-background"
 import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser"
 import {
   buildAudienceReactionContent,
+  buildAiPhoneCommandContent,
   buildPhoneCommandContent,
   buildSnsCommandContent,
   buildStatusBar,
@@ -28,6 +29,7 @@ import type { ImageCommandContext } from "@/lib/chat-commands/types"
 
 export {
   buildAudienceReactionContent,
+  buildAiPhoneCommandContent,
   buildPhoneCommandContent,
   buildSnsCommandContent,
   buildStatusBar,
@@ -310,17 +312,31 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
   return clip(promptParts.join(". "), 1400)
 }
 
-function buildFreeSampleImageUrl(characterName: string, context: ImageCommandContext = {}) {
-  const prompt = encodeURIComponent(buildImagePrompt(characterName, context))
-  const params = new URLSearchParams({
-    width: "1024",
-    height: "1024",
-    model: "flux",
-    enhance: "true",
-    nologo: "true",
-    seed: String(Date.now()),
+interface ImagenGenerationResponse {
+  imageUrl?: string
+  model?: string
+  error?: string
+}
+
+async function generateImagenImage(prompt: string) {
+  const response = await fetch("/api/images/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
   })
-  return `https://image.pollinations.ai/prompt/${prompt}?${params.toString()}`
+  const result = await response.json().catch(() => ({})) as ImagenGenerationResponse
+
+  if (!response.ok) {
+    throw new Error(result.error || "Google Imagen 이미지 생성에 실패했습니다.")
+  }
+  if (!result.imageUrl?.startsWith("data:image/")) {
+    throw new Error("Google Imagen이 올바른 이미지 데이터를 반환하지 않았습니다.")
+  }
+
+  return {
+    imageUrl: result.imageUrl,
+    model: result.model || "imagen-3.0-generate-001",
+  }
 }
 
 
@@ -537,28 +553,21 @@ export function formatIntroForAIContext(intro?: ChatIntroContext | null) {
   ].filter(Boolean).join("\n")
 }
 
-function buildAutoCommandContent(
-  commandId: string,
-  characterName: string,
-  context?: ImageCommandContext,
-) {
-  if (commandId === "phone") return buildPhoneCommandContent(characterName, context)
-  return ""
-}
-
 export function getDialogueAssistCharCount(
   commandIds: string[],
   characterName: string,
   context?: ImageCommandContext,
 ) {
-  return commandIds
+  const estimatedChars = commandIds
     .filter((commandId) => AUTO_COMMAND_IDS.includes(commandId))
     .slice(0, MAX_COMMAND_SUGGESTIONS)
     .reduce((total, commandId) => {
+      if (commandId === "phone") return total + 1_000
       if (commandId === "sns") return total + 650
       if (commandId === "status") return total + 350
-      return total + countTextChars(getVisibleCommandContent(buildAutoCommandContent(commandId, characterName, context)))
+      return total
     }, 0)
+  return Math.min(estimatedChars, MAX_TURN_CONTENT_CHARS - DEFAULT_MIN_ANSWER_CHARS)
 }
 
 export function getMessageContentCharCount(messages: ChatMessage[]) {
@@ -1190,13 +1199,14 @@ export async function runCommand(
   const normalized = command.replace(/^\//, "").trim()
 
   if (normalized === "휴대폰") {
+    const content = await buildAiPhoneCommandContent(characterName, context)
     return {
       kind: "message",
       message: {
         id: makeId(),
         type: "status",
         commandId: "phone",
-        content: buildPhoneCommandContent(characterName, context),
+        content,
         timestamp: new Date(),
       },
     }
@@ -1257,17 +1267,19 @@ export async function runCommand(
   }
 
   if (normalized === "이미지") {
-    await new Promise((resolve) => setTimeout(resolve, 300))
     const prompt = buildImagePrompt(characterName, context)
+    const generatedImage = await generateImagenImage(prompt)
     return {
       kind: "message",
       message: {
         id: makeId(),
         type: "ai",
         content: "",
-        imageUrl: buildFreeSampleImageUrl(characterName, context),
-        imageName: "무료 샘플 이미지",
+        imageUrl: generatedImage.imageUrl,
+        imageName: `${characterName} Imagen 3 이미지.jpg`,
         originalContent: prompt,
+        provider: "google-imagen",
+        model: generatedImage.model,
         timestamp: new Date(),
       },
     }

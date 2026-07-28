@@ -5,8 +5,10 @@ import { useTheme } from "@/components/theme-provider"
 import { type ChatMessage } from "@/lib/chat-types"
 import { parseMessageSegments, shouldRenderMessageSegments, type MessageSegment } from "@/lib/message-segments"
 import { parseComposerInput, type ComposerPart } from "@/lib/rp-input-parser"
+import { getCommandEditableContent } from "@/lib/chat-command-editing"
 import { cn } from "@/lib/utils"
 import { AuthorTools } from "./author-tools"
+import { MessageCandidateControls } from "./message-candidates-drawer"
 import {
   InstagramCommandContent,
   PhoneCommandContent,
@@ -248,9 +250,11 @@ interface ChatMessageListProps {
   messages: ChatMessage[]
   isTyping: boolean
   typingLabel?: string
-  typingVariant?: "text" | "image"
+  typingVariant?: "text" | "image" | "command"
+  regeneratingMessageId?: string | null
   messagesEndRef: RefObject<HTMLDivElement | null>
   onRewriteMessage?: (messageId: string) => void
+  onSelectMessageCandidate?: (messageId: string, candidateId: string) => void
   onRetryFailedMessage?: (messageId: string) => void
   onEditMessage?: (messageId: string, nextContent: string) => void
   onDeleteMessage?: (messageId: string) => void
@@ -269,8 +273,10 @@ export function ChatMessageList({
   isTyping, 
   typingLabel,
   typingVariant = "text",
+  regeneratingMessageId = null,
   messagesEndRef,
   onRewriteMessage,
+  onSelectMessageCandidate,
   onRetryFailedMessage,
   onEditMessage,
   onDeleteMessage,
@@ -362,7 +368,9 @@ export function ChatMessageList({
               message={message}
               extraMessages={extraMessages}
               typingLabel={typingLabel}
+              regeneratingMessageId={regeneratingMessageId}
               onRewrite={onRewriteMessage}
+              onSelectCandidate={onSelectMessageCandidate}
               onRetry={onRetryFailedMessage}
               onDelete={onDeleteMessage}
               onBranch={onBranchFromMessage}
@@ -404,8 +412,11 @@ export function ChatMessageList({
         })()
       ))}
 
-      {isTyping && typingVariant === "image" && (
+      {isTyping && !regeneratingMessageId && typingVariant === "image" && (
         <BubbleImageGeneratingIndicator label={typingLabel ?? "이미지 생성중..."} themeConfig={themeConfig} />
+      )}
+      {isTyping && !regeneratingMessageId && typingVariant === "command" && (
+        <BubbleCommandGeneratingIndicator label={typingLabel ?? "명령어 생성중..."} themeConfig={themeConfig} />
       )}
       {/* Scroll anchor */}
       <div ref={messagesEndRef} />
@@ -421,7 +432,9 @@ interface BubbleMessageBubbleProps {
   message: ChatMessage
   extraMessages?: ChatMessage[]
   typingLabel?: string
+  regeneratingMessageId?: string | null
   onRewrite?: (messageId: string) => void
+  onSelectCandidate?: (messageId: string, candidateId: string) => void
   onRetry?: (messageId: string) => void
   onDelete?: (messageId: string) => void
   onBranch?: (messageId: string) => void
@@ -449,7 +462,9 @@ function BubbleMessageBubble({
   message,
   extraMessages = [],
   typingLabel,
+  regeneratingMessageId,
   onRewrite,
+  onSelectCandidate,
   onRetry,
   onDelete,
   onBranch,
@@ -473,7 +488,10 @@ function BubbleMessageBubble({
   onSaveMessageEdit,
 }: BubbleMessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false)
-  const [editDraft, setEditDraft] = useState(() => normalizeMessageNewlines(editInitialContent))
+  const editableInitialContent = message.commandId
+    ? getCommandEditableContent(message.content, message.commandId)
+    : normalizeMessageNewlines(editInitialContent)
+  const [editDraft, setEditDraft] = useState(() => editableInitialContent)
   const [imageLoadFailed, setImageLoadFailed] = useState(false)
   const isCharacterLine = Boolean(message.isUserAuthoredCharacterLine && message.speakerType === "character")
   const isUser = message.type === "user" && !isCharacterLine
@@ -485,12 +503,28 @@ function BubbleMessageBubble({
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
 
   useEffect(() => {
-    if (isEditing) setEditDraft(normalizeMessageNewlines(editInitialContent))
-  }, [editInitialContent, isEditing])
+    if (isEditing) setEditDraft(editableInitialContent)
+  }, [editableInitialContent, isEditing])
 
   useEffect(() => {
     setImageLoadFailed(false)
   }, [message.imageUrl])
+
+  if (message.id === regeneratingMessageId) {
+    return message.commandId ? (
+      <BubbleCommandGeneratingIndicator
+        label={typingLabel ?? "명령어 재생성 중"}
+        themeConfig={themeConfig}
+      />
+    ) : (
+      <BubbleMessageGeneratingIndicator
+        label={typingLabel ?? "답변 재생성 중"}
+        themeConfig={themeConfig}
+        textSize={textSize}
+        lineHeight={lineHeight}
+      />
+    )
+  }
 
   if (message.isGenerationError) {
     return (
@@ -755,6 +789,8 @@ function BubbleMessageBubble({
           isEdited={Boolean(isEdited)}
           isCharacterLine={isCharacterLine}
           extraMessages={extraMessages}
+          regeneratingMessageId={regeneratingMessageId}
+          typingLabel={typingLabel}
           avatarUrl={speakerProfile?.avatarUrl}
           avatarFallback={speakerProfile?.emoji}
           latestEditableMessageId={latestEditableMessageId}
@@ -776,6 +812,16 @@ function BubbleMessageBubble({
             isUser={false}
             onCancelEdit={onCancelEdit}
             onSaveEdit={onSaveEdit}
+          />
+        )}
+
+        {!isEditing && (
+          <MessageCandidateControls
+            message={message}
+            disabled={disabled}
+            textSize={textSize}
+            lineHeight={lineHeight}
+            onSelectCandidate={onSelectCandidate}
           />
         )}
 
@@ -920,6 +966,8 @@ function BubbleMessageBubble({
         <div className="w-full max-w-[82%] sm:max-w-[80%]">
           <AssistantExtraSection
             messages={extraMessages}
+            regeneratingMessageId={regeneratingMessageId}
+            typingLabel={typingLabel}
             textSize={textSize}
             lineHeight={lineHeight}
             themeConfig={themeConfig}
@@ -934,6 +982,16 @@ function BubbleMessageBubble({
             onSaveEdit={onSaveMessageEdit}
           />
         </div>
+      )}
+
+      {isAI && !isEditing && (
+        <MessageCandidateControls
+          message={message}
+          disabled={disabled}
+          textSize={textSize}
+          lineHeight={lineHeight}
+          onSelectCandidate={onSelectCandidate}
+        />
       )}
       
       {/* Author Tools - only the latest message can be edited or deleted. */}
@@ -974,6 +1032,8 @@ function AssistantSegmentedMessage({
   message,
   segments,
   extraMessages,
+  regeneratingMessageId,
+  typingLabel,
   avatarUrl,
   avatarFallback,
   mentionNames,
@@ -995,6 +1055,8 @@ function AssistantSegmentedMessage({
   message: ChatMessage
   segments: MessageSegment[]
   extraMessages: ChatMessage[]
+  regeneratingMessageId?: string | null
+  typingLabel?: string
   avatarUrl?: string
   avatarFallback?: string
   mentionNames: string[]
@@ -1063,6 +1125,8 @@ function AssistantSegmentedMessage({
         {extraMessages.length > 0 && (
           <AssistantExtraSection
             messages={extraMessages}
+            regeneratingMessageId={regeneratingMessageId}
+            typingLabel={typingLabel}
             textSize={textSize}
             lineHeight={lineHeight}
             themeConfig={themeConfig}
@@ -1145,6 +1209,8 @@ function UserSegmentedMessage({
 
 function AssistantExtraSection({
   messages,
+  regeneratingMessageId,
+  typingLabel,
   textSize,
   lineHeight,
   themeConfig,
@@ -1159,6 +1225,8 @@ function AssistantExtraSection({
   onSaveEdit,
 }: {
   messages: ChatMessage[]
+  regeneratingMessageId?: string | null
+  typingLabel?: string
   textSize: number
   lineHeight: number
   themeConfig: ChatThemeConfig
@@ -1178,24 +1246,32 @@ function AssistantExtraSection({
     <div className="mt-1.5 w-full max-w-[92%] space-y-2">
       <p className="px-1 text-[11px] font-semibold" style={{ color: themeTextPalette.mutedText }}>부가 정보</p>
       <div className="space-y-2">
-        {messages.map((message) => (
-          <AssistantExtraCard
-            key={message.id}
-            message={message}
-            textSize={Math.max(12, textSize - 2)}
-            lineHeight={Math.max(1.35, lineHeight)}
-            themeConfig={themeConfig}
-            isLatest={message.id === latestEditableMessageId}
-            isEditing={message.id === editingMessageId}
-            isEdited={editedMessageIds.has(message.id)}
-            disabled={disabled}
-            onRewrite={onRewrite}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onCancelEdit={onCancelEdit}
-            onSaveEdit={onSaveEdit}
-          />
-        ))}
+        {messages.map((message) =>
+          message.id === regeneratingMessageId ? (
+            <BubbleCommandGeneratingIndicator
+              key={message.id}
+              label={typingLabel ?? "명령어 재생성 중"}
+              themeConfig={themeConfig}
+            />
+          ) : (
+            <AssistantExtraCard
+              key={message.id}
+              message={message}
+              textSize={Math.max(12, textSize - 2)}
+              lineHeight={Math.max(1.35, lineHeight)}
+              themeConfig={themeConfig}
+              isLatest={message.id === latestEditableMessageId}
+              isEditing={message.id === editingMessageId}
+              isEdited={editedMessageIds.has(message.id)}
+              disabled={disabled}
+              onRewrite={onRewrite}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onCancelEdit={onCancelEdit}
+              onSaveEdit={onSaveEdit}
+            />
+          ),
+        )}
       </div>
     </div>
   )
@@ -1230,7 +1306,10 @@ function AssistantExtraCard({
   onCancelEdit: () => void
   onSaveEdit: (messageId: string, nextContent: string) => void
 }) {
-  const [editDraft, setEditDraft] = useState(() => normalizeMessageNewlines(message.content))
+  const editableMessageContent = message.commandId
+    ? getCommandEditableContent(message.content, message.commandId)
+    : normalizeMessageNewlines(message.content)
+  const [editDraft, setEditDraft] = useState(() => editableMessageContent)
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
   const lines = message.content
     .split(/\r?\n/)
@@ -1246,8 +1325,8 @@ function AssistantExtraCard({
   const isPhoneCommand = message.commandId === "phone"
 
   useEffect(() => {
-    if (isEditing) setEditDraft(normalizeMessageNewlines(message.content))
-  }, [isEditing, message.content])
+    if (isEditing) setEditDraft(editableMessageContent)
+  }, [editableMessageContent, isEditing])
 
   return (
     <div className="space-y-1.5">
@@ -1347,7 +1426,7 @@ function MessageSegmentBlock({
     const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
     const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg)
     const narrationStyle = {
-      color: themeTextPalette.mutedText,
+      color: themeTextPalette.text,
       fontSize: textSize,
       lineHeight,
       "--mention-bg": narrationMentionStyle.bg,
@@ -1518,6 +1597,64 @@ function BubbleTypingDots({ color, compact = false }: { color: string; compact?:
         style={{ backgroundColor: color }}
       />
     </span>
+  )
+}
+
+function BubbleCommandGeneratingIndicator({ label, themeConfig }: { label: string; themeConfig: ChatThemeConfig }) {
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+  const displayLabel = label.replace(/\.+$/u, "")
+
+  return (
+    <div className="flex justify-start">
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex max-w-[92%] items-center gap-2 rounded-xl border px-3 py-2.5"
+        style={{
+          backgroundColor: themeTextPalette.panelBg,
+          borderColor: themeTextPalette.panelBorder,
+          color: themeTextPalette.mutedText,
+          fontSize: 11,
+          lineHeight: 1.45,
+        }}
+      >
+        <BubbleTypingDots color={themeTextPalette.indicator} compact />
+        <span>{displayLabel}</span>
+      </div>
+    </div>
+  )
+}
+
+function BubbleMessageGeneratingIndicator({
+  label,
+  themeConfig,
+  textSize,
+  lineHeight,
+}: {
+  label: string
+  themeConfig: ChatThemeConfig
+  textSize: number
+  lineHeight: number
+}) {
+  const displayLabel = label.replace(/\.+$/u, "")
+
+  return (
+    <div className="flex justify-start">
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex min-h-10 w-fit max-w-[82%] flex-col items-center justify-center gap-1.5 rounded-2xl px-4 py-2.5 opacity-70 sm:max-w-[80%]"
+        style={{
+          backgroundColor: themeConfig.preview.aiBubble,
+          color: themeConfig.preview.aiText,
+          fontSize: Math.max(12, textSize - 1),
+          lineHeight,
+        }}
+      >
+        <BubbleTypingDots color="currentColor" />
+        <span>{displayLabel}</span>
+      </div>
+    </div>
   )
 }
 

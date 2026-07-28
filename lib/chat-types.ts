@@ -6,6 +6,46 @@ import type {
 } from "@/lib/generation-runs"
 
 export type ChatMessageStatus = "pending" | "streaming" | "completed" | "failed" | "repaired"
+export type ChatCommandId = "phone" | "sns" | "status" | "audience" | "summary"
+
+export interface ChatMessageCandidateCompanion {
+  messageId: string
+  commandId?: ChatCommandId
+  content: string
+  timestamp: string
+  status?: ChatMessageStatus
+}
+
+export interface ChatMessageCandidate {
+  id: string
+  content: string
+  timestamp: string
+  status?: ChatMessageStatus
+  generationRunId?: string
+  provider?: string
+  model?: string
+  attemptedModel?: string
+  outputModel?: string
+  validationStatus?: GenerationValidationStatus
+  validationFailures?: string[]
+  validationAttempts?: GenerationValidationAttempt[]
+  repairAttempted?: boolean
+  fallback?: boolean
+  fallbackProvider?: string
+  fallbackModel?: string
+  providerOutcome?: GenerationProviderOutcome
+  timeoutStage?: GenerationTimeoutStage
+  geminiErrorCode?: number
+  geminiErrorStatus?: string
+  generationErrorCode?: number
+  generationErrorStatus?: string
+  generationErrorMessage?: string
+  streamedContent?: string
+  savedContent?: string
+  speakerId?: string
+  speakerName?: string
+  companionMessages?: ChatMessageCandidateCompanion[]
+}
 
 export interface ChatMessage {
   id: string
@@ -51,7 +91,9 @@ export interface ChatMessage {
   turnId?: string
   isGenerationError?: boolean
   isAutoAdvance?: boolean
-  commandId?: "phone" | "sns" | "status" | "audience" | "summary"
+  commandId?: ChatCommandId
+  messageCandidates?: ChatMessageCandidate[]
+  selectedCandidateId?: string
   retryPayload?: {
     content: string
     mentions?: string[]

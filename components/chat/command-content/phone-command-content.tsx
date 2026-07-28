@@ -1,26 +1,78 @@
-"use client"
+"use client";
 
-import { decodeCommandMarkup } from "./command-markup"
+import { decodeCommandMarkup } from "./command-markup";
 
 const PHONE_SECTION_TITLES = new Set([
+  "📱 휴대폰",
+  "🖼️ 배경화면",
   "📞 최근 통화 기록",
   "💬 최근 문자 목록",
+  "👥 단체 채팅",
   "🔍 최근 브라우저 검색 기록",
   "▶️ 최근 유튜브 시청 기록",
   "💳 최근 결제 내역",
   "📱 최근 실행 앱",
-])
+]);
+
+const SPACED_PHONE_LIST_SECTIONS = new Set([
+  "💬 최근 문자 목록",
+  "👥 단체 채팅",
+  "💳 최근 결제 내역",
+]);
 
 interface PhoneCommandContentProps {
-  content: string
-  textColor: string
+  content: string;
+  textColor: string;
+}
+
+function renderPhoneLine(line: string) {
+  return line.split(/(<phone-time>.*?<\/phone-time>)/gu).map((part, index) => {
+    const timeTag = part.match(/^<phone-time>(.*?)<\/phone-time>$/u);
+    if (timeTag) {
+      return (
+        <span
+          key={`phone-time-${index}`}
+          style={{ color: "var(--color-gray-400)" }}
+        >
+          {decodeCommandMarkup(timeTag[1])}
+        </span>
+      );
+    }
+    return decodeCommandMarkup(part);
+  });
+}
+
+function getSpacedPhoneLineIndexes(lines: string[]) {
+  const spacedIndexes = new Set<number>();
+  let currentSection = "";
+  let listItemIndex = 0;
+
+  lines.forEach((line, index) => {
+    const trimmedLine = line.trim();
+    if (PHONE_SECTION_TITLES.has(trimmedLine)) {
+      currentSection = trimmedLine;
+      listItemIndex = 0;
+      return;
+    }
+    if (!trimmedLine || !SPACED_PHONE_LIST_SECTIONS.has(currentSection)) return;
+    if (currentSection === "👥 단체 채팅" && /^\[.*\]$/u.test(trimmedLine))
+      return;
+
+    const isCharacterReply =
+      currentSection === "💬 최근 문자 목록" && trimmedLine.startsWith("↪");
+    if (!isCharacterReply && listItemIndex > 0) spacedIndexes.add(index);
+    listItemIndex += 1;
+  });
+
+  return spacedIndexes;
 }
 
 export function PhoneCommandContent({
   content,
   textColor,
 }: PhoneCommandContentProps) {
-  const lines = content.split(/\r?\n/)
+  const lines = content.split(/\r?\n/);
+  const spacedLineIndexes = getSpacedPhoneLineIndexes(lines);
 
   return (
     <div
@@ -28,54 +80,68 @@ export function PhoneCommandContent({
       style={{ color: textColor }}
     >
       {lines.map((line, index) => {
-        const statusTag = line.trim().match(
-          /^<phone-status><phone-time>(.*)<\/phone-time><phone-icons>(.*)<\/phone-icons><\/phone-status>$/u,
-        )
-        const legacyStatus = line.match(/^(\d{1,2}:\d{2})\s{2,}(.+)$/u)
+        const statusTag = line
+          .trim()
+          .match(
+            /^<phone-status><phone-time>(.*)<\/phone-time><phone-icons>(.*)<\/phone-icons><\/phone-status>$/u,
+          );
+        const legacyStatus = line.match(/^(\d{1,2}:\d{2})\s{2,}(.+)$/u);
         if (statusTag || legacyStatus) {
           return (
             <div
               key={`phone-status-${index}`}
               className="flex w-full min-w-[260px] items-center justify-between gap-4"
             >
-              <span>{decodeCommandMarkup(statusTag?.[1] ?? legacyStatus?.[1] ?? "")}</span>
+              <span style={{ color: "var(--color-gray-400)" }}>
+                {decodeCommandMarkup(statusTag?.[1] ?? legacyStatus?.[1] ?? "")}
+              </span>
               <span className="whitespace-nowrap text-right">
                 {decodeCommandMarkup(statusTag?.[2] ?? legacyStatus?.[2] ?? "")}
               </span>
             </div>
-          )
+          );
         }
-        if (line.trim() === "<phone-divider></phone-divider>" || /^━{5,}$/u.test(line.trim())) {
-          return <div key={`phone-divider-${index}`} className="mt-2 mb-3 border-b border-black" />
+        if (
+          line.trim() === "<phone-divider></phone-divider>" ||
+          /^━{5,}$/u.test(line.trim())
+        ) {
+          return (
+            <div
+              key={`phone-divider-${index}`}
+              className="mt-2 mb-3 border-b border-black"
+            />
+          );
         }
 
-        const trimmedLine = line.trim()
+        const trimmedLine = line.trim();
         if (PHONE_SECTION_TITLES.has(trimmedLine)) {
           const hasPreviousSection = lines
             .slice(0, index)
-            .some((previousLine) => PHONE_SECTION_TITLES.has(previousLine.trim()))
+            .some((previousLine) =>
+              PHONE_SECTION_TITLES.has(previousLine.trim()),
+            );
           return (
             <div key={`phone-section-${index}`}>
               {hasPreviousSection && <div className="my-3 border-b" />}
               <div className="font-bold">{trimmedLine}</div>
             </div>
-          )
+          );
         }
         if (!line) {
-          const nextLine = lines[index + 1]?.trim() ?? ""
-          return PHONE_SECTION_TITLES.has(nextLine)
-            ? null
-            : <div key={`phone-space-${index}`} className="h-2" />
+          const nextLine = lines[index + 1]?.trim() ?? "";
+          return PHONE_SECTION_TITLES.has(nextLine) ? null : (
+            <div key={`phone-space-${index}`} className="h-2" />
+          );
         }
         return (
           <div
             key={`phone-line-${index}`}
-            className="whitespace-pre-wrap break-words [word-break:keep-all]"
+            className={`whitespace-pre-wrap break-words [word-break:keep-all]${spacedLineIndexes.has(index) ? " mt-1" : ""}`}
           >
-            {line}
+            {renderPhoneLine(line)}
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }

@@ -30,7 +30,16 @@ import {
   runCommand,
 } from "@/lib/chat-engine"
 import { getChatMemoryMemo } from "@/lib/chat-memory-storage"
+import { kp } from "@/lib/chat-commands/shared"
+import { formatEditedCommandContent } from "@/lib/chat-command-editing"
 import { areAssistantResponsesSubstantiallyDuplicate } from "@/lib/response-similarity"
+import {
+  appendMessageCandidate,
+  buildRegenerationAvoidContent,
+  finalizeMessageCandidates,
+  getMessageCandidateContents,
+  selectMessageCandidate,
+} from "@/lib/message-candidates"
 import {
   clearChatHistory,
   deleteChatMessages as deleteStoredChatMessages,
@@ -92,6 +101,39 @@ const COMMAND_NAME_BY_ID: Record<NonNullable<ChatMessage["commandId"]>, string> 
   status: "상태창",
   audience: "시청자반응",
   summary: "요약",
+}
+
+function getCommandLoadingLabel(commandName: string, characterName: string) {
+  const normalizedCommand = commandName.replace(/^\//u, "").trim()
+  if (normalizedCommand === "이미지") return "이미지 생성중..."
+  if (normalizedCommand === "시청자반응") return "시청자 반응 생성중..."
+  const displayCommand = normalizedCommand === "상태바" ? "상태창" : normalizedCommand
+  const commandLabel = displayCommand || "명령어"
+  return `${characterName || "캐릭터"}의 ${commandLabel}${kp(commandLabel, "을", "를")} 보는 중`
+}
+
+function getTextCommandId(commandName: string): ChatMessage["commandId"] {
+  const normalizedCommand = commandName.replace(/^\//u, "").trim()
+  if (normalizedCommand === "휴대폰") return "phone"
+  if (normalizedCommand === "SNS") return "sns"
+  if (normalizedCommand === "상태창" || normalizedCommand === "상태바") return "status"
+  if (normalizedCommand === "시청자반응") return "audience"
+  if (normalizedCommand === "요약") return "summary"
+  return undefined
+}
+
+function getCommandGenerationErrorContent(commandName: string) {
+  const normalizedCommand = commandName.replace(/^\//u, "").trim()
+  if (normalizedCommand === "이미지") {
+    return "이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요."
+  }
+  if (normalizedCommand === "SNS") {
+    return "SNS 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
+  }
+  if (normalizedCommand === "상태창" || normalizedCommand === "상태바") {
+    return "상태창 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
+  }
+  return "명령어 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
 }
 
 const storyStatus: StoryStatus = {
@@ -283,7 +325,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [typingLabel, setTypingLabel] = useState<string | undefined>(undefined)
-  const [typingVariant, setTypingVariant] = useState<"text" | "image">("text")
+  const [typingVariant, setTypingVariant] = useState<"text" | "image" | "command">("text")
+  const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isModelDrawerOpen, setIsModelDrawerOpen] = useState(false)
   const [isStatusPanelOpen, setIsStatusPanelOpen] = useState(false)
@@ -499,7 +542,7 @@ export default function ChatPage() {
     const media = saveGeneratedMedia({
       imageUrl: result.message.imageUrl,
       prompt: result.message.originalContent || "",
-      provider: "pollinations",
+      provider: "google-imagen",
       workId: currentWork?.id,
       chatId,
       characterId: currentCharacter?.id,
@@ -768,6 +811,7 @@ export default function ChatPage() {
       return
     }
 
+    const confirmedMessages = finalizeMessageCandidates(messages)
     const turnId = makeTurnId()
     const userMessages = isAutoAdvance
       ? []
@@ -786,7 +830,7 @@ export default function ChatPage() {
     const openingMessageId = selectedIntroScenario
       ? `intro-${chatId}-${selectedIntroScenario.id}`
       : ""
-    const openingContent = messages.length === 0
+    const openingContent = confirmedMessages.length === 0
       ? selectedIntroScenario?.firstMessage?.trim()
       : ""
     const openingMessage: ChatMessage | null = openingContent
@@ -800,7 +844,7 @@ export default function ChatPage() {
           speakerName: characterName,
         }
       : null
-    const historyBeforeUser = openingMessage ? [openingMessage] : messages
+    const historyBeforeUser = openingMessage ? [openingMessage] : confirmedMessages
     const generationHistory = userMessages.length > 0
       ? [...historyBeforeUser, ...userMessages]
       : historyBeforeUser
@@ -886,11 +930,16 @@ export default function ChatPage() {
         }),
       )
     }
-    setMessages((prev) => [
-      ...(prev.length === 0 && openingMessage ? [openingMessage] : prev),
-      ...userMessages,
-      streamingMessage,
-    ])
+    setMessages((prev) => {
+      const confirmedPreviousMessages = finalizeMessageCandidates(prev)
+      return [
+        ...(confirmedPreviousMessages.length === 0 && openingMessage
+          ? [openingMessage]
+          : confirmedPreviousMessages),
+        ...userMessages,
+        streamingMessage,
+      ]
+    })
     setIsTyping(true)
     setTypingLabel(isAutoAdvance ? "스토리를 이어가는 중..." : undefined)
     setTypingVariant("text")
@@ -1059,53 +1108,10 @@ export default function ChatPage() {
             elapsedMs: event.elapsed_ms,
           })
         }
-        return
       }
-      if (event.event_type === "raw_delta") return
-
-      setMessages((prev) =>
-        prev.map((message) => {
-          if (message.id !== characterMessageId) return message
-          if (event.is_final_event) {
-            const savedContent = event.saved_content ?? message.content
-            return {
-              ...message,
-              id: event.message_id || message.id,
-              content: savedContent,
-              status: event.status === "failed" ? "failed" : "completed",
-              generationRunId: event.run_id,
-              provider: event.provider,
-              model: event.model,
-              attemptedModel: event.attempted_model,
-              outputModel: event.output_model ?? undefined,
-              validationStatus: event.validation_status,
-              validationFailures: event.validation_failures,
-              validationAttempts: event.validation_attempts,
-              repairAttempted: event.repair_attempted,
-              fallback: event.fallback,
-              fallbackProvider: event.fallback_provider,
-              fallbackModel: event.fallback_model,
-              providerOutcome: event.provider_outcome,
-              timeoutStage: event.timeout_stage,
-              geminiErrorCode: event.gemini_error_code,
-              geminiErrorStatus: event.gemini_error_status,
-              generationErrorCode: event.generation_error_code,
-              generationErrorStatus: event.generation_error_status,
-              generationErrorMessage: event.generation_error_message ?? event.error,
-              savedContent,
-              streamedContent: message.content,
-            }
-          }
-
-          return {
-            ...message,
-            content: `${message.content}${event.content ?? ""}`,
-            status: "streaming",
-          }
-        }),
-      )
     }
     setMessages([...retryMessages, streamingMessage])
+    setRegeneratingMessageId(characterMessageId)
     setIsTyping(true)
     setTypingLabel(
       retryIsRegeneration
@@ -1127,7 +1133,7 @@ export default function ChatPage() {
       const retryCreditCost = selectedModel.creditCostPerReply
       if (retryCreditCost > 0 && credits < retryCreditCost) {
         showModelCreditShortage()
-        setMessages((prev) => [...prev, failedMessage])
+        setMessages([...retryMessages, failedMessage])
         return
       }
 
@@ -1247,6 +1253,7 @@ export default function ChatPage() {
       )
       toast.error(errorText)
     } finally {
+      setRegeneratingMessageId(null)
       setIsTyping(false)
       setTypingLabel(undefined)
       setTypingVariant("text")
@@ -1256,8 +1263,8 @@ export default function ChatPage() {
   const handleCommand = async (command: string) => {
     const normalizedCommand = command.replace(/^\//, "").trim()
     const isImageCommand = normalizedCommand === "이미지"
-    const isSnsCommand = normalizedCommand === "SNS"
-    const isStatusCommand = normalizedCommand === "상태창" || normalizedCommand === "상태바"
+    const commandId = getTextCommandId(normalizedCommand)
+    const commandLoadingLabel = getCommandLoadingLabel(normalizedCommand, characterName)
     const userId = getCurrentUserId()
     const usage = getImageGenerationUsage(userId)
     const shouldUseFreeImage = isImageCommand && usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
@@ -1268,22 +1275,15 @@ export default function ChatPage() {
     }
 
     setIsTyping(true)
-    setTypingLabel(
-      isImageCommand
-        ? "이미지 생성중..."
-        : isSnsCommand
-          ? "SNS 생성중..."
-          : isStatusCommand
-            ? "상태창 생성중..."
-            : undefined,
-    )
-    setTypingVariant(isImageCommand ? "image" : "text")
+    setTypingLabel(commandLoadingLabel)
+    setTypingVariant(isImageCommand ? "image" : "command")
 
     try {
       const startedAt = Date.now()
       const turnId = makeTurnId()
       const result = await runCommand(command, characterName, buildImageCommandContext())
-      const remainingDelay = isImageCommand ? Math.max(0, 1400 - (Date.now() - startedAt)) : 0
+      const minimumLoadingDuration = isImageCommand ? 1400 : 450
+      const remainingDelay = Math.max(0, minimumLoadingDuration - (Date.now() - startedAt))
       if (remainingDelay > 0) {
         await new Promise((resolve) => setTimeout(resolve, remainingDelay))
       }
@@ -1297,7 +1297,7 @@ export default function ChatPage() {
         const media = saveGeneratedMedia({
           imageUrl: nextMessage.imageUrl,
           prompt: nextMessage.originalContent || "",
-          provider: "pollinations",
+          provider: "google-imagen",
           workId: currentWork?.id,
           chatId,
           characterId: currentCharacter?.id,
@@ -1323,15 +1323,11 @@ export default function ChatPage() {
       const errorMessage: ChatMessage = {
         id: `command-error-${Date.now()}`,
         type: "status",
-        commandId: isSnsCommand ? "sns" : isStatusCommand ? "status" : undefined,
-        content: isImageCommand
-          ? "이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요."
-          : isSnsCommand
-            ? "SNS 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
-            : isStatusCommand
-              ? "상태창 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
-              : "명령어 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요.",
+        commandId,
+        content: getCommandGenerationErrorContent(normalizedCommand),
         timestamp: new Date(),
+        status: "failed",
+        isGenerationError: Boolean(commandId),
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
@@ -1355,8 +1351,9 @@ export default function ChatPage() {
       }
 
       setIsTyping(true)
-      setTypingLabel("명령어 재생성 중")
-      setTypingVariant("text")
+      setTypingLabel(getCommandLoadingLabel(commandName, characterName))
+      setTypingVariant("command")
+      setRegeneratingMessageId(messageId)
 
       try {
         const result = await runCommand(commandName, characterName, buildImageCommandContext(messages.slice(0, targetIndex)))
@@ -1376,15 +1373,37 @@ export default function ChatPage() {
                   commandId: targetMessage.commandId,
                   timestamp: new Date(),
                   status: "completed",
+                  isGenerationError: false,
+                  retryPayload: undefined,
+                  generationErrorMessage: undefined,
                 }
               : message,
           ),
         )
         setEditedMessageIds((prev) => new Set(prev).add(messageId))
         toast.success("명령어 메시지를 다시 생성했어요.")
-      } catch {
+      } catch (error) {
+        const errorText = error instanceof Error
+          ? error.message
+          : "명령어 메시지를 다시 생성하지 못했어요."
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  type: "status",
+                  content: getCommandGenerationErrorContent(commandName),
+                  status: "failed",
+                  isGenerationError: true,
+                  generationErrorMessage: errorText,
+                  timestamp: new Date(),
+                }
+              : message,
+          ),
+        )
         toast.error("명령어 메시지를 다시 생성하지 못했어요.")
       } finally {
+        setRegeneratingMessageId(null)
         setIsTyping(false)
         setTypingLabel(undefined)
         setTypingVariant("text")
@@ -1434,59 +1453,15 @@ export default function ChatPage() {
       if (event.event_type === "phase") {
         // 재생성 중에는 공급자 단계 문구가 재생성 상태를 덮어쓰지 않게 한다.
         setTypingLabel("답변 재생성 중")
-        return
       }
-      if (event.event_type === "raw_delta") return
-
-      setMessages((prev) =>
-        prev.map((message) => {
-          if (message.id !== messageId) return message
-          if (event.is_final_event) {
-            return {
-              ...message,
-              content: event.saved_content ?? message.content,
-              status: event.status === "failed" ? "failed" : "completed",
-              generationRunId: event.run_id,
-              provider: event.provider,
-              model: event.model,
-              attemptedModel: event.attempted_model,
-              outputModel: event.output_model ?? undefined,
-              validationStatus: event.validation_status,
-              validationFailures: event.validation_failures,
-              validationAttempts: event.validation_attempts,
-              repairAttempted: event.repair_attempted,
-              fallback: event.fallback,
-              fallbackProvider: event.fallback_provider,
-              fallbackModel: event.fallback_model,
-              providerOutcome: event.provider_outcome,
-              timeoutStage: event.timeout_stage,
-              geminiErrorCode: event.gemini_error_code,
-              geminiErrorStatus: event.gemini_error_status,
-              generationErrorCode: event.generation_error_code,
-              generationErrorStatus: event.generation_error_status,
-              generationErrorMessage: event.generation_error_message ?? event.error,
-            }
-          }
-          return {
-            ...message,
-            content: `${message.content}${event.content ?? ""}`,
-            status: "streaming",
-          }
-        }),
-      )
     }
-    setMessages((prev) =>
-      prev.map((message) =>
-        message.id === messageId
-          ? { ...message, content: "", status: "streaming" }
-          : message,
-      ),
-    )
+    setRegeneratingMessageId(messageId)
     setIsTyping(true)
     setTypingLabel("답변 재생성 중")
     setTypingVariant("text")
 
     try {
+      const regenerationAvoidContent = buildRegenerationAvoidContent(targetMessage)
       const rewrittenReply = await generateAssistantReply(
         rewriteHistory,
         userContent,
@@ -1497,7 +1472,7 @@ export default function ChatPage() {
           bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
           debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
           onStreamEvent: handleRewriteStreamEvent,
-          regenerationAvoidContent: targetMessage.content,
+          regenerationAvoidContent,
           autoAdvance: isAutoAdvanceRewrite,
           answerLength,
         },
@@ -1517,7 +1492,9 @@ export default function ChatPage() {
       const finalRewrittenReply = fittedRewriteContent === rewrittenReply.content
         ? rewrittenReply
         : { ...rewrittenReply, content: fittedRewriteContent, savedContent: fittedRewriteContent }
-      rejectDuplicateAssistantResponse(finalRewrittenReply.content, targetMessage.content)
+      for (const existingContent of getMessageCandidateContents(targetMessage)) {
+        rejectDuplicateAssistantResponse(finalRewrittenReply.content, existingContent)
+      }
       const regeneratedCommandsByMessageId = new Map(
         regeneratedAutoCommandMessages.flatMap((freshMessage) => {
           const existingMessage = turnMessages.find((message) => message.commandId === freshMessage.commandId)
@@ -1526,73 +1503,59 @@ export default function ChatPage() {
             : []
         }),
       )
-
-      setMessages((prev) =>
-        prev.map((msg) => {
-          const regeneratedCommand = regeneratedCommandsByMessageId.get(msg.id)
-          if (regeneratedCommand) return regeneratedCommand
-          return msg.id === messageId
-            ? {
-                ...msg,
-                content: finalRewrittenReply.content,
-                timestamp: new Date(),
-                status: "completed",
-                isAutoAdvance: isAutoAdvanceRewrite || msg.isAutoAdvance,
-                generationRunId: finalRewrittenReply.generationRunId,
-                provider: finalRewrittenReply.provider,
-                model: finalRewrittenReply.model,
-                attemptedModel: finalRewrittenReply.attemptedModel,
-                outputModel: finalRewrittenReply.outputModel,
-                validationStatus: finalRewrittenReply.validationStatus,
-                validationFailures: finalRewrittenReply.validationFailures,
-                validationAttempts: finalRewrittenReply.validationAttempts,
-                repairAttempted: finalRewrittenReply.repairAttempted,
-                fallback: finalRewrittenReply.fallback,
-                fallbackProvider: finalRewrittenReply.fallbackProvider,
-                fallbackModel: finalRewrittenReply.fallbackModel,
-                providerOutcome: finalRewrittenReply.providerOutcome,
-                timeoutStage: finalRewrittenReply.timeoutStage,
-                geminiErrorCode: finalRewrittenReply.geminiErrorCode,
-                geminiErrorStatus: finalRewrittenReply.geminiErrorStatus,
-                generationErrorCode: finalRewrittenReply.generationErrorCode,
-                generationErrorStatus: finalRewrittenReply.generationErrorStatus,
-                generationErrorMessage: finalRewrittenReply.generationErrorMessage,
-                savedContent: finalRewrittenReply.savedContent,
-                speakerId: finalRewrittenReply.speakerId ?? msg.speakerId,
-                speakerName: finalRewrittenReply.speakerName ?? msg.speakerName,
-              }
-            : msg
-        }),
+      const currentCompanionMessages = turnMessages.filter((message) =>
+        Boolean(message.commandId && rewriteCommandIds.includes(message.commandId)),
       )
+      const generatedCompanionMessages = [...regeneratedCommandsByMessageId.values()]
+
+      setMessages((prev) => {
+        const currentTarget = prev.find((message) => message.id === messageId)
+        if (!currentTarget) return prev
+
+        const messageWithCandidate = appendMessageCandidate(
+          {
+            ...currentTarget,
+            isAutoAdvance: isAutoAdvanceRewrite || currentTarget.isAutoAdvance,
+          },
+          finalRewrittenReply,
+          {
+            currentCompanionMessages,
+            generatedCompanionMessages,
+          },
+        )
+        const withCandidate = prev.map((message) =>
+          message.id === messageId ? messageWithCandidate : message,
+        )
+
+        return selectMessageCandidate(
+          withCandidate,
+          messageId,
+          messageWithCandidate.selectedCandidateId ?? "",
+        )
+      })
       setEditedMessageIds((prev) => new Set(prev).add(messageId))
-      toast.success("메시지를 다시 작성했어요.")
+      toast.success("새 전개를 추가했어요.")
     } catch (error) {
       const errorText = error instanceof Error ? error.message : "다시 작성하지 못했어요."
-      const rewriteErrorMessage: ChatMessage = {
-        id: messageId,
-        type: "status",
-        content: `새 답변을 채택하지 않았어요.\n${errorText}\n다시 생성할 수 있습니다.`,
-        timestamp: new Date(),
-        status: "failed",
-        turnId: targetMessage.turnId,
-        isGenerationError: true,
-        isAutoAdvance: isAutoAdvanceRewrite,
-        retryPayload: {
-          content: userContent,
-          turnId: targetMessage.turnId,
-          autoAdvance: isAutoAdvanceRewrite,
-          regenerationAvoidContent: targetMessage.content,
-        },
-      }
-      setMessages((prev) =>
-        prev.map((message) => message.id === messageId ? { ...message, ...rewriteErrorMessage } : message),
-      )
       toast.error(errorText)
     } finally {
+      setRegeneratingMessageId(null)
       setIsTyping(false)
       setTypingLabel(undefined)
       setTypingVariant("text")
     }
+  }
+
+  const handleRetryMessage = (messageId: string) => {
+    const failedMessage = messages.find((message) => message.id === messageId)
+    if (failedMessage?.commandId) {
+      return handleRewriteMessage(messageId)
+    }
+    return handleRetryFailedMessage(messageId)
+  }
+
+  const handleSelectMessageCandidate = (messageId: string, candidateId: string) => {
+    setMessages((prev) => selectMessageCandidate(prev, messageId, candidateId))
   }
 
   const handleEditMessage = async (messageId: string, nextContent: string) => {
@@ -1602,12 +1565,20 @@ export default function ChatPage() {
       return
     }
 
-    const targetMessage = messages.find((message) => message.id === messageId)
+    const confirmedMessages = finalizeMessageCandidates(messages)
+    const targetMessage = confirmedMessages.find((message) => message.id === messageId)
+    const storedContent = targetMessage?.commandId
+      ? formatEditedCommandContent(
+          targetMessage.content,
+          targetMessage.commandId,
+          trimmedContent,
+        )
+      : trimmedContent
     const shouldRegenerateImages = Boolean(
       targetMessage?.turnId &&
-        messages.some((message) => message.turnId === targetMessage.turnId && message.imageUrl),
+        confirmedMessages.some((message) => message.turnId === targetMessage.turnId && message.imageUrl),
     )
-    const editedMessages = messages.map((msg) => {
+    const editedMessages = confirmedMessages.map((msg) => {
       if (msg.id !== messageId) return msg
 
       if (msg.type === "user" && !msg.isUserAuthoredCharacterLine) {
@@ -1619,7 +1590,7 @@ export default function ChatPage() {
         }
       }
 
-      return { ...msg, content: trimmedContent }
+      return { ...msg, content: storedContent }
     })
 
     setMessages(editedMessages)
@@ -1646,7 +1617,7 @@ export default function ChatPage() {
         const media = saveGeneratedMedia({
           imageUrl: result.message.imageUrl,
           prompt: result.message.originalContent || "",
-          provider: "pollinations",
+          provider: "google-imagen",
           workId: currentWork?.id,
           chatId,
           characterId: currentCharacter?.id,
@@ -1878,9 +1849,11 @@ export default function ChatPage() {
             isTyping={isTyping}
             typingLabel={typingLabel}
             typingVariant={typingVariant}
+            regeneratingMessageId={regeneratingMessageId}
             messagesEndRef={messagesEndRef}
             onRewriteMessage={handleRewriteMessage}
-            onRetryFailedMessage={handleRetryFailedMessage}
+            onSelectMessageCandidate={handleSelectMessageCandidate}
+            onRetryFailedMessage={handleRetryMessage}
             onEditMessage={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}
             onBranchFromMessage={handleBranchFromMessage}

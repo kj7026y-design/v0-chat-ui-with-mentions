@@ -1,6 +1,6 @@
 export { buildAudienceReactionContent } from "./audience"
 export { buildSnsCommandContent } from "./instagram"
-export { buildPhoneCommandContent } from "./phone"
+export { buildAiPhoneCommandContent, buildPhoneCommandContent } from "./phone"
 export { buildSummaryCommandContent } from "./summary"
 export { buildStatusBar } from "./status"
 export type { ImageCommandContext, ImageCommandStatusContext } from "./types"

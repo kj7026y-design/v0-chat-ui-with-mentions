@@ -14,6 +14,20 @@ export function StatusCommandContent({
   textColor,
 }: StatusCommandContentProps) {
   if (!content.trimStart().startsWith("<status>")) {
+    const [firstLine = "", ...bodyLines] = content.split(/\r?\n/u)
+    if (/상태창/u.test(firstLine)) {
+      return (
+        <div style={{ color: textColor }}>
+          <div className="whitespace-pre-wrap break-words font-bold [word-break:keep-all]">
+            {firstLine}
+          </div>
+          <div className="mt-2 mb-3 border-b border-black" />
+          <div className="whitespace-pre-wrap break-words [word-break:keep-all]">
+            {bodyLines.join("\n")}
+          </div>
+        </div>
+      )
+    }
     return <div className="whitespace-pre-wrap break-words [word-break:keep-all]">{content}</div>
   }
 

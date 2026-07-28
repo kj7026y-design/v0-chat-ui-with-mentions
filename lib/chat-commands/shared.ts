@@ -77,7 +77,7 @@ export function commandPick<T>(random: CommandRandom, values: readonly T[]): T {
 export function getVisibleCommandContent(content: string) {
   return content
     .replace(
-      /<ig-comment (?:nickname|author)="([^"]*)" time="([^"]*)" reply="(?:true|false)">/gu,
+      /<ig-comment (?:nickname|author)="([^"]*)" time="([^"]*)" reply="(?:true|false)"(?: reply-to="[^"]*")?>/gu,
       "$1 $2 ",
     )
     .replace(/<\/?(?:ig|status|phone)(?:-[a-z-]+)?(?:\s+[^>]*)?\s*\/?>/gu, "")
@@ -116,19 +116,98 @@ export function parseAiCommandJson(rawContent: string, label: string) {
     .trim()
     .replace(/^```(?:json)?\s*/iu, "")
     .replace(/\s*```$/u, "")
-  const firstBrace = withoutFence.indexOf("{")
-  const lastBrace = withoutFence.lastIndexOf("}")
-  if (firstBrace < 0 || lastBrace <= firstBrace) {
+
+  const candidates: string[] = []
+  let objectStart = -1
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = 0; index < withoutFence.length; index += 1) {
+    const character = withoutFence[index]
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (character === "\\") {
+        escaped = true
+      } else if (character === "\"") {
+        inString = false
+      }
+      continue
+    }
+    if (character === "\"") {
+      inString = true
+    } else if (character === "{") {
+      if (depth === 0) objectStart = index
+      depth += 1
+    } else if (character === "}" && depth > 0) {
+      depth -= 1
+      if (depth === 0 && objectStart >= 0) {
+        candidates.push(withoutFence.slice(objectStart, index + 1))
+        objectStart = -1
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
     throw new Error(`${label}에서 JSON을 찾지 못했습니다.`)
   }
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(withoutFence.slice(firstBrace, lastBrace + 1))
-  } catch {
-    throw new Error(`${label}를 해석하지 못했습니다.`)
+  for (const candidate of candidates) {
+    for (const source of [candidate, repairAiCommandJson(candidate)]) {
+      try {
+        return asCommandRecord(JSON.parse(source), label)
+      } catch {
+        // Try the next bounded object or its minimally repaired form.
+      }
+    }
   }
-  return asCommandRecord(parsed, label)
+  throw new Error(`${label}를 해석하지 못했습니다.`)
+}
+
+function repairAiCommandJson(source: string) {
+  let repaired = ""
+  let inString = false
+  let escaped = false
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index]
+    if (inString) {
+      if (escaped) {
+        repaired += character
+        escaped = false
+      } else if (character === "\\") {
+        repaired += character
+        escaped = true
+      } else if (character === "\"") {
+        repaired += character
+        inString = false
+      } else if (character === "\n") {
+        repaired += "\\n"
+      } else if (character === "\r") {
+        if (source[index + 1] === "\n") index += 1
+        repaired += "\\n"
+      } else if (character === "\t") {
+        repaired += "\\t"
+      } else {
+        repaired += character
+      }
+      continue
+    }
+
+    if (character === "\"") {
+      repaired += character
+      inString = true
+      continue
+    }
+    if (character === ",") {
+      let nextIndex = index + 1
+      while (/\s/u.test(source[nextIndex] ?? "")) nextIndex += 1
+      if (source[nextIndex] === "}" || source[nextIndex] === "]") continue
+    }
+    repaired += character
+  }
+
+  return repaired
 }
 
 export function getCommandBaseDate(context?: ImageCommandContext) {

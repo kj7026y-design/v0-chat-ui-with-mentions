@@ -12,6 +12,22 @@ import {
   runCommand,
   type ImageCommandContext,
 } from "../lib/chat-engine"
+import { parseAiCommandJson } from "../lib/chat-commands/shared"
+
+test("command JSON parser repairs common model formatting mistakes", () => {
+  const parsed = parseAiCommandJson(
+    `응답:
+{"caption":"첫 줄
+둘째 줄","items":["하나","둘",],}
+부연 설명 {"ignored":true}`,
+    "테스트 결과",
+  )
+
+  assert.deepEqual(parsed, {
+    caption: "첫 줄\n둘째 줄",
+    items: ["하나", "둘"],
+  })
+})
 
 const commandContext = {
   work: {
@@ -87,26 +103,65 @@ const commandContext = {
   ],
 } as unknown as ImageCommandContext
 
-test("phone command renders a contextual phone screen and changes on each invocation", async () => {
-  const first = buildPhoneCommandContent("강태현", commandContext)
-  const second = buildPhoneCommandContent("강태현", commandContext)
+test("phone command renders the full AI-generated phone screen", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    result: JSON.stringify({
+      wallpaper: { label: "잠금화면", description: "공연장 출입증 두 장을 나란히 놓고 찍은 사진" },
+      calls: [
+        { contact: "최 매니저", direction: "부재중", time: "오후 4:45" },
+        { contact: "윤재", direction: "수신", time: "오후 4:20" },
+      ],
+      directMessages: [
+        { contact: "윤재", time: "방금", content: "인터뷰 끝나면 갈게.", isDraft: false },
+        { contact: "최 매니저", time: "5분전", content: "순서 확인했습니다.", isDraft: false },
+        { contact: "윤재", time: "임시저장", content: "공연 끝나고도 네 옆에 있고 싶어.", isDraft: true },
+      ],
+      groupChat: {
+        roomName: "공연 전 체크",
+        members: ["강태현", "최 매니저", "한서진"],
+        messages: [
+          { sender: "최 매니저", time: "5분전", content: "인터뷰 순서 바뀌었습니다." },
+          { sender: "한서진", time: "3분전", content: "무대 오른쪽에서 대기할게요." },
+          { sender: "강태현", time: "1분전", content: "확인했어. 바로 갈게." },
+          { sender: "최 매니저", time: "방금", content: "차량도 준비됐습니다." },
+        ],
+      },
+      searches: ["공연 뒤 조용한 출구", "긴장 풀어 주는 대화법"],
+      videos: ["무대 전 호흡 루틴", "서울 밤 드라이브 플레이리스트"],
+      payments: [
+        { method: "법인카드", merchant: "공연장 카페", detail: "스태프용 아이스커피 네 잔", amount: "24,000원", time: "오후 3:40" },
+      ],
+      recentApps: ["메시지", "캘린더", "지도"],
+    }),
+  }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  })
+  try {
+    const first = await buildPhoneCommandContent("강태현", commandContext)
+    assert.match(first, /^<phone-status><phone-time>17:17<\/phone-time><phone-icons>🔇 HD 5G ▂▄▆▇ 🔋91%<\/phone-icons><\/phone-status>/u)
+    assert.match(first, /🖼️ 배경화면/u)
+    assert.match(first, /📞 최근 통화 기록/u)
+    assert.match(first, /💬 최근 문자 목록/u)
+    assert.match(first, /👥 단체 채팅/u)
+    assert.match(first, /🔍 최근 브라우저 검색 기록/u)
+    assert.match(first, /▶️ 최근 유튜브 시청 기록/u)
+    assert.match(first, /💳 최근 결제 내역/u)
+    assert.match(first, /📱 최근 실행 앱/u)
+    assert.match(first, /윤재/u)
+    assert.match(first, /공연 전 체크/u)
 
-  assert.match(first, /^17:17\s+.*HD 5G.*🔋/u)
-  assert.match(first, /\[최근 통화 기록\]/u)
-  assert.match(first, /\[최근 문자 목록\]/u)
-  assert.match(first, /\[최근 브라우저 검색 기록\]/u)
-  assert.match(first, /\[최근 유튜브 시청 기록\]/u)
-  assert.match(first, /\[최근 결제 내역\]/u)
-  assert.match(first, /\[최근 실행 앱\]/u)
-  assert.match(first, /윤재/u)
-  assert.match(first, /매니저|스타일리스트|현장 팀장/u)
-  assert.match(first, /콘서트|공연|인터뷰/u)
-  assert.notEqual(first, second)
-  assert.ok(Array.from(first).length <= 800)
-
-  const result = await runCommand("휴대폰", "강태현", commandContext)
-  assert.equal(result.kind, "message")
-  if (result.kind === "message") assert.equal(result.message.commandId, "phone")
+    const result = await runCommand("휴대폰", "강태현", commandContext)
+    assert.equal(result.kind, "message")
+    if (result.kind === "message") {
+      assert.equal(result.message.commandId, "phone")
+      assert.match(result.message.content, /👥 단체 채팅/u)
+      assert.match(result.message.content, /\[공연 전 체크 · 3명\]/u)
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("remaining text commands use the current scene instead of fixed dummy copy", async () => {
@@ -181,7 +236,7 @@ test("remaining text commands use the current scene instead of fixed dummy copy"
   assert.match(snsRequestBody, /최근 두 차례 대화/u)
   assert.match(snsRequestBody, /오늘 공연 끝나고도 나랑 이야기할 거지/u)
   assert.match(status, /콘서트홀 대기실/u)
-  assert.match(status, /\[윤재가 공연이 끝난 뒤에도/u)
+  assert.match(status, /<status-summary>✍️ 윤재가 공연이 끝난 뒤에도/u)
   assert.match(status, /😶 일정표를 접는 손은/u)
   assert.match(statusRequestBody, /미리 정해진 문장/u)
   assert.match(statusRequestBody, /오늘 공연 끝나고도 나랑 이야기할 거지/u)

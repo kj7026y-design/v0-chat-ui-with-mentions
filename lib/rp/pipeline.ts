@@ -39,6 +39,7 @@ export interface ChatRequestBody {
   mode?: ChatModelMode
   modelId?: ChatModelId
   roleplayEnabled?: boolean
+  responseMimeType?: "application/json"
   stream?: boolean
   roomId?: string
   userMessageId?: string
@@ -1572,6 +1573,7 @@ export function normalizeBody(body: ChatRequestBody | null) {
   return {
     mode,
     modelId,
+    responseMimeType: body?.responseMimeType === "application/json" ? "application/json" as const : undefined,
     messages,
     systemPrompt,
     fallbackPrompt,
@@ -4097,7 +4099,11 @@ async function handleRoleplayRulesBypassChat(
   })
 }
 
-async function handleGeminiChat(messages: NonNullable<ChatRequestBody["messages"]>, mode: Extract<ChatModelMode, "normal" | "premium">) {
+async function handleGeminiChat(
+  messages: NonNullable<ChatRequestBody["messages"]>,
+  mode: Extract<ChatModelMode, "normal" | "premium">,
+  responseMimeType?: "application/json",
+) {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
     return NextResponse.json(
@@ -4116,6 +4122,7 @@ async function handleGeminiChat(messages: NonNullable<ChatRequestBody["messages"
       const model = genAI.getGenerativeModel({
         model: modelName,
         safetySettings: GEMINI_SAFETY_SETTINGS,
+        generationConfig: responseMimeType ? { responseMimeType } : undefined,
       })
       const response = await withTimeout(model.generateContent(prompt), GEMINI_TIMEOUT_MS)
       const result = response.response.text().trim()
@@ -4540,6 +4547,7 @@ async function handleOpenRouterNsfwChat(
   return handleRoleplayChatFromNormalized({
     mode: "nsfw",
     modelId: model.id,
+    responseMimeType: undefined,
     messages,
     systemPrompt: "",
     fallbackPrompt: messages
@@ -4647,7 +4655,11 @@ async function handleFreeChat(
   })
 }
 
-async function handleOpenAIChat(messages: ChatRequestBody["messages"], model: ChatModelConfig) {
+async function handleOpenAIChat(
+  messages: ChatRequestBody["messages"],
+  model: ChatModelConfig,
+  responseMimeType?: "application/json",
+) {
   const apiKey = getOpenAIApiKey()
   if (!apiKey) {
     return NextResponse.json(
@@ -4667,6 +4679,7 @@ async function handleOpenAIChat(messages: ChatRequestBody["messages"], model: Ch
       messages,
       temperature: 0.9,
       max_tokens: model.maxTokens ?? 3200,
+      response_format: responseMimeType ? { type: "json_object" } : undefined,
     }),
   }), OPENAI_TIMEOUT_MS)
 
@@ -4697,14 +4710,14 @@ async function handlePlainChat(
   normalizedBody: ReturnType<typeof normalizeBody>,
   model: ChatModelConfig,
 ) {
-  const { mode, messages, systemPrompt, fallbackPrompt } = normalizedBody
+  const { mode, messages, systemPrompt, fallbackPrompt, responseMimeType } = normalizedBody
 
   if (model.provider === "openai") {
-    return handleOpenAIChat(messages, model)
+    return handleOpenAIChat(messages, model, responseMimeType)
   }
 
   if (mode === "premium" || mode === "normal") {
-    return handleGeminiChat(messages, mode)
+    return handleGeminiChat(messages, mode, responseMimeType)
   }
 
   return handleFreeChat(messages, systemPrompt, fallbackPrompt, model)

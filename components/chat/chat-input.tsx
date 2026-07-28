@@ -711,7 +711,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         onMouseLeave={stopQuickBarDrag}
         onClickCapture={handleQuickBarClickCapture}
         className={cn(
-          "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none bg-white/70 rounded-xl w-fit",
+          "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none",
           isQuickBarDragging ? "cursor-grabbing" : "cursor-grab",
         )}
       >
