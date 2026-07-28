@@ -209,14 +209,10 @@ export function getAssistantReplyLengthBudget(dialogueAssistChars: number): Assi
 
 function formatRecentMessages(messages: ChatMessage[] = []) {
   return messages
-    .slice(-6)
+    .filter((message) => (message.type === "user" || message.type === "ai") && !message.commandId)
+    .slice(-4)
     .map((message) => {
-      const role =
-        message.type === "user"
-          ? message.speakerName || "user"
-          : message.type === "status"
-            ? "scene status"
-            : "character"
+      const role = message.type === "user" ? "second subject" : "primary subject"
       return `${role}: ${clip(message.content || message.imageName || "image scene", 120)}`
     })
     .join(" / ")
@@ -262,15 +258,13 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
   const personaName = persona?.name || status?.personaName || "user persona"
 
   const promptParts = [
-    "cinematic story illustration",
-    `show two visible subjects in the same scene: ${character?.name || characterName} and ${personaName}`,
+    "full-bleed cinematic story scene from an ongoing moment, never promotional artwork",
+    "show the primary fictional character and the second fictional character together in the same physical scene",
     latestUserAction
-      ? `main visual action: ${personaName} ${latestUserAction}, reacting toward ${character?.name || characterName}`
+      ? `latest turn context to translate into silent visual action rather than written or spoken words: ${latestUserAction}`
       : "",
-    "compose the image so both the character and the user persona are clearly visible, with facial expression and body language",
-    compact(work?.title || world?.name),
+    "compose both characters clearly through facial expression, body language, physical action, and environmental storytelling",
     compact(work?.genre || world?.genre || character?.genre),
-    compact(work?.tagline || world?.tagline),
     compact(work?.coreSetting || world?.coreSetting),
     locations.length ? `main locations: ${locations.slice(0, 4).join(", ")}` : "",
     events.length ? `story clues: ${events.slice(0, 4).join(", ")}` : "",
@@ -279,7 +273,7 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
     scene ? `current scene: ${scene}` : "",
     currentGoal ? `current goal: ${currentGoal}` : "",
     [
-      `${character?.name || characterName}`,
+      "primary fictional character visual reference only",
       compact(character?.role),
       compact(character?.appearance),
       visualTags.length ? visualTags.slice(0, 5).join(", ") : "",
@@ -287,15 +281,17 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
     ].filter(Boolean).join(", "),
     persona
       ? [
-          `user persona: ${personaName}`,
+          "second fictional character visual reference only",
           compact(persona.role),
           compact(persona.appearance),
           compact(persona.relationship),
         ].filter(Boolean).join(", ")
       : "",
-    status?.characterEmotion ? `${character?.name || characterName} emotion: ${status.characterEmotion}` : "",
-    status?.personaEmotion ? `${persona?.name || status.personaName || "user"} emotion: ${status.personaEmotion}` : "",
-    recentFlow ? `recent conversation: ${recentFlow}` : "",
+    status?.characterEmotion ? `primary character emotion: ${status.characterEmotion}` : "",
+    status?.personaEmotion ? `second character emotion: ${status.personaEmotion}` : "",
+    recentFlow
+      ? `silent scene continuity context; translate every line into expression, posture, action, and setting only: ${recentFlow}`
+      : "",
     [
       "high quality fantasy concept art",
       "cinematic composition",
@@ -304,7 +300,23 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
       "sharp focus",
       "rich atmosphere",
       "high detail digital illustration",
-      "no text",
+      "natural scene filling the entire frame",
+      "not a character introduction",
+      "not a character sheet",
+      "not a profile card",
+      "not a poster",
+      "not a title card",
+      "not a social media post",
+      "no typography",
+      "no visible text in any language",
+      "no names",
+      "no captions",
+      "no labels",
+      "no subtitles",
+      "no speech bubbles",
+      "no signs",
+      "no interface",
+      "no logo",
       "no watermark",
     ].join(", "),
   ].filter(Boolean)
@@ -315,10 +327,11 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
 interface ImagenGenerationResponse {
   imageUrl?: string
   model?: string
+  provider?: "google-imagen" | "google-gemini-image"
   error?: string
 }
 
-async function generateImagenImage(prompt: string) {
+async function generateGoogleImage(prompt: string) {
   const response = await fetch("/api/images/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -336,6 +349,7 @@ async function generateImagenImage(prompt: string) {
   return {
     imageUrl: result.imageUrl,
     model: result.model || "imagen-3.0-generate-001",
+    provider: result.provider || "google-imagen",
   }
 }
 
@@ -1268,7 +1282,7 @@ export async function runCommand(
 
   if (normalized === "이미지") {
     const prompt = buildImagePrompt(characterName, context)
-    const generatedImage = await generateImagenImage(prompt)
+    const generatedImage = await generateGoogleImage(prompt)
     return {
       kind: "message",
       message: {
@@ -1276,9 +1290,9 @@ export async function runCommand(
         type: "ai",
         content: "",
         imageUrl: generatedImage.imageUrl,
-        imageName: `${characterName} Imagen 3 이미지.jpg`,
+        imageName: `${characterName} AI 이미지.jpg`,
         originalContent: prompt,
-        provider: "google-imagen",
+        provider: generatedImage.provider,
         model: generatedImage.model,
         timestamp: new Date(),
       },

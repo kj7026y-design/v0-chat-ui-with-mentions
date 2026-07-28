@@ -136,6 +136,12 @@ function getCommandGenerationErrorContent(commandName: string) {
   return "명령어 내용을 생성하지 못했어요. 잠시 후 다시 시도해주세요."
 }
 
+function getGeneratedImageProvider(message: ChatMessage) {
+  return message.provider === "google-gemini-image"
+    ? "google-gemini-image" as const
+    : "google-imagen" as const
+}
+
 const storyStatus: StoryStatus = {
   useChapters: true,
   currentChapterId: "chapter_1",
@@ -492,7 +498,6 @@ export default function ChatPage() {
 
   const reportHistoryError = (error: unknown) => {
     console.error("[chat history sync failed]", error)
-    setIsHistoryPersistenceEnabled(false)
     if (historyErrorShownRef.current) return
     historyErrorShownRef.current = true
     toast.error(error instanceof Error ? error.message : "채팅 내역을 DB와 동기화하지 못했어요.")
@@ -542,7 +547,7 @@ export default function ChatPage() {
     const media = saveGeneratedMedia({
       imageUrl: result.message.imageUrl,
       prompt: result.message.originalContent || "",
-      provider: "google-imagen",
+      provider: getGeneratedImageProvider(result.message),
       workId: currentWork?.id,
       chatId,
       characterId: currentCharacter?.id,
@@ -1297,7 +1302,7 @@ export default function ChatPage() {
         const media = saveGeneratedMedia({
           imageUrl: nextMessage.imageUrl,
           prompt: nextMessage.originalContent || "",
-          provider: "google-imagen",
+          provider: getGeneratedImageProvider(nextMessage),
           workId: currentWork?.id,
           chatId,
           characterId: currentCharacter?.id,
@@ -1617,7 +1622,7 @@ export default function ChatPage() {
         const media = saveGeneratedMedia({
           imageUrl: result.message.imageUrl,
           prompt: result.message.originalContent || "",
-          provider: "google-imagen",
+          provider: getGeneratedImageProvider(result.message),
           workId: currentWork?.id,
           chatId,
           characterId: currentCharacter?.id,

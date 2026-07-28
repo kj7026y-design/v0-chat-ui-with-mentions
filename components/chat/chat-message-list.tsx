@@ -1,42 +1,52 @@
-"use client"
+"use client";
 
-import { useState, useEffect, type CSSProperties, type ReactNode, type RefObject } from "react"
-import { useTheme } from "@/components/theme-provider"
-import { type ChatMessage } from "@/lib/chat-types"
-import { parseMessageSegments, shouldRenderMessageSegments, type MessageSegment } from "@/lib/message-segments"
-import { parseComposerInput, type ComposerPart } from "@/lib/rp-input-parser"
-import { getCommandEditableContent } from "@/lib/chat-command-editing"
-import { cn } from "@/lib/utils"
-import { AuthorTools } from "./author-tools"
-import { MessageCandidateControls } from "./message-candidates-drawer"
+import {
+  useState,
+  useEffect,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { useTheme } from "@/components/theme-provider";
+import { type ChatMessage } from "@/lib/chat-types";
+import {
+  parseMessageSegments,
+  shouldRenderMessageSegments,
+  type MessageSegment,
+} from "@/lib/message-segments";
+import { parseComposerInput, type ComposerPart } from "@/lib/rp-input-parser";
+import { getCommandEditableContent } from "@/lib/chat-command-editing";
+import { cn } from "@/lib/utils";
+import { AuthorTools } from "./author-tools";
+import { MessageCandidateControls } from "./message-candidates-drawer";
 import {
   InstagramCommandContent,
   PhoneCommandContent,
   StatusCommandContent,
-} from "./command-content"
+} from "./command-content";
 
-type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger"
+type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger";
 
 type ChatMessageCharacterProfile = {
-  id: string
-  name: string
-  emoji?: string
-  avatarUrl?: string
-}
+  id: string;
+  name: string;
+  emoji?: string;
+  avatarUrl?: string;
+};
 
 interface ChatThemeConfig {
-  id: ChatThemeId
+  id: ChatThemeId;
   preview: {
-    bg: string
-    userBubble: string
-    userText: string
-    aiBubble: string
-    aiText: string
-  }
+    bg: string;
+    userBubble: string;
+    userText: string;
+    aiBubble: string;
+    aiText: string;
+  };
 }
 
 function getChatThemeTextPalette(backgroundColor: string) {
-  const isDark = isDarkColor(backgroundColor)
+  const isDark = isDarkColor(backgroundColor);
   return isDark
     ? {
         text: "#F5F5F5",
@@ -51,7 +61,7 @@ function getChatThemeTextPalette(backgroundColor: string) {
         panelBg: "rgba(255,255,255,0.58)",
         panelBorder: "rgba(17,24,39,0.12)",
         indicator: "rgba(31,41,55,0.52)",
-      }
+      };
 }
 
 // Mention target name mapping
@@ -60,41 +70,46 @@ const MENTION_NAMES: Record<string, string> = {
   imugi: "이무기",
   extra: "엑스트라",
   all: "모두",
-}
+};
 
 function getMentionDisplayNames(mentions: string[] | undefined): string[] {
-  if (!mentions || mentions.length === 0) return []
-  return mentions.map(id => MENTION_NAMES[id] || id)
+  if (!mentions || mentions.length === 0) return [];
+  return mentions.map((id) => MENTION_NAMES[id] || id);
 }
 
 function renderHighlightedMentions(content: string, names: string[]) {
   const mentionNames = [...new Set([...names, ...Object.values(MENTION_NAMES)])]
     .filter(Boolean)
-    .sort((a, b) => b.length - a.length)
+    .sort((a, b) => b.length - a.length);
 
-  if (mentionNames.length === 0) return content
+  if (mentionNames.length === 0) return content;
 
-  const parts: ReactNode[] = []
-  let index = 0
+  const parts: ReactNode[] = [];
+  let index = 0;
 
   while (index < content.length) {
-    const matchedName = mentionNames.find((name) => content.startsWith(`@${name}`, index))
+    const matchedName = mentionNames.find((name) =>
+      content.startsWith(`@${name}`, index),
+    );
     if (!matchedName) {
-      parts.push(content[index])
-      index += 1
-      continue
+      parts.push(content[index]);
+      index += 1;
+      continue;
     }
 
-    const token = `@${matchedName}`
+    const token = `@${matchedName}`;
     parts.push(
-      <span key={`${token}-${index}`} className="mention-token rounded-md border px-1 py-0.5 font-semibold">
+      <span
+        key={`${token}-${index}`}
+        className="mention-token rounded-md border px-1 py-0.5 font-semibold"
+      >
         {token}
       </span>,
-    )
-    index += token.length
+    );
+    index += token.length;
   }
 
-  return parts
+  return parts;
 }
 
 const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
@@ -148,19 +163,23 @@ const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
       aiText: "#000000",
     },
   },
-}
+};
 
 function getEditTargetMessage(message: ChatMessage, messages: ChatMessage[]) {
-  if (!message.imageUrl || message.content.trim() || !message.turnId) return message
+  if (!message.imageUrl || message.content.trim() || !message.turnId)
+    return message;
 
-  return [...messages]
-    .reverse()
-    .find((item) =>
-      item.turnId === message.turnId &&
-      item.type === "ai" &&
-      !item.imageUrl &&
-      item.content.trim(),
-    ) ?? message
+  return (
+    [...messages]
+      .reverse()
+      .find(
+        (item) =>
+          item.turnId === message.turnId &&
+          item.type === "ai" &&
+          !item.imageUrl &&
+          item.content.trim(),
+      ) ?? message
+  );
 }
 
 function normalizeMessageNewlines(content: string) {
@@ -168,54 +187,75 @@ function normalizeMessageNewlines(content: string) {
     .replace(/\\r\\n|\\n|\\r/g, "\n")
     .replace(/([^\s\n])(["“][^"“”\n]{1,500}["”])/g, "$1\n\n$2")
     .replace(/(["“][^"“”\n]{1,500}["”])([^\s\n])/g, "$1\n\n$2")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 function getLatestEditableMessageId(messages: ChatMessage[]) {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (isAssistantExtraMessage(message) && !message.commandId) continue
-    const editTarget = getEditTargetMessage(message, messages)
-    const isCharacterLine = editTarget.isUserAuthoredCharacterLine && editTarget.speakerType === "character"
-    const isCommandMessage = Boolean(editTarget.commandId)
-    const isEditable = editTarget.type === "user" || editTarget.type === "ai" || isCharacterLine || isCommandMessage
-    if (isEditable && editTarget.content.trim()) return editTarget.id
+    const message = messages[index];
+    if (isAssistantExtraMessage(message) && !message.commandId) continue;
+    const editTarget = getEditTargetMessage(message, messages);
+    const isCharacterLine =
+      editTarget.isUserAuthoredCharacterLine &&
+      editTarget.speakerType === "character";
+    const isCommandMessage = Boolean(editTarget.commandId);
+    const isEditable =
+      editTarget.type === "user" ||
+      editTarget.type === "ai" ||
+      isCharacterLine ||
+      isCommandMessage;
+    if (isEditable && editTarget.content.trim()) return editTarget.id;
   }
-  return null
+  return null;
 }
 
 function isAssistantExtraMessage(message: ChatMessage) {
-  if (message.type !== "status" || message.isGenerationError || !message.turnId) return false
-  return /^(📱 휴대폰|💬 SNS|INSTAGRAM|<ig>|<status>|📊 상태창|📍장소:)/.test(message.content.trim())
+  if (message.type !== "status" || message.isGenerationError || !message.turnId)
+    return false;
+  return /^(📱 휴대폰|💬 SNS|INSTAGRAM|<ig>|<status>|📊 상태창|📍장소:)/.test(
+    message.content.trim(),
+  );
 }
 
-function getAssistantExtraMessages(message: ChatMessage, messages: ChatMessage[], index: number) {
-  if (message.type !== "ai" || !message.turnId) return []
+function getAssistantExtraMessages(
+  message: ChatMessage,
+  messages: ChatMessage[],
+  index: number,
+) {
+  if (message.type !== "ai" || !message.turnId) return [];
 
-  const extras: ChatMessage[] = []
+  const extras: ChatMessage[] = [];
   for (let nextIndex = index + 1; nextIndex < messages.length; nextIndex += 1) {
-    const nextMessage = messages[nextIndex]
-    if (nextMessage.turnId !== message.turnId) break
+    const nextMessage = messages[nextIndex];
+    if (nextMessage.turnId !== message.turnId) break;
     if (isAssistantExtraMessage(nextMessage)) {
-      extras.push(nextMessage)
+      extras.push(nextMessage);
     }
   }
-  return extras
+  return extras;
 }
 
-function isGroupedAssistantExtra(message: ChatMessage, messages: ChatMessage[], index: number) {
-  if (!isAssistantExtraMessage(message)) return false
+function isGroupedAssistantExtra(
+  message: ChatMessage,
+  messages: ChatMessage[],
+  index: number,
+) {
+  if (!isAssistantExtraMessage(message)) return false;
   return messages
     .slice(0, index)
-    .some((item) => item.type === "ai" && item.turnId === message.turnId)
+    .some((item) => item.type === "ai" && item.turnId === message.turnId);
 }
 
-function getSpeakerProfile(message: ChatMessage, characters: ChatMessageCharacterProfile[]) {
+function getSpeakerProfile(
+  message: ChatMessage,
+  characters: ChatMessageCharacterProfile[],
+) {
   return characters.find((character) => {
-    if (message.speakerId && character.id === message.speakerId) return true
-    if (message.speakerName && character.name === message.speakerName) return true
-    return false
-  })
+    if (message.speakerId && character.id === message.speakerId) return true;
+    if (message.speakerName && character.name === message.speakerName)
+      return true;
+    return false;
+  });
 }
 
 function MessageAvatar({
@@ -224,53 +264,61 @@ function MessageAvatar({
   alt,
   className,
 }: {
-  imageUrl?: string
-  fallback: string
-  alt: string
-  className?: string
+  imageUrl?: string;
+  fallback: string;
+  alt: string;
+  className?: string;
 }) {
   if (imageUrl) {
     return (
       <img
         src={imageUrl}
         alt={alt}
-        className={cn("shrink-0 rounded-full bg-secondary object-cover", className)}
+        className={cn(
+          "shrink-0 rounded-full bg-secondary object-cover",
+          className,
+        )}
       />
-    )
+    );
   }
 
   return (
-    <div className={cn("flex shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground", className)}>
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground",
+        className,
+      )}
+    >
       {fallback}
     </div>
-  )
+  );
 }
 
 interface ChatMessageListProps {
-  messages: ChatMessage[]
-  isTyping: boolean
-  typingLabel?: string
-  typingVariant?: "text" | "image" | "command"
-  regeneratingMessageId?: string | null
-  messagesEndRef: RefObject<HTMLDivElement | null>
-  onRewriteMessage?: (messageId: string) => void
-  onSelectMessageCandidate?: (messageId: string, candidateId: string) => void
-  onRetryFailedMessage?: (messageId: string) => void
-  onEditMessage?: (messageId: string, nextContent: string) => void
-  onDeleteMessage?: (messageId: string) => void
-  onBranchFromMessage?: (messageId: string) => void
-  editedMessageIds?: Set<string>
-  chatId?: string
-  chatTheme?: ChatThemeId
-  disabled?: boolean
-  textSize?: number
-  lineHeight?: number
-  characters?: ChatMessageCharacterProfile[]
+  messages: ChatMessage[];
+  isTyping: boolean;
+  typingLabel?: string;
+  typingVariant?: "text" | "image" | "command";
+  regeneratingMessageId?: string | null;
+  messagesEndRef: RefObject<HTMLDivElement | null>;
+  onRewriteMessage?: (messageId: string) => void;
+  onSelectMessageCandidate?: (messageId: string, candidateId: string) => void;
+  onRetryFailedMessage?: (messageId: string) => void;
+  onEditMessage?: (messageId: string, nextContent: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
+  onBranchFromMessage?: (messageId: string) => void;
+  editedMessageIds?: Set<string>;
+  chatId?: string;
+  chatTheme?: ChatThemeId;
+  disabled?: boolean;
+  textSize?: number;
+  lineHeight?: number;
+  characters?: ChatMessageCharacterProfile[];
 }
 
-export function ChatMessageList({ 
-  messages, 
-  isTyping, 
+export function ChatMessageList({
+  messages,
+  isTyping,
   typingLabel,
   typingVariant = "text",
   regeneratingMessageId = null,
@@ -289,79 +337,96 @@ export function ChatMessageList({
   lineHeight = 1.5,
   characters = [],
 }: ChatMessageListProps) {
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  const [internalChatTheme, setInternalChatTheme] = useState<ChatThemeId>("system")
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [internalChatTheme, setInternalChatTheme] =
+    useState<ChatThemeId>("system");
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   useEffect(() => {
-    setMounted(true)
+    setMounted(true);
     if (chatId) {
-      const savedTheme = localStorage.getItem(`chat-theme-${chatId}`) as ChatThemeId
+      const savedTheme = localStorage.getItem(
+        `chat-theme-${chatId}`,
+      ) as ChatThemeId;
       if (savedTheme && chatThemes[savedTheme]) {
-        setInternalChatTheme(savedTheme)
+        setInternalChatTheme(savedTheme);
       } else {
-        setInternalChatTheme("system")
+        setInternalChatTheme("system");
       }
     }
-    
+
     // Listen for storage changes (when theme is updated from settings)
     const handleStorageChange = (e: StorageEvent) => {
       if (chatId && e.key === `chat-theme-${chatId}`) {
         if (e.newValue) {
-          setInternalChatTheme(e.newValue as ChatThemeId)
+          setInternalChatTheme(e.newValue as ChatThemeId);
         } else {
-          setInternalChatTheme("system")
+          setInternalChatTheme("system");
         }
       }
-    }
-    window.addEventListener("storage", handleStorageChange)
-    return () => window.removeEventListener("storage", handleStorageChange)
-  }, [chatId])
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [chatId]);
 
   // Use external theme if provided, otherwise use internal state
-  const chatTheme = externalChatTheme ?? internalChatTheme
+  const chatTheme = externalChatTheme ?? internalChatTheme;
 
   // Determine the actual theme config to use
   const getActualThemeConfig = () => {
     // Before mount, default to light to match SSR output and avoid hydration mismatch
-    if (!mounted) return chatThemes.light
+    if (!mounted) return chatThemes.light;
     if (chatTheme === "system") {
       // Follow app theme
-      return resolvedTheme === "dark" ? chatThemes.dark : chatThemes.light
+      return resolvedTheme === "dark" ? chatThemes.dark : chatThemes.light;
     }
-    return chatThemes[chatTheme]
-  }
+    return chatThemes[chatTheme];
+  };
 
-  const themeConfig = getActualThemeConfig()
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
-  const latestEditableMessageId = getLatestEditableMessageId(messages)
+  const themeConfig = getActualThemeConfig();
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
+  const latestEditableMessageId = getLatestEditableMessageId(messages);
   // Keep the larger bottom inset only for the initial scene/first turn.
   // Once a second turn exists, the composer no longer needs the opening-scene
   // spacing; applying pb-44 to the whole history leaves a large empty tail.
-  const turnIds = new Set(messages.map((message) => message.turnId).filter(Boolean))
-  const isInitialScene = turnIds.size <= 1
+  const turnIds = new Set(
+    messages.map((message) => message.turnId).filter(Boolean),
+  );
+  const isInitialScene = turnIds.size <= 1;
   // Bubble style rendering
   return (
     <div
-      className={cn("flex flex-col gap-3 px-4 py-4", isInitialScene ? "pb-44" : "pb-4")}
-      style={{
-        color: themeTextPalette.text,
-        "--chat-theme-text": themeTextPalette.text,
-        "--chat-theme-muted-text": themeTextPalette.mutedText,
-        "--chat-theme-panel-bg": themeTextPalette.panelBg,
-        "--chat-theme-panel-border": themeTextPalette.panelBorder,
-        "--chat-theme-indicator": themeTextPalette.indicator,
-      } as CSSProperties}
+      className={cn(
+        "flex flex-col gap-3 px-4 py-4",
+        isInitialScene ? "pb-44" : "pb-4",
+      )}
+      style={
+        {
+          color: themeTextPalette.text,
+          "--chat-theme-text": themeTextPalette.text,
+          "--chat-theme-muted-text": themeTextPalette.mutedText,
+          "--chat-theme-panel-bg": themeTextPalette.panelBg,
+          "--chat-theme-panel-border": themeTextPalette.panelBorder,
+          "--chat-theme-indicator": themeTextPalette.indicator,
+        } as CSSProperties
+      }
     >
-      {messages.map((message, index) => (
+      {messages.map((message, index) =>
         (() => {
-          if (isGroupedAssistantExtra(message, messages, index)) return null
-          const editTarget = getEditTargetMessage(message, messages)
-          const extraMessages = getAssistantExtraMessages(message, messages, index)
+          if (isGroupedAssistantExtra(message, messages, index)) return null;
+          const editTarget = getEditTargetMessage(message, messages);
+          const extraMessages = getAssistantExtraMessages(
+            message,
+            messages,
+            index,
+          );
           const isLatestEditableTarget =
             editTarget.id === latestEditableMessageId ||
-            (editTarget.type === "ai" && extraMessages.some((extraMessage) => extraMessage.id === latestEditableMessageId))
+            (editTarget.type === "ai" &&
+              extraMessages.some(
+                (extraMessage) => extraMessage.id === latestEditableMessageId,
+              ));
           return (
             <BubbleMessageBubble
               key={message.id}
@@ -383,45 +448,55 @@ export function ChatMessageList({
               isLatest={isLatestEditableTarget}
               latestEditableMessageId={latestEditableMessageId}
               canBranch={
-                (message.type === "ai" || message.type === "status" || message.type === "inner-thought") &&
-                (!message.turnId || messages[index + 1 + extraMessages.length]?.turnId !== message.turnId)
+                (message.type === "ai" ||
+                  message.type === "status" ||
+                  message.type === "inner-thought") &&
+                (!message.turnId ||
+                  messages[index + 1 + extraMessages.length]?.turnId !==
+                    message.turnId)
               }
               editInitialContent={editTarget.content}
               isEditing={editingMessageId === message.id}
               editingMessageId={editingMessageId}
               disabled={disabled}
               onStartEdit={() => {
-                if (disabled) return
-                setEditingMessageId(message.id)
+                if (disabled) return;
+                setEditingMessageId(message.id);
               }}
               onStartMessageEdit={(targetMessageId) => {
-                if (disabled) return
-                setEditingMessageId(targetMessageId)
+                if (disabled) return;
+                setEditingMessageId(targetMessageId);
               }}
               onCancelEdit={() => setEditingMessageId(null)}
               onSaveEdit={(nextContent) => {
-                onEditMessage?.(editTarget.id, nextContent)
-                setEditingMessageId(null)
+                onEditMessage?.(editTarget.id, nextContent);
+                setEditingMessageId(null);
               }}
               onSaveMessageEdit={(targetMessageId, nextContent) => {
-                onEditMessage?.(targetMessageId, nextContent)
-                setEditingMessageId(null)
+                onEditMessage?.(targetMessageId, nextContent);
+                setEditingMessageId(null);
               }}
             />
-          )
-        })()
-      ))}
+          );
+        })(),
+      )}
 
       {isTyping && !regeneratingMessageId && typingVariant === "image" && (
-        <BubbleImageGeneratingIndicator label={typingLabel ?? "이미지 생성중..."} themeConfig={themeConfig} />
+        <BubbleImageGeneratingIndicator
+          label={typingLabel ?? "이미지 생성중..."}
+          themeConfig={themeConfig}
+        />
       )}
       {isTyping && !regeneratingMessageId && typingVariant === "command" && (
-        <BubbleCommandGeneratingIndicator label={typingLabel ?? "명령어 생성중..."} themeConfig={themeConfig} />
+        <BubbleCommandGeneratingIndicator
+          label={typingLabel ?? "명령어 생성중..."}
+          themeConfig={themeConfig}
+        />
       )}
       {/* Scroll anchor */}
       <div ref={messagesEndRef} />
     </div>
-  )
+  );
 }
 
 // ============================================
@@ -429,33 +504,33 @@ export function ChatMessageList({
 // ============================================
 
 interface BubbleMessageBubbleProps {
-  message: ChatMessage
-  extraMessages?: ChatMessage[]
-  typingLabel?: string
-  regeneratingMessageId?: string | null
-  onRewrite?: (messageId: string) => void
-  onSelectCandidate?: (messageId: string, candidateId: string) => void
-  onRetry?: (messageId: string) => void
-  onDelete?: (messageId: string) => void
-  onBranch?: (messageId: string) => void
-  isEdited?: boolean
-  editedMessageIds: Set<string>
-  themeConfig: ChatThemeConfig
-  textSize: number
-  lineHeight: number
-  characters: ChatMessageCharacterProfile[]
-  isLatest: boolean
-  latestEditableMessageId: string | null
-  canBranch: boolean
-  editInitialContent: string
-  isEditing: boolean
-  editingMessageId: string | null
-  disabled?: boolean
-  onStartEdit: () => void
-  onStartMessageEdit: (messageId: string) => void
-  onCancelEdit: () => void
-  onSaveEdit: (nextContent: string) => void
-  onSaveMessageEdit: (messageId: string, nextContent: string) => void
+  message: ChatMessage;
+  extraMessages?: ChatMessage[];
+  typingLabel?: string;
+  regeneratingMessageId?: string | null;
+  onRewrite?: (messageId: string) => void;
+  onSelectCandidate?: (messageId: string, candidateId: string) => void;
+  onRetry?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onBranch?: (messageId: string) => void;
+  isEdited?: boolean;
+  editedMessageIds: Set<string>;
+  themeConfig: ChatThemeConfig;
+  textSize: number;
+  lineHeight: number;
+  characters: ChatMessageCharacterProfile[];
+  isLatest: boolean;
+  latestEditableMessageId: string | null;
+  canBranch: boolean;
+  editInitialContent: string;
+  isEditing: boolean;
+  editingMessageId: string | null;
+  disabled?: boolean;
+  onStartEdit: () => void;
+  onStartMessageEdit: (messageId: string) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (nextContent: string) => void;
+  onSaveMessageEdit: (messageId: string, nextContent: string) => void;
 }
 
 function BubbleMessageBubble({
@@ -487,28 +562,30 @@ function BubbleMessageBubble({
   onSaveEdit,
   onSaveMessageEdit,
 }: BubbleMessageBubbleProps) {
-  const [isBranching, setIsBranching] = useState(false)
+  const [isBranching, setIsBranching] = useState(false);
   const editableInitialContent = message.commandId
     ? getCommandEditableContent(message.content, message.commandId)
-    : normalizeMessageNewlines(editInitialContent)
-  const [editDraft, setEditDraft] = useState(() => editableInitialContent)
-  const [imageLoadFailed, setImageLoadFailed] = useState(false)
-  const isCharacterLine = Boolean(message.isUserAuthoredCharacterLine && message.speakerType === "character")
-  const isUser = message.type === "user" && !isCharacterLine
-  const isAI = message.type === "ai"
-  const isEvent = message.type === "event"
-  const isInnerThought = message.type === "inner-thought"
-  const isStatus = message.type === "status"
-  const speakerProfile = getSpeakerProfile(message, characters)
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+    : normalizeMessageNewlines(editInitialContent);
+  const [editDraft, setEditDraft] = useState(() => editableInitialContent);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const isCharacterLine = Boolean(
+    message.isUserAuthoredCharacterLine && message.speakerType === "character",
+  );
+  const isUser = message.type === "user" && !isCharacterLine;
+  const isAI = message.type === "ai";
+  const isEvent = message.type === "event";
+  const isInnerThought = message.type === "inner-thought";
+  const isStatus = message.type === "status";
+  const speakerProfile = getSpeakerProfile(message, characters);
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
 
   useEffect(() => {
-    if (isEditing) setEditDraft(editableInitialContent)
-  }, [editableInitialContent, isEditing])
+    if (isEditing) setEditDraft(editableInitialContent);
+  }, [editableInitialContent, isEditing]);
 
   useEffect(() => {
-    setImageLoadFailed(false)
-  }, [message.imageUrl])
+    setImageLoadFailed(false);
+  }, [message.imageUrl]);
 
   if (message.id === regeneratingMessageId) {
     return message.commandId ? (
@@ -523,7 +600,7 @@ function BubbleMessageBubble({
         textSize={textSize}
         lineHeight={lineHeight}
       />
-    )
+    );
   }
 
   if (message.isGenerationError) {
@@ -539,7 +616,10 @@ function BubbleMessageBubble({
         >
           <p
             className="whitespace-pre-wrap break-words [word-break:keep-all]"
-            style={{ fontSize: Math.min(14, Math.max(11, textSize)), lineHeight: Math.max(1.45, lineHeight) }}
+            style={{
+              fontSize: Math.min(14, Math.max(11, textSize)),
+              lineHeight: Math.max(1.45, lineHeight),
+            }}
           >
             {message.content || "답변을 생성하지 못했어요."}
           </p>
@@ -553,7 +633,7 @@ function BubbleMessageBubble({
           </button>
         </div>
       </div>
-    )
+    );
   }
 
   // Event Card
@@ -583,35 +663,46 @@ function BubbleMessageBubble({
             )}
             {/* Gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
-            
+
             {/* Event Title */}
             <div className="absolute bottom-3 left-4 right-4">
-              <span className="text-xs uppercase tracking-wider" style={{ color: themeTextPalette.mutedText }}>Event</span>
-              <h4 className="mt-0.5 text-lg font-semibold" style={{ color: themeTextPalette.text }}>
+              <span
+                className="text-xs uppercase tracking-wider"
+                style={{ color: themeTextPalette.mutedText }}
+              >
+                Event
+              </span>
+              <h4
+                className="mt-0.5 text-lg font-semibold"
+                style={{ color: themeTextPalette.text }}
+              >
                 {message.content}
               </h4>
             </div>
           </div>
-          
+
           {/* Event Description */}
           {message.eventDescription && (
             <div className="px-4 py-3">
-              <p className="text-sm leading-relaxed" style={{ color: themeTextPalette.mutedText }}>
+              <p
+                className="text-sm leading-relaxed"
+                style={{ color: themeTextPalette.mutedText }}
+              >
                 {message.eventDescription}
               </p>
             </div>
           )}
         </div>
       </div>
-    )
+    );
   }
 
   if (isStatus || isInnerThought) {
-    const statusTextSize = Math.min(14, Math.max(11, textSize))
-    const isPhoneCommand = isStatus && message.commandId === "phone"
-    const isInstagramCommand = isStatus && message.commandId === "sns"
-    const isStatusCommand = isStatus && message.commandId === "status"
-    const isCommandMessage = Boolean(message.commandId)
+    const statusTextSize = Math.min(14, Math.max(11, textSize));
+    const isPhoneCommand = isStatus && message.commandId === "phone";
+    const isInstagramCommand = isStatus && message.commandId === "sns";
+    const isStatusCommand = isStatus && message.commandId === "status";
+    const isCommandMessage = Boolean(message.commandId);
 
     return (
       <div className="flex flex-col items-start gap-2">
@@ -677,49 +768,65 @@ function BubbleMessageBubble({
             disabled={disabled}
             isBranching={isBranching}
             onClick={() => {
-              if (disabled) return
-              setIsBranching(true)
+              if (disabled) return;
+              setIsBranching(true);
               setTimeout(() => {
-                onBranch?.(message.id)
-                setIsBranching(false)
-              }, 800)
+                onBranch?.(message.id);
+                setIsBranching(false);
+              }, 800);
             }}
           />
         )}
       </div>
-    )
+    );
   }
 
   // Regular Message Bubble
   const mentionNames = [
     ...getMentionDisplayNames(message.mentions),
     ...(message.speakerName ? [message.speakerName] : []),
-  ]
-  const displayContent = normalizeMessageNewlines(message.content)
-  const streamingLabel = (typingLabel?.trim() || "답변 생성 중").replace(/\.+$/, "")
+  ];
+  const displayContent = normalizeMessageNewlines(message.content);
+  const streamingLabel = (typingLabel?.trim() || "답변 생성 중").replace(
+    /\.+$/,
+    "",
+  );
   const statusLabel =
     message.status === "failed"
-        ? "생성 실패"
-        : message.status === "repaired"
-          ? "검수 후 수정됨"
-          : ""
-  const displayMessage = displayContent === message.content ? message : { ...message, content: displayContent }
-  const bubbleColor = isUser ? themeConfig.preview.userBubble : themeConfig.preview.aiBubble
-  const bubbleTextColor = isUser ? themeConfig.preview.userText : themeConfig.preview.aiText
-  const mentionStyle = getMentionStyle(bubbleColor)
+      ? "생성 실패"
+      : message.status === "repaired"
+        ? "검수 후 수정됨"
+        : "";
+  const displayMessage =
+    displayContent === message.content
+      ? message
+      : { ...message, content: displayContent };
+  const bubbleColor = isUser
+    ? themeConfig.preview.userBubble
+    : themeConfig.preview.aiBubble;
+  const bubbleTextColor = isUser
+    ? themeConfig.preview.userText
+    : themeConfig.preview.aiText;
+  const mentionStyle = getMentionStyle(bubbleColor);
   const bubbleStyle = {
     backgroundColor: bubbleColor,
     color: bubbleTextColor,
-    boxShadow: isDarkColor(themeConfig.preview.bg) ? "0 0 0 1px rgba(255,255,255,0.14)" : undefined,
+    boxShadow: isDarkColor(themeConfig.preview.bg)
+      ? "0 0 0 1px rgba(255,255,255,0.14)"
+      : undefined,
     "--mention-bg": mentionStyle.bg,
     "--mention-text": mentionStyle.text,
     "--mention-border": mentionStyle.border,
-  } as CSSProperties
-  const segments = parseMessageSegments(displayMessage)
-  const shouldRenderSegments = !message.imageUrl && shouldRenderMessageSegments(displayMessage, segments)
-  const composerParts = isUser && !message.imageUrl ? parseComposerInput(displayContent) : []
+  } as CSSProperties;
+  const segments = parseMessageSegments(displayMessage);
+  const shouldRenderSegments =
+    !message.imageUrl && shouldRenderMessageSegments(displayMessage, segments);
+  const composerParts =
+    isUser && !message.imageUrl ? parseComposerInput(displayContent) : [];
   const shouldRenderComposerParts =
-    isUser && (composerParts.some((part) => part.type === "action") || composerParts.length > 1)
+    isUser &&
+    (composerParts.some((part) => part.type === "action") ||
+      composerParts.length > 1);
 
   if (shouldRenderComposerParts) {
     return (
@@ -763,17 +870,17 @@ function BubbleMessageBubble({
             disabled={disabled}
             isBranching={isBranching}
             onClick={() => {
-              if (disabled) return
-              setIsBranching(true)
+              if (disabled) return;
+              setIsBranching(true);
               setTimeout(() => {
-                onBranch?.(message.id)
-                setIsBranching(false)
-              }, 800)
+                onBranch?.(message.id);
+                setIsBranching(false);
+              }, 800);
             }}
           />
         )}
       </div>
-    )
+    );
   }
 
   if (shouldRenderSegments) {
@@ -832,7 +939,7 @@ function BubbleMessageBubble({
               onRewrite={onRewrite}
               onEdit={onStartEdit}
               onDelete={onDelete}
-          isEdited={isEdited}
+              isEdited={isEdited}
               canRewrite={isAI}
               disabled={disabled}
             />
@@ -844,43 +951,57 @@ function BubbleMessageBubble({
             disabled={disabled}
             isBranching={isBranching}
             onClick={() => {
-              if (disabled) return
-              setIsBranching(true)
+              if (disabled) return;
+              setIsBranching(true);
               setTimeout(() => {
-                onBranch?.(message.id)
-                setIsBranching(false)
-              }, 800)
+                onBranch?.(message.id);
+                setIsBranching(false);
+              }, 800);
             }}
           />
         )}
       </div>
-    )
+    );
   }
 
   return (
-    <div 
-      className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}
+    <div
+      className={cn(
+        "flex flex-col gap-2",
+        isUser ? "items-end" : "items-start",
+      )}
     >
-      <div className={cn("relative flex w-full", isUser ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "relative flex w-full",
+          isUser ? "justify-end" : "justify-start",
+        )}
+      >
         {isCharacterLine && (
           <MessageAvatar
             className="mr-2 mt-1 h-8 w-8 text-xs"
             imageUrl={speakerProfile?.avatarUrl}
-            fallback={speakerProfile?.emoji ?? message.speakerName?.slice(0, 1) ?? "?"}
+            fallback={
+              speakerProfile?.emoji ?? message.speakerName?.slice(0, 1) ?? "?"
+            }
             alt={message.speakerName ?? "캐릭터"}
           />
         )}
         <div
           className={cn(
-            "relative w-fit max-w-[82%] rounded-2xl px-4 py-2.5 sm:max-w-[80%]",
+            "relative w-fit max-w-[82%] rounded-2xl sm:max-w-[80%]",
             isUser && "ml-auto",
           )}
           style={bubbleStyle}
         >
           {isCharacterLine && message.speakerName && (
             <div className="mb-1 flex items-center gap-1.5">
-              <span className="text-xs font-semibold opacity-90">{message.speakerName}</span>
-              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] opacity-70">직접 작성</span>
+              <span className="text-xs font-semibold opacity-90">
+                {message.speakerName}
+              </span>
+              <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] opacity-70">
+                직접 작성
+              </span>
             </div>
           )}
           {message.imageUrl && !imageLoadFailed && (
@@ -905,7 +1026,10 @@ function BubbleMessageBubble({
             >
               <p
                 className="whitespace-pre-wrap break-words [word-break:keep-all]"
-                style={{ fontSize: Math.min(14, Math.max(11, textSize)), lineHeight: Math.max(1.45, lineHeight) }}
+                style={{
+                  fontSize: Math.min(14, Math.max(11, textSize)),
+                  lineHeight: Math.max(1.45, lineHeight),
+                }}
               >
                 이미지 생성에 실패했어요. 잠시 후 다시 시도해주세요.
               </p>
@@ -941,9 +1065,11 @@ function BubbleMessageBubble({
             </div>
           )}
           {statusLabel && displayContent && (
-            <p className="mt-1 text-[10px] font-medium opacity-60">{statusLabel}</p>
+            <p className="mt-1 text-[10px] font-medium opacity-60">
+              {statusLabel}
+            </p>
           )}
-          
+
           {/* Edited indicator dot */}
           {isEdited && !isUser && (
             <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-background" />
@@ -993,39 +1119,42 @@ function BubbleMessageBubble({
           onSelectCandidate={onSelectCandidate}
         />
       )}
-      
+
       {/* Author Tools - only the latest message can be edited or deleted. */}
-      {isLatest && (isUser || isAI || isCharacterLine) && !isEditing && !disabled && (
-        <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-          <AuthorTools
-            messageId={message.id}
-            onRewrite={onRewrite}
-            onEdit={onStartEdit}
-            onDelete={onDelete}
-            isEdited={isEdited}
-            canRewrite={isAI}
-            disabled={disabled}
-          />
-        </div>
-      )}
-      
+      {isLatest &&
+        (isUser || isAI || isCharacterLine) &&
+        !isEditing &&
+        !disabled && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+            <AuthorTools
+              messageId={message.id}
+              onRewrite={onRewrite}
+              onEdit={onStartEdit}
+              onDelete={onDelete}
+              isEdited={isEdited}
+              canRewrite={isAI}
+              disabled={disabled}
+            />
+          </div>
+        )}
+
       {/* Branch Button - below AI messages */}
       {canBranch && !isEditing && (
         <BranchButton
           disabled={disabled}
           isBranching={isBranching}
           onClick={() => {
-            if (disabled) return
-            setIsBranching(true)
+            if (disabled) return;
+            setIsBranching(true);
             setTimeout(() => {
-              onBranch?.(message.id)
-              setIsBranching(false)
-            }, 800)
+              onBranch?.(message.id);
+              setIsBranching(false);
+            }, 800);
           }}
         />
       )}
     </div>
-  )
+  );
 }
 
 function AssistantSegmentedMessage({
@@ -1052,35 +1181,36 @@ function AssistantSegmentedMessage({
   onCancelEdit,
   onSaveEdit,
 }: {
-  message: ChatMessage
-  segments: MessageSegment[]
-  extraMessages: ChatMessage[]
-  regeneratingMessageId?: string | null
-  typingLabel?: string
-  avatarUrl?: string
-  avatarFallback?: string
-  mentionNames: string[]
-  themeConfig: ChatThemeConfig
-  textSize: number
-  lineHeight: number
-  isEdited?: boolean
-  isCharacterLine: boolean
-  latestEditableMessageId: string | null
-  editingMessageId: string | null
-  editedMessageIds: Set<string>
-  disabled: boolean
-  onRewrite?: (messageId: string) => void
-  onEdit: (messageId: string) => void
-  onDelete?: (messageId: string) => void
-  onCancelEdit: () => void
-  onSaveEdit: (messageId: string, nextContent: string) => void
+  message: ChatMessage;
+  segments: MessageSegment[];
+  extraMessages: ChatMessage[];
+  regeneratingMessageId?: string | null;
+  typingLabel?: string;
+  avatarUrl?: string;
+  avatarFallback?: string;
+  mentionNames: string[];
+  themeConfig: ChatThemeConfig;
+  textSize: number;
+  lineHeight: number;
+  isEdited?: boolean;
+  isCharacterLine: boolean;
+  latestEditableMessageId: string | null;
+  editingMessageId: string | null;
+  editedMessageIds: Set<string>;
+  disabled: boolean;
+  onRewrite?: (messageId: string) => void;
+  onEdit: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (messageId: string, nextContent: string) => void;
 }) {
   const firstDialogue = segments.find(
-    (segment): segment is Extract<MessageSegment, { type: "dialogue" }> => segment.type === "dialogue",
-  )
-  const speakerName = message.speakerName ?? firstDialogue?.speakerName
-  const avatarLabel = speakerName?.slice(0, 1) ?? "AI"
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+    (segment): segment is Extract<MessageSegment, { type: "dialogue" }> =>
+      segment.type === "dialogue",
+  );
+  const speakerName = message.speakerName ?? firstDialogue?.speakerName;
+  const avatarLabel = speakerName?.slice(0, 1) ?? "AI";
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
 
   return (
     <div className="assistant-message-group w-full max-w-[92%] pb-1">
@@ -1093,19 +1223,28 @@ function AssistantSegmentedMessage({
         />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold" style={{ color: themeTextPalette.text }}>
+            <span
+              className="truncate text-sm font-semibold"
+              style={{ color: themeTextPalette.text }}
+            >
               {speakerName ?? "AI"}
             </span>
             {isCharacterLine && (
               <span
                 className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-                style={{ backgroundColor: themeTextPalette.panelBg, color: themeTextPalette.mutedText }}
+                style={{
+                  backgroundColor: themeTextPalette.panelBg,
+                  color: themeTextPalette.mutedText,
+                }}
               >
                 직접 작성
               </span>
             )}
             {isEdited && !isCharacterLine && (
-              <span className="h-2 w-2 rounded-full bg-purple-500" aria-label="수정됨" />
+              <span
+                className="h-2 w-2 rounded-full bg-purple-500"
+                aria-label="수정됨"
+              />
             )}
           </div>
         </div>
@@ -1143,7 +1282,7 @@ function AssistantSegmentedMessage({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function UserSegmentedMessage({
@@ -1154,15 +1293,15 @@ function UserSegmentedMessage({
   lineHeight,
   bubbleStyle,
 }: {
-  parts: ComposerPart[]
-  mentionNames: string[]
-  themeConfig: ChatThemeConfig
-  textSize: number
-  lineHeight: number
-  bubbleStyle: CSSProperties
+  parts: ComposerPart[];
+  mentionNames: string[];
+  themeConfig: ChatThemeConfig;
+  textSize: number;
+  lineHeight: number;
+  bubbleStyle: CSSProperties;
 }) {
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
-  const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg)
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
+  const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg);
   const actionStyle = {
     color: themeTextPalette.mutedText,
     fontSize: textSize,
@@ -1170,7 +1309,7 @@ function UserSegmentedMessage({
     "--mention-bg": narrationMentionStyle.bg,
     "--mention-text": narrationMentionStyle.text,
     "--mention-border": narrationMentionStyle.border,
-  } as CSSProperties
+  } as CSSProperties;
 
   return (
     <div className="flex w-full flex-col items-end gap-2">
@@ -1184,11 +1323,14 @@ function UserSegmentedMessage({
             >
               {renderHighlightedMentions(part.text, mentionNames)}
             </p>
-          )
+          );
         }
 
         return (
-          <div key={`user-dialogue-${index}`} className="relative flex w-full justify-end">
+          <div
+            key={`user-dialogue-${index}`}
+            className="relative flex w-full justify-end"
+          >
             <div
               className="relative w-fit max-w-[82%] rounded-2xl px-4 py-2.5 sm:max-w-[80%]"
               style={bubbleStyle}
@@ -1201,10 +1343,10 @@ function UserSegmentedMessage({
               </p>
             </div>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 
 function AssistantExtraSection({
@@ -1224,27 +1366,32 @@ function AssistantExtraSection({
   onCancelEdit,
   onSaveEdit,
 }: {
-  messages: ChatMessage[]
-  regeneratingMessageId?: string | null
-  typingLabel?: string
-  textSize: number
-  lineHeight: number
-  themeConfig: ChatThemeConfig
-  latestEditableMessageId: string | null
-  editingMessageId: string | null
-  editedMessageIds: Set<string>
-  disabled: boolean
-  onRewrite?: (messageId: string) => void
-  onEdit: (messageId: string) => void
-  onDelete?: (messageId: string) => void
-  onCancelEdit: () => void
-  onSaveEdit: (messageId: string, nextContent: string) => void
+  messages: ChatMessage[];
+  regeneratingMessageId?: string | null;
+  typingLabel?: string;
+  textSize: number;
+  lineHeight: number;
+  themeConfig: ChatThemeConfig;
+  latestEditableMessageId: string | null;
+  editingMessageId: string | null;
+  editedMessageIds: Set<string>;
+  disabled: boolean;
+  onRewrite?: (messageId: string) => void;
+  onEdit: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (messageId: string, nextContent: string) => void;
 }) {
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
 
   return (
     <div className="mt-1.5 w-full max-w-[92%] space-y-2">
-      <p className="px-1 text-[11px] font-semibold" style={{ color: themeTextPalette.mutedText }}>부가 정보</p>
+      <p
+        className="px-1 text-[11px] font-semibold"
+        style={{ color: themeTextPalette.mutedText }}
+      >
+        부가 정보
+      </p>
       <div className="space-y-2">
         {messages.map((message) =>
           message.id === regeneratingMessageId ? (
@@ -1274,7 +1421,7 @@ function AssistantExtraSection({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function AssistantExtraCard({
@@ -1292,41 +1439,41 @@ function AssistantExtraCard({
   onCancelEdit,
   onSaveEdit,
 }: {
-  message: ChatMessage
-  textSize: number
-  lineHeight: number
-  themeConfig: ChatThemeConfig
-  isLatest: boolean
-  isEditing: boolean
-  isEdited: boolean
-  disabled: boolean
-  onRewrite?: (messageId: string) => void
-  onEdit: (messageId: string) => void
-  onDelete?: (messageId: string) => void
-  onCancelEdit: () => void
-  onSaveEdit: (messageId: string, nextContent: string) => void
+  message: ChatMessage;
+  textSize: number;
+  lineHeight: number;
+  themeConfig: ChatThemeConfig;
+  isLatest: boolean;
+  isEditing: boolean;
+  isEdited: boolean;
+  disabled: boolean;
+  onRewrite?: (messageId: string) => void;
+  onEdit: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (messageId: string, nextContent: string) => void;
 }) {
   const editableMessageContent = message.commandId
     ? getCommandEditableContent(message.content, message.commandId)
-    : normalizeMessageNewlines(message.content)
-  const [editDraft, setEditDraft] = useState(() => editableMessageContent)
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+    : normalizeMessageNewlines(message.content);
+  const [editDraft, setEditDraft] = useState(() => editableMessageContent);
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
   const lines = message.content
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-  const titleLine = lines[0] ?? "부가 정보"
-  const iconMatch = titleLine.match(/^(\S+)\s*(.*)$/)
-  const icon = iconMatch?.[1] ?? "•"
-  const title = iconMatch?.[2] || titleLine
-  const bodyLines = lines.slice(1)
-  const isInstagramCommand = message.commandId === "sns"
-  const isStatusCommand = message.commandId === "status"
-  const isPhoneCommand = message.commandId === "phone"
+    .filter(Boolean);
+  const titleLine = lines[0] ?? "부가 정보";
+  const iconMatch = titleLine.match(/^(\S+)\s*(.*)$/);
+  const icon = iconMatch?.[1] ?? "•";
+  const title = iconMatch?.[2] || titleLine;
+  const bodyLines = lines.slice(1);
+  const isInstagramCommand = message.commandId === "sns";
+  const isStatusCommand = message.commandId === "status";
+  const isPhoneCommand = message.commandId === "phone";
 
   useEffect(() => {
-    if (isEditing) setEditDraft(editableMessageContent)
-  }, [editableMessageContent, isEditing])
+    if (isEditing) setEditDraft(editableMessageContent);
+  }, [editableMessageContent, isEditing]);
 
   return (
     <div className="space-y-1.5">
@@ -1360,20 +1507,34 @@ function AssistantExtraCard({
               />
             )}
             {isEdited && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-purple-500" aria-label="수정됨" />
+              <span
+                className="absolute right-2 top-2 h-2 w-2 rounded-full bg-purple-500"
+                aria-label="수정됨"
+              />
             )}
           </>
         ) : (
           <>
-            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: themeTextPalette.text }}>
+            <div
+              className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold"
+              style={{ color: themeTextPalette.text }}
+            >
               <span className="text-sm leading-none">{icon}</span>
               <span>{title}</span>
-              {isEdited && <span className="h-2 w-2 rounded-full bg-purple-500" aria-label="수정됨" />}
+              {isEdited && (
+                <span
+                  className="h-2 w-2 rounded-full bg-purple-500"
+                  aria-label="수정됨"
+                />
+              )}
             </div>
             {bodyLines.length > 0 && (
               <div className="space-y-0.5">
                 {bodyLines.map((line, index) => (
-                  <p key={`${message.id}-extra-line-${index}`} className="break-words [word-break:keep-all]">
+                  <p
+                    key={`${message.id}-extra-line-${index}`}
+                    className="break-words [word-break:keep-all]"
+                  >
                     {line}
                   </p>
                 ))}
@@ -1406,7 +1567,7 @@ function AssistantExtraCard({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function MessageSegmentBlock({
@@ -1416,15 +1577,15 @@ function MessageSegmentBlock({
   textSize,
   lineHeight,
 }: {
-  segment: MessageSegment
-  mentionNames: string[]
-  themeConfig: ChatThemeConfig
-  textSize: number
-  lineHeight: number
+  segment: MessageSegment;
+  mentionNames: string[];
+  themeConfig: ChatThemeConfig;
+  textSize: number;
+  lineHeight: number;
 }) {
   if (segment.type === "narration") {
-    const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
-    const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg)
+    const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
+    const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg);
     const narrationStyle = {
       color: themeTextPalette.text,
       fontSize: textSize,
@@ -1432,7 +1593,7 @@ function MessageSegmentBlock({
       "--mention-bg": narrationMentionStyle.bg,
       "--mention-text": narrationMentionStyle.text,
       "--mention-border": narrationMentionStyle.border,
-    } as CSSProperties
+    } as CSSProperties;
 
     return (
       <p
@@ -1441,20 +1602,22 @@ function MessageSegmentBlock({
       >
         {renderHighlightedMentions(segment.content, mentionNames)}
       </p>
-    )
+    );
   }
 
-  const bubbleColor = themeConfig.preview.aiBubble
-  const bubbleTextColor = themeConfig.preview.aiText
-  const mentionStyle = getMentionStyle(bubbleColor)
+  const bubbleColor = themeConfig.preview.aiBubble;
+  const bubbleTextColor = themeConfig.preview.aiText;
+  const mentionStyle = getMentionStyle(bubbleColor);
   const bubbleStyle = {
     backgroundColor: bubbleColor,
     color: bubbleTextColor,
-    boxShadow: isDarkColor(themeConfig.preview.bg) ? "0 0 0 1px rgba(255,255,255,0.14)" : undefined,
+    boxShadow: isDarkColor(themeConfig.preview.bg)
+      ? "0 0 0 1px rgba(255,255,255,0.14)"
+      : undefined,
     "--mention-bg": mentionStyle.bg,
     "--mention-text": mentionStyle.text,
     "--mention-border": mentionStyle.border,
-  } as CSSProperties
+  } as CSSProperties;
   return (
     <div className="relative flex w-full justify-start">
       <div
@@ -1469,7 +1632,7 @@ function MessageSegmentBlock({
         </p>
       </div>
     </div>
-  )
+  );
 }
 
 function EditMessageForm({
@@ -1480,21 +1643,24 @@ function EditMessageForm({
   onCancelEdit,
   onSaveEdit,
 }: {
-  editDraft: string
-  setEditDraft: (value: string) => void
-  disabled: boolean
-  isUser: boolean
-  onCancelEdit: () => void
-  onSaveEdit: (nextContent: string) => void
+  editDraft: string;
+  setEditDraft: (value: string) => void;
+  disabled: boolean;
+  isUser: boolean;
+  onCancelEdit: () => void;
+  onSaveEdit: (nextContent: string) => void;
 }) {
   return (
     <form
       onSubmit={(event) => {
-        event.preventDefault()
-        if (disabled) return
-        onSaveEdit(normalizeMessageNewlines(editDraft))
+        event.preventDefault();
+        if (disabled) return;
+        onSaveEdit(normalizeMessageNewlines(editDraft));
       }}
-      className={cn("w-full max-w-[82%] space-y-2 sm:max-w-[80%]", isUser && "ml-auto")}
+      className={cn(
+        "w-full max-w-[82%] space-y-2 sm:max-w-[80%]",
+        isUser && "ml-auto",
+      )}
     >
       <textarea
         value={editDraft}
@@ -1504,7 +1670,12 @@ function EditMessageForm({
         disabled={disabled}
         className="max-h-[50vh] min-h-[168px] w-full resize-y whitespace-pre-wrap rounded-xl border border-border bg-input px-3 py-2 text-[15px] leading-relaxed text-foreground outline-none focus:ring-2 focus:ring-ring"
       />
-      <div className={cn("flex items-center gap-2", isUser ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "flex items-center gap-2",
+          isUser ? "justify-end" : "justify-start",
+        )}
+      >
         <button
           type="button"
           onClick={onCancelEdit}
@@ -1522,7 +1693,7 @@ function EditMessageForm({
         </button>
       </div>
     </form>
-  )
+  );
 }
 
 function BranchButton({
@@ -1530,9 +1701,9 @@ function BranchButton({
   isBranching,
   onClick,
 }: {
-  disabled: boolean
-  isBranching: boolean
-  onClick: () => void
+  disabled: boolean;
+  isBranching: boolean;
+  onClick: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 -mx-1 -mt-1">
@@ -1545,17 +1716,27 @@ function BranchButton({
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
-        <svg className={cn("w-3 h-3", isBranching && "animate-spin")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9" strokeLinecap="round" strokeLinejoin="round"/>
+        <svg
+          className={cn("w-3 h-3", isBranching && "animate-spin")}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        >
+          <path
+            d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
         <span>{isBranching ? "분기 생성 중..." : "여기서부터 분기"}</span>
       </button>
     </div>
-  )
+  );
 }
 
 function getMentionStyle(backgroundColor: string) {
-  const isDark = isDarkColor(backgroundColor)
+  const isDark = isDarkColor(backgroundColor);
   return isDark
     ? {
         bg: "rgba(255,255,255,0.16)",
@@ -1566,43 +1747,64 @@ function getMentionStyle(backgroundColor: string) {
         bg: "rgba(0,0,0,0.08)",
         text: "#111827",
         border: "rgba(0,0,0,0.14)",
-      }
+      };
 }
 
 function isDarkColor(hexColor: string) {
-  const hex = hexColor.replace("#", "")
-  if (hex.length !== 6) return true
-  const red = Number.parseInt(hex.slice(0, 2), 16)
-  const green = Number.parseInt(hex.slice(2, 4), 16)
-  const blue = Number.parseInt(hex.slice(4, 6), 16)
-  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255
-  return luminance < 0.55
+  const hex = hexColor.replace("#", "");
+  if (hex.length !== 6) return true;
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  return luminance < 0.55;
 }
 
-function BubbleTypingDots({ color, compact = false }: { color: string; compact?: boolean }) {
-  const dotSize = compact ? "h-1 w-1" : "h-1.5 w-1.5"
+function BubbleTypingDots({
+  color,
+  compact = false,
+}: {
+  color: string;
+  compact?: boolean;
+}) {
+  const dotSize = compact ? "h-1 w-1" : "h-1.5 w-1.5";
 
   return (
     <span className="inline-flex items-center gap-1" aria-hidden="true">
       <span
-        className={cn(dotSize, "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:0ms]")}
+        className={cn(
+          dotSize,
+          "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:0ms]",
+        )}
         style={{ backgroundColor: color }}
       />
       <span
-        className={cn(dotSize, "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:150ms]")}
+        className={cn(
+          dotSize,
+          "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:150ms]",
+        )}
         style={{ backgroundColor: color }}
       />
       <span
-        className={cn(dotSize, "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:300ms]")}
+        className={cn(
+          dotSize,
+          "animate-bounce rounded-full motion-reduce:animate-none [animation-delay:300ms]",
+        )}
         style={{ backgroundColor: color }}
       />
     </span>
-  )
+  );
 }
 
-function BubbleCommandGeneratingIndicator({ label, themeConfig }: { label: string; themeConfig: ChatThemeConfig }) {
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
-  const displayLabel = label.replace(/\.+$/u, "")
+function BubbleCommandGeneratingIndicator({
+  label,
+  themeConfig,
+}: {
+  label: string;
+  themeConfig: ChatThemeConfig;
+}) {
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
+  const displayLabel = label.replace(/\.+$/u, "");
 
   return (
     <div className="flex justify-start">
@@ -1622,7 +1824,7 @@ function BubbleCommandGeneratingIndicator({ label, themeConfig }: { label: strin
         <span>{displayLabel}</span>
       </div>
     </div>
-  )
+  );
 }
 
 function BubbleMessageGeneratingIndicator({
@@ -1631,12 +1833,12 @@ function BubbleMessageGeneratingIndicator({
   textSize,
   lineHeight,
 }: {
-  label: string
-  themeConfig: ChatThemeConfig
-  textSize: number
-  lineHeight: number
+  label: string;
+  themeConfig: ChatThemeConfig;
+  textSize: number;
+  lineHeight: number;
 }) {
-  const displayLabel = label.replace(/\.+$/u, "")
+  const displayLabel = label.replace(/\.+$/u, "");
 
   return (
     <div className="flex justify-start">
@@ -1655,39 +1857,63 @@ function BubbleMessageGeneratingIndicator({
         <span>{displayLabel}</span>
       </div>
     </div>
-  )
+  );
 }
 
-function BubbleImageGeneratingIndicator({ label, themeConfig }: { label: string; themeConfig: ChatThemeConfig }) {
-  const [dotCount, setDotCount] = useState(1)
-  const baseLabel = label.replace(/\.+$/, "")
-  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg)
+function BubbleImageGeneratingIndicator({
+  label,
+  themeConfig,
+}: {
+  label: string;
+  themeConfig: ChatThemeConfig;
+}) {
+  const [dotCount, setDotCount] = useState(1);
+  const baseLabel = label.replace(/\.+$/, "");
+  const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setDotCount((current) => (current >= 3 ? 1 : current + 1))
-    }, 360)
-    return () => window.clearInterval(timer)
-  }, [])
+      setDotCount((current) => (current >= 3 ? 1 : current + 1));
+    }, 360);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <div className="flex justify-start">
       <div
-        className="w-full max-w-[82%] overflow-hidden rounded-2xl border shadow-sm sm:max-w-[80%]"
-        style={{ backgroundColor: themeTextPalette.panelBg, borderColor: themeTextPalette.panelBorder }}
+        className="w-full max-w-[82%] overflow-hidden rounded-2xl"
+        style={{
+          backgroundColor: themeTextPalette.panelBg,
+          borderColor: themeTextPalette.panelBorder,
+        }}
       >
         <div className="flex aspect-square max-h-80 min-h-48 w-full flex-col items-center justify-center gap-3 px-4 text-center">
-          <p className="text-sm font-medium" style={{ color: themeTextPalette.mutedText }} aria-live="polite">
+          <p
+            className="text-sm font-medium"
+            style={{ color: themeTextPalette.mutedText }}
+            aria-live="polite"
+          >
             {baseLabel}
-            <span className="inline-block w-5 text-left">{".".repeat(dotCount)}</span>
+            <span className="inline-block w-5 text-left">
+              {".".repeat(dotCount)}
+            </span>
           </p>
           <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
-            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
-            <span className="h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]" style={{ backgroundColor: themeTextPalette.indicator }} />
+            <span
+              className="h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]"
+              style={{ backgroundColor: themeTextPalette.indicator }}
+            />
+            <span
+              className="h-2 w-2 animate-bounce rounded-full [animation-delay:150ms]"
+              style={{ backgroundColor: themeTextPalette.indicator }}
+            />
+            <span
+              className="h-2 w-2 animate-bounce rounded-full [animation-delay:300ms]"
+              style={{ backgroundColor: themeTextPalette.indicator }}
+            />
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

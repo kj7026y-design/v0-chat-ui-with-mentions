@@ -17,6 +17,12 @@ export interface ChatHistoryPage {
   hasMore: boolean
 }
 
+export const MAX_KEEPALIVE_REQUEST_BYTES = 60 * 1024
+
+export function canUseKeepalive(body: string) {
+  return new TextEncoder().encode(body).byteLength <= MAX_KEEPALIVE_REQUEST_BYTES
+}
+
 async function readJsonResponse<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({})) as T & { error?: string }
   if (!response.ok) throw new Error(data.error || "요청을 처리하지 못했어요.")
@@ -53,11 +59,12 @@ export async function loadChatHistoryPage(
 }
 
 export async function saveChatMessages(roomId: string, messages: ChatMessage[], characterName?: string) {
+  const body = JSON.stringify({ roomId, characterName, messages })
   const response = await fetch("/api/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ roomId, characterName, messages }),
-    keepalive: true,
+    body,
+    keepalive: canUseKeepalive(body),
   })
   return readJsonResponse<{ saved: number }>(response)
 }

@@ -5,6 +5,8 @@ import {
   FALLBACK_IMAGEN_MODEL,
   IMAGEN_OUTPUT_MIME_TYPE,
   IMAGEN_OUTPUT_SIZE,
+  NATIVE_IMAGE_FALLBACK_MODEL,
+  buildGeminiImageInteractionRequest,
   buildImagenGenerateRequest,
 } from "@/lib/imagen-config"
 
@@ -19,6 +21,10 @@ function getImagenModel() {
 
 function getImagenFallbackModel() {
   return process.env.GOOGLE_IMAGEN_FALLBACK_MODEL?.trim() || FALLBACK_IMAGEN_MODEL
+}
+
+function getNativeImageFallbackModel() {
+  return process.env.GOOGLE_GEMINI_IMAGE_MODEL?.trim() || NATIVE_IMAGE_FALLBACK_MODEL
 }
 
 function getErrorStatus(error: unknown) {
@@ -63,56 +69,84 @@ export async function POST(request: Request) {
 
   try {
     const ai = new GoogleGenAI({ apiKey })
+    const imagenModels = [...new Set([model, getImagenFallbackModel()])]
+    let imagenResponse: GenerateImagesResponse | undefined
     let outputModel = model
-    let response: GenerateImagesResponse
 
-    try {
-      response = await ai.models.generateImages(
-        buildImagenGenerateRequest(prompt, outputModel),
+    for (const imagenModel of imagenModels) {
+      try {
+        outputModel = imagenModel
+        imagenResponse = await ai.models.generateImages(
+          buildImagenGenerateRequest(prompt, imagenModel),
+        )
+        break
+      } catch (error) {
+        if (!isModelUnavailableError(error)) throw error
+        console.warn(`[Imagen model unavailable] ${imagenModel}`)
+      }
+    }
+
+    if (imagenResponse) {
+      const generatedImage = imagenResponse.generatedImages?.find(
+        (item) => Boolean(item.image?.imageBytes),
       )
-    } catch (error) {
-      const fallbackModel = getImagenFallbackModel()
-      if (!isModelUnavailableError(error) || fallbackModel === outputModel) throw error
+      const imageBytes = generatedImage?.image?.imageBytes
 
-      console.warn(`[Imagen model unavailable] ${outputModel}; retrying with ${fallbackModel}`)
-      outputModel = fallbackModel
-      response = await ai.models.generateImages(
-        buildImagenGenerateRequest(prompt, outputModel),
+      if (!imageBytes) {
+        const filterReason = imagenResponse.generatedImages
+          ?.map((item) => item.raiFilteredReason?.trim())
+          .find(Boolean)
+        return NextResponse.json(
+          {
+            error: filterReason
+              ? `안전 정책으로 이미지를 생성하지 못했습니다: ${filterReason}`
+              : "Imagen이 이미지 데이터를 반환하지 않았습니다.",
+          },
+          { status: 422 },
+        )
+      }
+
+      const mimeType = generatedImage.image?.mimeType || IMAGEN_OUTPUT_MIME_TYPE
+      return NextResponse.json(
+        {
+          imageUrl: `data:${mimeType};base64,${imageBytes}`,
+          mimeType,
+          model: outputModel,
+          requestedModel: model,
+          provider: "google-imagen",
+          width: IMAGEN_OUTPUT_SIZE,
+          height: IMAGEN_OUTPUT_SIZE,
+        },
       )
     }
 
-    const generatedImage = response.generatedImages?.find(
-      (item) => Boolean(item.image?.imageBytes),
+    const nativeImageModel = getNativeImageFallbackModel()
+    console.warn(`[Imagen unavailable] retrying with native image model ${nativeImageModel}`)
+    const interaction = await ai.interactions.create(
+      buildGeminiImageInteractionRequest(prompt, nativeImageModel),
     )
-    const imageBytes = generatedImage?.image?.imageBytes
-
+    const imageBytes = interaction.output_image?.data
     if (!imageBytes) {
-      const filterReason = response.generatedImages
-        ?.map((item) => item.raiFilteredReason?.trim())
-        .find(Boolean)
       return NextResponse.json(
-        {
-          error: filterReason
-            ? `안전 정책으로 이미지를 생성하지 못했습니다: ${filterReason}`
-            : "Imagen이 이미지 데이터를 반환하지 않았습니다.",
-        },
+        { error: "Gemini 이미지 모델이 이미지 데이터를 반환하지 않았습니다." },
         { status: 422 },
       )
     }
 
-    const mimeType = generatedImage.image?.mimeType || IMAGEN_OUTPUT_MIME_TYPE
+    const mimeType = interaction.output_image?.mime_type || IMAGEN_OUTPUT_MIME_TYPE
     return NextResponse.json({
       imageUrl: `data:${mimeType};base64,${imageBytes}`,
       mimeType,
-      model: outputModel,
+      model: nativeImageModel,
       requestedModel: model,
+      provider: "google-gemini-image",
       width: IMAGEN_OUTPUT_SIZE,
       height: IMAGEN_OUTPUT_SIZE,
     })
   } catch (error) {
-    console.error("[Imagen image generation failed]", error)
+    console.error("[Google image generation failed]", error)
     return NextResponse.json(
-      { error: "Google Imagen 이미지 생성에 실패했습니다." },
+      { error: "Google 이미지 생성에 실패했습니다." },
       { status: getErrorStatus(error) },
     )
   }

@@ -11,7 +11,7 @@ export interface GeneratedMedia {
   type: "image"
   imageUrl: string
   prompt: string
-  provider?: "pollinations" | "google-imagen" | "openai" | "replicate" | "custom"
+  provider?: "pollinations" | "google-imagen" | "google-gemini-image" | "openai" | "replicate" | "custom"
   workId?: string
   chatId?: string
   characterId?: string
