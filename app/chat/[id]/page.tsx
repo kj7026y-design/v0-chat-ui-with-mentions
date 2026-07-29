@@ -101,6 +101,7 @@ const COMMAND_NAME_BY_ID: Record<NonNullable<ChatMessage["commandId"]>, string> 
   status: "상태창",
   audience: "시청자반응",
   summary: "요약",
+  image: "이미지",
 }
 
 function getCommandLoadingLabel(commandName: string, characterName: string) {
@@ -114,6 +115,7 @@ function getCommandLoadingLabel(commandName: string, characterName: string) {
 
 function getTextCommandId(commandName: string): ChatMessage["commandId"] {
   const normalizedCommand = commandName.replace(/^\//u, "").trim()
+  if (normalizedCommand === "이미지") return "image"
   if (normalizedCommand === "휴대폰") return "phone"
   if (normalizedCommand === "SNS") return "sns"
   if (normalizedCommand === "상태창" || normalizedCommand === "상태바") return "status"
@@ -137,9 +139,7 @@ function getCommandGenerationErrorContent(commandName: string) {
 }
 
 function getGeneratedImageProvider(message: ChatMessage) {
-  return message.provider === "google-gemini-image"
-    ? "google-gemini-image" as const
-    : "google-imagen" as const
+  return message.provider === "fal" ? "fal" as const : "custom" as const
 }
 
 const storyStatus: StoryStatus = {
@@ -541,7 +541,7 @@ export default function ChatPage() {
     const shouldUseFreeImage = usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
     if (!shouldUseFreeImage && credits < IMAGE_GENERATION_CREDIT_COST) return null
 
-    const result = await runCommand("이미지", characterName, buildImageCommandContext(contextMessages, statusOverride))
+    const result = await runCommand("이미지", characterName, buildImageCommandContext(contextMessages, statusOverride), selectedModelId)
     if (result.kind !== "message" || !result.message.imageUrl) return null
 
     const media = saveGeneratedMedia({
@@ -589,7 +589,7 @@ export default function ChatPage() {
 
     for (const command of selectedCommands) {
       try {
-        const result = await runCommand(command.name, characterName, buildImageCommandContext(contextMessages, statusOverride))
+        const result = await runCommand(command.name, characterName, buildImageCommandContext(contextMessages, statusOverride), selectedModelId)
         if (result.kind === "message") {
           autoMessages.push({ ...result.message, turnId })
         }
@@ -1286,7 +1286,7 @@ export default function ChatPage() {
     try {
       const startedAt = Date.now()
       const turnId = makeTurnId()
-      const result = await runCommand(command, characterName, buildImageCommandContext())
+      const result = await runCommand(command, characterName, buildImageCommandContext(), selectedModelId)
       const minimumLoadingDuration = isImageCommand ? 1400 : 450
       const remainingDelay = Math.max(0, minimumLoadingDuration - (Date.now() - startedAt))
       if (remainingDelay > 0) {
@@ -1325,6 +1325,9 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, nextMessage])
     } catch (error) {
       console.error(`[command] ${normalizedCommand} generation failed`, error)
+      const generationErrorMessage = error instanceof Error
+        ? error.message
+        : "명령어 생성에 실패했습니다."
       const errorMessage: ChatMessage = {
         id: `command-error-${Date.now()}`,
         type: "status",
@@ -1333,6 +1336,7 @@ export default function ChatPage() {
         timestamp: new Date(),
         status: "failed",
         isGenerationError: Boolean(commandId),
+        generationErrorMessage,
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
@@ -1350,6 +1354,7 @@ export default function ChatPage() {
 
     if (targetMessage.commandId) {
       const commandName = COMMAND_NAME_BY_ID[targetMessage.commandId]
+      const isImageCommand = targetMessage.commandId === "image"
       if (!commandName) {
         toast.error("다시 생성할 명령어를 찾지 못했어요.")
         return
@@ -1357,14 +1362,35 @@ export default function ChatPage() {
 
       setIsTyping(true)
       setTypingLabel(getCommandLoadingLabel(commandName, characterName))
-      setTypingVariant("command")
+      setTypingVariant(isImageCommand ? "image" : "command")
       setRegeneratingMessageId(messageId)
 
       try {
-        const result = await runCommand(commandName, characterName, buildImageCommandContext(messages.slice(0, targetIndex)))
+        const result = await runCommand(commandName, characterName, buildImageCommandContext(messages.slice(0, targetIndex)), selectedModelId)
         if (result.kind !== "message") {
           toast(result.message)
           return
+        }
+        if (isImageCommand && !result.message.imageUrl) {
+          throw new Error("이미지 재생성 결과가 올바르지 않습니다.")
+        }
+
+        let regeneratedMessage = result.message
+        if (isImageCommand && result.message.imageUrl) {
+          const userId = getCurrentUserId()
+          const media = saveGeneratedMedia({
+            imageUrl: result.message.imageUrl,
+            prompt: result.message.originalContent || "",
+            provider: getGeneratedImageProvider(result.message),
+            workId: currentWork?.id,
+            chatId,
+            characterId: currentCharacter?.id,
+            userId,
+            messageId,
+            title: `${characterName} 무료 재생성 이미지`,
+          })
+          regeneratedMessage = { ...result.message, mediaId: media.id }
+          attachMediaToMessage(messageId, media.id)
         }
 
         setMessages((prev) =>
@@ -1372,10 +1398,10 @@ export default function ChatPage() {
             message.id === messageId
               ? {
                   ...message,
-                  ...result.message,
+                  ...regeneratedMessage,
                   id: message.id,
                   turnId: message.turnId,
-                  commandId: targetMessage.commandId,
+                  commandId: isImageCommand ? undefined : targetMessage.commandId,
                   timestamp: new Date(),
                   status: "completed",
                   isGenerationError: false,
@@ -1386,7 +1412,11 @@ export default function ChatPage() {
           ),
         )
         setEditedMessageIds((prev) => new Set(prev).add(messageId))
-        toast.success("명령어 메시지를 다시 생성했어요.")
+        toast.success(
+          isImageCommand
+            ? "이미지를 무료로 다시 생성했어요."
+            : "명령어 메시지를 다시 생성했어요.",
+        )
       } catch (error) {
         const errorText = error instanceof Error
           ? error.message
@@ -1615,7 +1645,7 @@ export default function ChatPage() {
       setTypingVariant("image")
 
       try {
-        const result = await runCommand("이미지", characterName, buildImageCommandContext(editedMessages))
+        const result = await runCommand("이미지", characterName, buildImageCommandContext(editedMessages), selectedModelId)
         if (result.kind !== "message" || !result.message.imageUrl) {
           throw new Error("Image regeneration failed")
         }
@@ -1663,6 +1693,10 @@ export default function ChatPage() {
                   content: "이미지 재생성에 실패했어요. 잠시 후 다시 시도해주세요.",
                   imageUrl: undefined,
                   imageName: undefined,
+                  commandId: "image",
+                  status: "failed",
+                  isGenerationError: true,
+                  generationErrorMessage: "이미지 재생성에 실패했습니다.",
                 }
               : message,
           ),

@@ -4103,6 +4103,7 @@ async function handleGeminiChat(
   messages: NonNullable<ChatRequestBody["messages"]>,
   mode: Extract<ChatModelMode, "normal" | "premium">,
   responseMimeType?: "application/json",
+  preferredModel?: string,
 ) {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
@@ -4114,7 +4115,10 @@ async function handleGeminiChat(
 
   const genAI = new GoogleGenerativeAI(apiKey)
   const prompt = formatMessagesForGemini(messages)
-  const modelCandidates = getGeminiModelCandidates(mode)
+  const modelCandidates = [
+    preferredModel?.trim(),
+    ...getGeminiModelCandidates(mode),
+  ].filter((model, index, models): model is string => Boolean(model) && models.indexOf(model) === index)
   let lastError: unknown
 
   for (const modelName of modelCandidates) {
@@ -4706,6 +4710,65 @@ async function handleOpenAIChat(
   return NextResponse.json({ result: content })
 }
 
+async function handleOpenRouterPlainChat(
+  messages: ChatRequestBody["messages"],
+  model: ChatModelConfig,
+) {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim()
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "OPENROUTER_API_KEY가 설정되어 있지 않습니다. .env.local 또는 배포 환경변수에 OPENROUTER_API_KEY를 추가해 주세요." },
+      { status: 503 },
+    )
+  }
+
+  const response = await withTimeout(fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "X-Title": process.env.OPENROUTER_APP_NAME?.trim() || "StoryChat",
+      ...(process.env.OPENROUTER_SITE_URL?.trim()
+        ? { "HTTP-Referer": process.env.OPENROUTER_SITE_URL.trim() }
+        : {}),
+    },
+    body: JSON.stringify({
+      model: getOpenRouterModelName(model),
+      messages,
+      temperature: 0.8,
+      max_completion_tokens: Math.min(model.maxTokens ?? 2_000, 2_000),
+    }),
+  }), OPENROUTER_TIMEOUT_MS, "openrouter-fallback")
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "")
+    return NextResponse.json(
+      { error: errorText || `OpenRouter chat API failed: ${response.status}` },
+      { status: response.status },
+    )
+  }
+
+  const data = await response.json().catch(() => null) as {
+    choices?: Array<{
+      message?: {
+        content?: string
+      }
+    }>
+    error?: {
+      message?: string
+    }
+  } | null
+  const content = data?.choices?.[0]?.message?.content?.trim()
+  if (!content) {
+    return NextResponse.json(
+      { error: data?.error?.message || "OpenRouter returned empty content" },
+      { status: 502 },
+    )
+  }
+
+  return NextResponse.json({ result: content })
+}
+
 async function handlePlainChat(
   normalizedBody: ReturnType<typeof normalizeBody>,
   model: ChatModelConfig,
@@ -4716,8 +4779,16 @@ async function handlePlainChat(
     return handleOpenAIChat(messages, model, responseMimeType)
   }
 
-  if (mode === "premium" || mode === "normal") {
-    return handleGeminiChat(messages, mode, responseMimeType)
+  if (model.provider === "openrouter") {
+    return handleOpenRouterPlainChat(messages, model)
+  }
+
+  if (model.provider === "gemini") {
+    const geminiMode = mode === "premium" ? "premium" : "normal"
+    const preferredModel = model.id === "gemini-3-flash-rp"
+      ? getProviderModelName(model)
+      : undefined
+    return handleGeminiChat(messages, geminiMode, responseMimeType, preferredModel)
   }
 
   return handleFreeChat(messages, systemPrompt, fallbackPrompt, model)
@@ -4728,6 +4799,43 @@ export async function runPlainChat(
   model: ChatModelConfig,
 ) {
   return handlePlainChat(normalizedBody, model)
+}
+
+export async function generateTextWithSelectedChatModel({
+  modelId,
+  messages,
+}: {
+  modelId?: string
+  messages: NonNullable<ChatRequestBody["messages"]>
+}) {
+  const body: ChatRequestBody = {
+    modelId: normalizeChatModelId(modelId) ?? DEFAULT_CHAT_MODEL_ID,
+    roleplayEnabled: false,
+    messages,
+  }
+  const normalizedBody = normalizeBody(body)
+  const model = getChatModelConfig(normalizedBody.modelId)
+  const response = await runPlainChat(normalizedBody, model)
+  const data = await response.json().catch(() => null) as {
+    result?: string
+    content?: string
+    error?: string
+  } | null
+
+  if (!response.ok) {
+    throw new ChatApiError(data?.error || `${model.label} 텍스트 생성에 실패했습니다.`, response.status)
+  }
+
+  const content = (data?.result ?? data?.content)?.trim()
+  if (!content) {
+    throw new ChatApiError(`${model.label}이 빈 응답을 반환했습니다.`, 502)
+  }
+
+  return {
+    content,
+    modelId: model.id,
+    provider: model.provider,
+  }
 }
 
 async function readChatResultFromResponse(response: Response) {

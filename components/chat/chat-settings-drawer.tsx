@@ -1,11 +1,7 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import Link from "next/link"
-import { X, Palette, SlidersHorizontal, Trash2, LogOut, Check, Sun, Moon, MessageSquare, Send, Gem } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useTheme } from "@/components/theme-provider"
-import { ConfirmModal } from "@/components/ui/app-modal"
+import { useTheme } from "@/components/theme-provider";
+import { ConfirmModal } from "@/components/ui/app-modal";
 import {
   Dialog,
   DialogContent,
@@ -13,16 +9,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
+import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage";
 import {
   CHAT_MEMORY_MEMO_MAX_LENGTH,
   getChatMemoryMemo,
   normalizeChatMemoryMemo,
   saveChatMemoryMemo,
-} from "@/lib/chat-memory-storage"
-import { getChatMedia, type ChatMediaItem } from "@/lib/chat-media-storage"
-import type { StoryPersona } from "@/lib/storychat-storage"
-import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, SLASH_COMMANDS } from "@/lib/chat-types"
+} from "@/lib/chat-memory-storage";
 import {
   CHAT_LINE_HEIGHT_MAX,
   CHAT_LINE_HEIGHT_MIN,
@@ -31,24 +25,57 @@ import {
   getChatReadingSettings,
   saveChatReadingSettings,
   type ChatReadingSettings,
-} from "@/lib/chat-settings-storage"
+} from "@/lib/chat-settings-storage";
+import {
+  AUTO_COMMAND_IDS,
+  MAX_COMMAND_SUGGESTIONS,
+  SLASH_COMMANDS,
+} from "@/lib/chat-types";
+import type { StoryPersona } from "@/lib/storychat-storage";
+import { cn } from "@/lib/utils";
+import {
+  ChartNoAxesColumnIncreasing,
+  ChartNoAxesCombined,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  FlaskConical,
+  Gem,
+  ImageIcon,
+  LogOut,
+  MessageSquare,
+  MessageSquareHeart,
+  MessageSquareText,
+  Moon,
+  NotebookTabs,
+  Palette,
+  Send,
+  Smartphone,
+  Sun,
+  Trash2,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
-type ChatThemeId = "light" | "dark" | "message" | "messenger"
-type AppThemeMode = "light" | "dark"
+type ChatThemeId = "light" | "dark" | "message" | "messenger";
+type AppThemeMode = "light" | "dark";
 
-const CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY = "storychat_chat_theme_mode_suggestion_dismissed"
+const CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY =
+  "storychat_chat_theme_mode_suggestion_dismissed";
 
 interface ChatThemeConfig {
-  id: ChatThemeId
-  label: string
-  icon: React.ReactNode
+  id: ChatThemeId;
+  label: string;
+  icon: React.ReactNode;
   preview: {
-    bg: string
-    userBubble: string
-    userText: string
-    aiBubble: string
-    aiText: string
-  }
+    bg: string;
+    userBubble: string;
+    userText: string;
+    aiBubble: string;
+    aiText: string;
+  };
 }
 
 const chatThemes: ChatThemeConfig[] = [
@@ -100,39 +127,41 @@ const chatThemes: ChatThemeConfig[] = [
       aiText: "#000000",
     },
   },
-]
+];
 
-function getPreferredAppThemeForChatTheme(chatTheme: ChatThemeId): AppThemeMode {
-  return chatTheme === "dark" ? "dark" : "light"
+function getPreferredAppThemeForChatTheme(
+  chatTheme: ChatThemeId,
+): AppThemeMode {
+  return chatTheme === "dark" ? "dark" : "light";
 }
 
 function getAppThemeLabel(theme: AppThemeMode) {
-  return theme === "dark" ? "다크 모드" : "라이트 모드"
+  return theme === "dark" ? "다크 모드" : "라이트 모드";
 }
 
 function getChatThemeLabel(themeId: ChatThemeId) {
-  return chatThemes.find((theme) => theme.id === themeId)?.label ?? "선택한"
+  return chatThemes.find((theme) => theme.id === themeId)?.label ?? "선택한";
 }
 
 interface ChatSettingsDrawerProps {
-  isOpen: boolean
-  onClose: () => void
-  characterName: string
-  characterEmoji: string
-  chatId: string
-  creditBalance?: number
-  currentPersona?: StoryPersona
-  canShowProgressStatus?: boolean
-  onChatThemeChange?: (theme: ChatThemeId) => void
-  onReadingSettingsChange?: (settings: ChatReadingSettings) => void
-  onClearChat?: () => void
-  onLeaveChat?: () => void
+  isOpen: boolean;
+  onClose: () => void;
+  characterName: string;
+  characterEmoji: string;
+  chatId: string;
+  creditBalance?: number;
+  currentPersona?: StoryPersona;
+  canShowProgressStatus?: boolean;
+  onChatThemeChange?: (theme: ChatThemeId) => void;
+  onReadingSettingsChange?: (settings: ChatReadingSettings) => void;
+  onClearChat?: () => void;
+  onLeaveChat?: () => void;
 }
 
-export function ChatSettingsDrawer({ 
-  isOpen, 
-  onClose, 
-  characterName, 
+export function ChatSettingsDrawer({
+  isOpen,
+  onClose,
+  characterName,
   characterEmoji,
   chatId,
   creditBalance,
@@ -143,14 +172,16 @@ export function ChatSettingsDrawer({
   onClearChat,
   onLeaveChat,
 }: ChatSettingsDrawerProps) {
-  const { resolvedTheme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  const [selectedChatTheme, setSelectedChatTheme] = useState<ChatThemeId>("light")
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [selectedChatTheme, setSelectedChatTheme] =
+    useState<ChatThemeId>("light");
   const [themeModeSuggestion, setThemeModeSuggestion] = useState<{
-    chatTheme: ChatThemeId
-    targetTheme: AppThemeMode
-  } | null>(null)
-  const [dontShowThemeModeSuggestion, setDontShowThemeModeSuggestion] = useState(false)
+    chatTheme: ChatThemeId;
+    targetTheme: AppThemeMode;
+  } | null>(null);
+  const [dontShowThemeModeSuggestion, setDontShowThemeModeSuggestion] =
+    useState(false);
   const [readingSettings, setReadingSettings] = useState<ChatReadingSettings>({
     textSize: 13,
     textSizeUserSet: false,
@@ -160,124 +191,133 @@ export function ChatSettingsDrawer({
     selectedCommandIds: [],
     testBypassRoleplayRules: false,
     testRawRoleplayStream: false,
-  })
-  const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([])
-  const [isMemoryMemoOpen, setIsMemoryMemoOpen] = useState(false)
-  const [memoryMemoDraft, setMemoryMemoDraft] = useState("")
-  const memoryTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false)
-  const autoCommandOptions = SLASH_COMMANDS.filter((command) => AUTO_COMMAND_IDS.includes(command.id))
-  const validSelectedCommandIds = readingSettings.selectedCommandIds.filter((id) =>
-    autoCommandOptions.some((command) => command.id === id),
-  )
+  });
+  const [sharedMedia, setSharedMedia] = useState<ChatMediaItem[]>([]);
+  const [isMemoryMemoOpen, setIsMemoryMemoOpen] = useState(false);
+  const [memoryMemoDraft, setMemoryMemoDraft] = useState("");
+  const memoryTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false);
+  const [isDisplayOpen, setIsDisplayOpen] = useState(true);
+  const [isAssistOpen, setIsAssistOpen] = useState(true);
+  const [isDeveloperOpen, setIsDeveloperOpen] = useState(false);
+  const autoCommandOptions = SLASH_COMMANDS.filter((command) =>
+    AUTO_COMMAND_IDS.includes(command.id),
+  );
+  const validSelectedCommandIds = readingSettings.selectedCommandIds.filter(
+    (id) => autoCommandOptions.some((command) => command.id === id),
+  );
 
   // Load chat-specific theme on mount
   useEffect(() => {
-    setMounted(true)
-    const savedTheme = localStorage.getItem(`chat-theme-${chatId}`)
+    setMounted(true);
+    const savedTheme = localStorage.getItem(`chat-theme-${chatId}`);
     if (savedTheme && chatThemes.some((theme) => theme.id === savedTheme)) {
-      setSelectedChatTheme(savedTheme as ChatThemeId)
+      setSelectedChatTheme(savedTheme as ChatThemeId);
     } else {
-      localStorage.setItem(`chat-theme-${chatId}`, "light")
-      setSelectedChatTheme("light")
+      localStorage.setItem(`chat-theme-${chatId}`, "light");
+      setSelectedChatTheme("light");
     }
-    const savedReadingSettings = getChatReadingSettings(chatId)
-    setReadingSettings(savedReadingSettings)
-    onReadingSettingsChange?.(savedReadingSettings)
-    const syncMedia = () => setSharedMedia(getChatMedia(chatId, characterName))
-    syncMedia()
-    window.addEventListener("storychat-chat-media-updated", syncMedia)
-    window.addEventListener("storage", syncMedia)
+    const savedReadingSettings = getChatReadingSettings(chatId);
+    setReadingSettings(savedReadingSettings);
+    onReadingSettingsChange?.(savedReadingSettings);
+    const syncMedia = () => setSharedMedia(getChatMedia(chatId, characterName));
+    syncMedia();
+    window.addEventListener("storychat-chat-media-updated", syncMedia);
+    window.addEventListener("storage", syncMedia);
     return () => {
-      window.removeEventListener("storychat-chat-media-updated", syncMedia)
-      window.removeEventListener("storage", syncMedia)
-    }
-  }, [characterName, chatId])
+      window.removeEventListener("storychat-chat-media-updated", syncMedia);
+      window.removeEventListener("storage", syncMedia);
+    };
+  }, [characterName, chatId]);
 
   const handleChatThemeChange = (theme: ChatThemeId) => {
-    if (theme === selectedChatTheme) return
+    if (theme === selectedChatTheme) return;
 
-    setSelectedChatTheme(theme)
-    localStorage.setItem(`chat-theme-${chatId}`, theme)
-    onChatThemeChange?.(theme)
+    setSelectedChatTheme(theme);
+    localStorage.setItem(`chat-theme-${chatId}`, theme);
+    onChatThemeChange?.(theme);
 
-    const targetTheme = getPreferredAppThemeForChatTheme(theme)
-    const isDismissed = localStorage.getItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY) === "true"
+    const targetTheme = getPreferredAppThemeForChatTheme(theme);
+    const isDismissed =
+      localStorage.getItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY) === "true";
     if (!isDismissed && targetTheme !== resolvedTheme) {
-      setDontShowThemeModeSuggestion(false)
-      setThemeModeSuggestion({ chatTheme: theme, targetTheme })
+      setDontShowThemeModeSuggestion(false);
+      setThemeModeSuggestion({ chatTheme: theme, targetTheme });
     }
-  }
+  };
 
   const closeThemeModeSuggestion = () => {
     if (dontShowThemeModeSuggestion) {
-      localStorage.setItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY, "true")
+      localStorage.setItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY, "true");
     }
-    setThemeModeSuggestion(null)
-  }
+    setThemeModeSuggestion(null);
+  };
 
   const confirmThemeModeSuggestion = () => {
-    if (!themeModeSuggestion) return
+    if (!themeModeSuggestion) return;
     if (dontShowThemeModeSuggestion) {
-      localStorage.setItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY, "true")
+      localStorage.setItem(CHAT_THEME_MODE_SUGGESTION_DISMISSED_KEY, "true");
     }
-    setTheme(themeModeSuggestion.targetTheme)
-    setThemeModeSuggestion(null)
-  }
+    setTheme(themeModeSuggestion.targetTheme);
+    setThemeModeSuggestion(null);
+  };
 
   const updateReadingSettings = (nextSettings: ChatReadingSettings) => {
-    setReadingSettings(nextSettings)
-    saveChatReadingSettings(nextSettings, chatId)
-    onReadingSettingsChange?.(nextSettings)
-  }
+    setReadingSettings(nextSettings);
+    saveChatReadingSettings(nextSettings, chatId);
+    onReadingSettingsChange?.(nextSettings);
+  };
 
   const toggleCommandSelection = (commandId: string) => {
-    const selected = validSelectedCommandIds
+    const selected = validSelectedCommandIds;
     const nextSelected = selected.includes(commandId)
       ? selected.filter((id) => id !== commandId)
       : selected.length < MAX_COMMAND_SUGGESTIONS
         ? [...selected, commandId]
-        : selected
+        : selected;
 
     updateReadingSettings({
       ...readingSettings,
       alwaysShowCommandSuggestions: nextSelected.length > 0,
       selectedCommandIds: nextSelected,
-    })
-  }
+    });
+  };
 
   // Get the actual preview theme based on system setting
   const getPreviewTheme = (themeConfig: ChatThemeConfig) => {
-    void mounted
-    void resolvedTheme
-    return themeConfig.preview
-  }
+    void mounted;
+    void resolvedTheme;
+    return themeConfig.preview;
+  };
 
   const openMemoryMemo = () => {
-    setMemoryMemoDraft(getChatMemoryMemo(chatId))
-    setIsMemoryMemoOpen(true)
-  }
+    setMemoryMemoDraft(getChatMemoryMemo(chatId));
+    setIsMemoryMemoOpen(true);
+  };
 
   const insertMemoryToken = (token: string) => {
-    const textarea = memoryTextareaRef.current
-    const selectionStart = textarea?.selectionStart ?? memoryMemoDraft.length
-    const selectionEnd = textarea?.selectionEnd ?? memoryMemoDraft.length
+    const textarea = memoryTextareaRef.current;
+    const selectionStart = textarea?.selectionStart ?? memoryMemoDraft.length;
+    const selectionEnd = textarea?.selectionEnd ?? memoryMemoDraft.length;
     const nextValue = normalizeChatMemoryMemo(
       `${memoryMemoDraft.slice(0, selectionStart)}${token}${memoryMemoDraft.slice(selectionEnd)}`,
-    )
+    );
 
-    setMemoryMemoDraft(nextValue)
+    setMemoryMemoDraft(nextValue);
     window.requestAnimationFrame(() => {
-      textarea?.focus()
-      const nextCursor = Math.min(selectionStart + token.length, nextValue.length)
-      textarea?.setSelectionRange(nextCursor, nextCursor)
-    })
-  }
+      textarea?.focus();
+      const nextCursor = Math.min(
+        selectionStart + token.length,
+        nextValue.length,
+      );
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   const saveMemoryMemo = () => {
-    saveChatMemoryMemo(chatId, memoryMemoDraft.trim())
-    setIsMemoryMemoOpen(false)
-  }
+    saveChatMemoryMemo(chatId, memoryMemoDraft.trim());
+    setIsMemoryMemoOpen(false);
+  };
 
   return (
     <>
@@ -285,49 +325,61 @@ export function ChatSettingsDrawer({
       <div
         className={cn(
           "fixed inset-0 z-50 bg-black/70 transition-opacity duration-300",
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          isOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={onClose}
       />
 
-      {/* Drawer */}
       <div
         className={cn(
-          "fixed right-0 top-0 bottom-0 z-50 w-[80%] max-w-sm overflow-y-auto border-l border-border bg-card shadow-2xl shadow-black/60 transition-transform duration-300 ease-out dark:border-white/25 dark:shadow-[0_0_0_1px_rgba(255,255,255,0.12),-24px_0_48px_rgba(0,0,0,0.72)]",
-          isOpen ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none"
+          "fixed inset-y-0 right-0 z-50 flex w-[min(92vw,440px)] flex-col overflow-hidden border-l border-border bg-background shadow-2xl transition-transform duration-300 ease-out",
+          isOpen
+            ? "translate-x-0 pointer-events-auto"
+            : "translate-x-full pointer-events-none",
         )}
+        role="dialog"
+        aria-modal="true"
+        aria-label="채팅방 설정"
       >
-        {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 dark:border-white/20">
-          <h2 className="text-base font-bold text-foreground">채팅방 설정</h2>
+        <div className="z-10 flex min-h-14 items-center justify-between gap-3 border-b border-border bg-background px-5">
+          <h2 className="text-[15px] font-bold text-foreground">채팅방 설정</h2>
           <div className="flex items-center gap-2">
             <Link
               href="/credits"
               onClick={onClose}
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-mist-50 px-3 text-[11px] font-semibold text-foreground transition-colors hover:bg-accent"
             >
-              <Gem className="h-3.5 w-3.5 text-primary" />
-              <span className="tabular-nums">{mounted ? (creditBalance ?? 0).toLocaleString() : "-"} 크레딧</span>
+              <Gem className="h-4 w-4 text-muted-foreground" />
+              <span className="tabular-nums">
+                {mounted ? (creditBalance ?? 0).toLocaleString() : "-"}
+              </span>
             </Link>
             <button
+              type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="rounded-full p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
               aria-label="닫기"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4.5 w-4.5" />
             </button>
           </div>
         </div>
 
-        <div className="px-4 py-3 space-y-4">
-          <div className="grid grid-cols-3 gap-2">
-            <SettingsSquareLink
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <nav
+            className="grid grid-cols-4 gap-1 border-b border-border px-4 py-5"
+            aria-label="채팅방 바로가기"
+          >
+            <SettingsShortcut
               href={`/chat/${chatId}/media`}
               label="갤러리"
               onClick={onClose}
-              backgroundImage={sharedMedia[0]?.imageUrl}
+              icon={<ImageIcon className="h-5 w-5" />}
+              badge={
+                sharedMedia.length > 0 ? String(sharedMedia.length) : undefined
+              }
             />
-            <PersonaSquareButton
+            <PersonaShortcut
               persona={currentPersona}
               href={
                 currentPersona
@@ -336,50 +388,66 @@ export function ChatSettingsDrawer({
               }
               onClick={onClose}
             />
-            <div className="grid aspect-square min-h-[82px] gap-2">
-              <SettingsMiniLink href="/timeline" label="타임라인" onClick={onClose} />
-              <SettingsMiniButton label="기억 메모" onClick={openMemoryMemo} />
-            </div>
-          </div>
+            <SettingsShortcut
+              href="/timeline"
+              label="타임라인"
+              onClick={onClose}
+              icon={<ChartNoAxesCombined className="h-5 w-5" />}
+            />
+            <SettingsShortcut
+              label="기억 메모"
+              onClick={openMemoryMemo}
+              icon={<NotebookTabs className="h-5 w-5" />}
+            />
+          </nav>
 
-          <section className="space-y-3">
-            <SectionTitle icon={<Palette className="h-4 w-4" />} title="채팅 표시" />
-            <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-medium text-foreground">채팅 테마</p>
-                  <p className="text-[11px] text-muted-foreground">현재 채팅방에만 적용되는 테마입니다.</p>
-                </div>
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide">
-                  {chatThemes.map((theme) => {
-                    const isSelected = selectedChatTheme === theme.id
-                    const previewColors = getPreviewTheme(theme)
-                    return (
-                      <button
-                        key={theme.id}
-                        type="button"
-                        onClick={() => handleChatThemeChange(theme.id)}
-                        className={cn(
-                          "relative flex min-w-[72px] flex-col items-center gap-1 rounded-lg border px-2 py-2 text-xs transition-colors",
-                          isSelected
-                            ? "border-primary bg-primary/10 text-foreground"
-                            : "border-border bg-background/60 text-muted-foreground hover:bg-accent",
-                        )}
+          <SettingsSection
+            title="채팅 표시"
+            icon={<Palette className="h-4 w-4" />}
+            open={isDisplayOpen}
+            onToggle={() => setIsDisplayOpen((open) => !open)}
+          >
+            <div className="space-y-6">
+              <div className="grid grid-cols-4 gap-2 min-[390px]:grid-cols-4">
+                {chatThemes.map((theme) => {
+                  const isSelected = selectedChatTheme === theme.id;
+                  const previewColors = getPreviewTheme(theme);
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => handleChatThemeChange(theme.id)}
+                      className={cn(
+                        "relative flex min-w-0 flex-col gap-3 rounded-lg p-1.5 text-center bg-mist-50",
+                        isSelected
+                          ? "text-foreground bg-mist-200"
+                          : "text-muted-foreground",
+                      )}
+                      aria-pressed={isSelected}
+                    >
+                      <div
+                        className="flex h-8 w-full items-center rounded-md px-1.5"
+                        style={{ backgroundColor: previewColors.bg }}
                       >
-                        <div className="h-7 w-10 rounded-md p-1" style={{ backgroundColor: previewColors.bg }}>
-                          <div className="mb-1 h-1.5 w-7 rounded-full" style={{ backgroundColor: previewColors.aiBubble }} />
-                          <div className="ml-auto h-1.5 w-5 rounded-full" style={{ backgroundColor: previewColors.userBubble }} />
-                        </div>
-                        <span className="truncate font-medium">{theme.label}</span>
-                        {isSelected && (
-                          <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary">
-                            <Check className="h-2.5 w-2.5 text-primary-foreground" />
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
+                        <div
+                          className="h-3 w-full rounded-sm"
+                          style={{ backgroundColor: previewColors.userBubble }}
+                        />
+                      </div>
+                      <span className="truncate text-[11px] font-medium">
+                        {theme.label}
+                      </span>
+                      {isSelected && (
+                        <span className="absolute -right-1 -top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary">
+                          <Check
+                            className="h-3 w-3 text-primary-foreground"
+                            aria-hidden="true"
+                          />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               <SliderSetting
@@ -388,7 +456,13 @@ export function ChatSettingsDrawer({
                 min={CHAT_TEXT_SIZE_MIN}
                 max={CHAT_TEXT_SIZE_MAX}
                 value={readingSettings.textSize}
-                onChange={(value) => updateReadingSettings({ ...readingSettings, textSize: value, textSizeUserSet: true })}
+                onChange={(value) =>
+                  updateReadingSettings({
+                    ...readingSettings,
+                    textSize: value,
+                    textSizeUserSet: true,
+                  })
+                }
               />
               <SliderSetting
                 label="줄간격"
@@ -397,105 +471,148 @@ export function ChatSettingsDrawer({
                 max={CHAT_LINE_HEIGHT_MAX}
                 step={0.1}
                 value={readingSettings.lineHeight}
-                onChange={(value) => updateReadingSettings({ ...readingSettings, lineHeight: value })}
+                onChange={(value) =>
+                  updateReadingSettings({
+                    ...readingSettings,
+                    lineHeight: value,
+                  })
+                }
               />
               {canShowProgressStatus && (
                 <ToggleRow
                   title="진행상황 표시"
                   description="챕터나 퀘스트 진행 상태를 상단에 표시합니다."
                   checked={readingSettings.showStoryStatus}
-                  onClick={() => updateReadingSettings({ ...readingSettings, showStoryStatus: !readingSettings.showStoryStatus })}
+                  onClick={() =>
+                    updateReadingSettings({
+                      ...readingSettings,
+                      showStoryStatus: !readingSettings.showStoryStatus,
+                    })
+                  }
                 />
               )}
             </div>
-          </section>
+          </SettingsSection>
 
-          <section className="space-y-3">
-            <SectionTitle icon={<SlidersHorizontal className="h-4 w-4" />} title="대화 보조" />
-            <div className="space-y-3 rounded-xl border border-border bg-muted/70 p-3">
+          <SettingsSection
+            title="대화 보조"
+            icon={<MessageSquareText className="h-4 w-4" />}
+            open={isAssistOpen}
+            onToggle={() => setIsAssistOpen((open) => !open)}
+          >
+            <div className="space-y-5">
               <div>
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">자동 실행할 명령어 선택</p>
-                    <p className="text-[11px] text-muted-foreground">선택한 명령어를 답변 뒤에 실행합니다. 선택하지 않으면 실행하지 않습니다.</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-medium text-muted-foreground">
+                    자동 실행할 명령어
+                  </p>
+                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
                     {validSelectedCommandIds.length}/{MAX_COMMAND_SUGGESTIONS}
                   </span>
                 </div>
-                <div className="rounded-lg border border-border bg-background/50 px-2.5 py-2">
-                  <div className="grid gap-1">
-                    {autoCommandOptions.map((command) => {
-                      const checked = validSelectedCommandIds.includes(command.id)
-                      const disabled = !checked && validSelectedCommandIds.length >= MAX_COMMAND_SUGGESTIONS
-                      return (
-                        <label
-                          key={command.id}
-                          className={cn(
-                            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-                            disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer hover:bg-accent",
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled}
-                            onChange={() => toggleCommandSelection(command.id)}
-                            className="h-4 w-4 accent-primary"
-                          />
-                          <span className="text-base leading-none">{command.icon}</span>
-                          <span className="font-medium text-foreground">/{command.name}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {autoCommandOptions.map((command) => {
+                    const checked = validSelectedCommandIds.includes(
+                      command.id,
+                    );
+                    const disabled =
+                      !checked &&
+                      validSelectedCommandIds.length >= MAX_COMMAND_SUGGESTIONS;
+                    return (
+                      <button
+                        type="button"
+                        key={command.id}
+                        onClick={() => toggleCommandSelection(command.id)}
+                        disabled={disabled}
+                        className={cn(
+                          "relative inline-flex h-8 items-center gap-2 rounded-full px-3 text-[11px] font-semibold transition-colors",
+                          checked
+                            ? "bg-primary/10 text-primary"
+                            : "bg-mist-50 text-muted-foreground hover:bg-accent",
+                          disabled && "cursor-not-allowed opacity-40",
+                        )}
+                        aria-pressed={checked}
+                      >
+                        {checked && (
+                          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary">
+                            <Check
+                              className="h-2.5 w-2.5 text-primary-foreground"
+                              aria-hidden="true"
+                            />
+                          </span>
+                        )}
+                        {getAutoCommandIcon(command.id)}
+                        <span>/{command.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
               {process.env.NODE_ENV !== "production" && (
-                <>
-                  <ToggleRow
-                    title="테스트: 검수/수리 우회"
-                    description="기본 문체는 유지하고 앱 검수만 건너뜁니다."
-                    checked={readingSettings.testBypassRoleplayRules}
-                    onClick={() => updateReadingSettings({
-                      ...readingSettings,
-                      testBypassRoleplayRules: !readingSettings.testBypassRoleplayRules,
-                    })}
-                  />
-                  <ToggleRow
-                    title="테스트: 검수 전 원문 로그"
-                    description="Gemini 생성 청크를 브라우저 콘솔에 실시간 기록합니다."
-                    checked={readingSettings.testRawRoleplayStream}
-                    onClick={() => updateReadingSettings({
-                      ...readingSettings,
-                      testRawRoleplayStream: !readingSettings.testRawRoleplayStream,
-                    })}
-                  />
-                </>
+                <div className="overflow-hidden rounded-lg bg-muted/50">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeveloperOpen((open) => !open)}
+                    className="flex h-12 w-full items-center gap-3 px-4 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent"
+                    aria-expanded={isDeveloperOpen}
+                  >
+                    <FlaskConical className="h-4 w-4" />
+                    <span className="flex-1">개발자 옵션</span>
+                    {isDeveloperOpen ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </button>
+                  {isDeveloperOpen && (
+                    <div className="space-y-1 border-t border-border p-2">
+                      <ToggleRow
+                        title="검수/수리 우회"
+                        description="기본 문체는 유지하고 앱 검수만 건너뜁니다."
+                        checked={readingSettings.testBypassRoleplayRules}
+                        onClick={() =>
+                          updateReadingSettings({
+                            ...readingSettings,
+                            testBypassRoleplayRules:
+                              !readingSettings.testBypassRoleplayRules,
+                          })
+                        }
+                      />
+                      <ToggleRow
+                        title="검수 전 원문 로그"
+                        description="Gemini 생성 청크를 브라우저 콘솔에 기록합니다."
+                        checked={readingSettings.testRawRoleplayStream}
+                        onClick={() =>
+                          updateReadingSettings({
+                            ...readingSettings,
+                            testRawRoleplayStream:
+                              !readingSettings.testRawRoleplayStream,
+                          })
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-          </section>
+          </SettingsSection>
 
-          <section className="pb-5">
-            <div className="space-y-2 rounded-xl border border-border bg-muted/70 p-3">
-              <div>
-                <DangerRow
-                  icon={<Trash2 className="h-4 w-4" />}
-                  title="대화 초기화"
-                  description="현재 채팅 메시지를 모두 삭제합니다."
-                  buttonText="초기화"
-                  onClick={onClearChat}
-                />
-                <DangerRow
-                  icon={<LogOut className="h-4 w-4" />}
-                  title="채팅방 나가기"
-                  description="이 채팅방에서 나갑니다."
-                  buttonText="나가기"
-                  onClick={() => setIsLeaveConfirmOpen(true)}
-                />
-              </div>
+          <div className="px-4 py-4">
+            <div className="overflow-hidden rounded-lg border border-destructive/50">
+              <DangerRow
+                icon={<Trash2 className="h-4 w-4" />}
+                title="대화 초기화"
+                onClick={onClearChat}
+              />
+              <DangerRow
+                icon={<LogOut className="h-4 w-4" />}
+                title="채팅방 나가기"
+                onClick={() => setIsLeaveConfirmOpen(true)}
+                withDivider
+              />
             </div>
-          </section>
+          </div>
         </div>
       </div>
       <Dialog open={isMemoryMemoOpen} onOpenChange={setIsMemoryMemoOpen}>
@@ -503,13 +620,16 @@ export function ChatSettingsDrawer({
           <DialogHeader>
             <DialogTitle>기억 메모</DialogTitle>
             <DialogDescription>
-              작품이나 캐릭터 설정을 덮어쓰고 싶은 내용을 적어두면 다음 답변 생성에 우선 반영됩니다.
+              작품이나 캐릭터 설정을 덮어쓰고 싶은 내용을 적어두면 다음 답변
+              생성에 우선 반영됩니다.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <div className="rounded-md border border-border/70 bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-              <div className="mb-2 font-semibold text-foreground">작성 예시</div>
+              <div className="mb-2 font-semibold text-foreground">
+                작성 예시
+              </div>
               <pre className="whitespace-pre-wrap font-sans">{`#{유저} 정보
 - 30살
 
@@ -542,7 +662,11 @@ export function ChatSettingsDrawer({
                 ref={memoryTextareaRef}
                 value={memoryMemoDraft}
                 maxLength={CHAT_MEMORY_MEMO_MAX_LENGTH}
-                onChange={(event) => setMemoryMemoDraft(normalizeChatMemoryMemo(event.target.value))}
+                onChange={(event) =>
+                  setMemoryMemoDraft(
+                    normalizeChatMemoryMemo(event.target.value),
+                  )
+                }
                 placeholder="#{유저} 정보&#10;- 30살&#10;&#10;#{유저}와 {캐릭터}의 관계&#10;- {유저}는 {캐릭터}와 친구이다."
                 className="min-h-[220px] w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary"
               />
@@ -574,17 +698,17 @@ export function ChatSettingsDrawer({
       <Dialog
         open={Boolean(themeModeSuggestion)}
         onOpenChange={(open) => {
-          if (!open) closeThemeModeSuggestion()
+          if (!open) closeThemeModeSuggestion();
         }}
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[min(calc(100vw-2rem),340px)] gap-0 rounded-[20px] border-0 bg-[#FFFFFF] px-5 pb-5 pt-6 text-[#1A1A1A] shadow-2xl shadow-black/25 dark:bg-[#2E2E2C] dark:text-[#F5F5F3]"
+          className="w-[min(calc(100vw-2rem),340px)] gap-0 rounded-xl border-border bg-background px-5 pb-5 pt-6 text-foreground shadow-2xl"
         >
           <button
             type="button"
             onClick={closeThemeModeSuggestion}
-            className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-[#9B9A93] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#888780] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+            className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
@@ -595,21 +719,23 @@ export function ChatSettingsDrawer({
           </div>
 
           <DialogHeader className="gap-2 text-left">
-            <DialogTitle className="text-[18px] font-medium leading-tight tracking-normal text-[#1A1A1A] dark:text-[#F5F5F3]">
+            <DialogTitle className="text-[18px] font-medium leading-tight tracking-normal text-foreground">
               앱 테마도 맞출까요?
             </DialogTitle>
-            <DialogDescription className="text-[14px] font-normal leading-[1.6] text-[#6B6B68] dark:text-[#B4B2A9]">
+            <DialogDescription className="text-[14px] font-normal leading-[1.6] text-muted-foreground">
               {themeModeSuggestion
                 ? `${getChatThemeLabel(themeModeSuggestion.chatTheme)} 채팅 테마는 ${getAppThemeLabel(themeModeSuggestion.targetTheme)}에서 더 자연스럽게 보여요. 앱 전체 테마를 ${getAppThemeLabel(themeModeSuggestion.targetTheme)}로 전환할까요?`
                 : ""}
             </DialogDescription>
           </DialogHeader>
 
-          <label className="mt-5 flex w-fit items-center gap-2.5 text-[13px] font-medium leading-snug text-[#1A1A1A] dark:text-[#F5F5F3]">
+          <label className="mt-5 flex w-fit items-center gap-2.5 text-[13px] font-medium leading-snug text-foreground">
             <input
               type="checkbox"
               checked={dontShowThemeModeSuggestion}
-              onChange={(event) => setDontShowThemeModeSuggestion(event.target.checked)}
+              onChange={(event) =>
+                setDontShowThemeModeSuggestion(event.target.checked)
+              }
               className="h-4 w-4 rounded border-border accent-primary"
             />
             <span>다시 보지 않기</span>
@@ -621,12 +747,14 @@ export function ChatSettingsDrawer({
               onClick={confirmThemeModeSuggestion}
               className="flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              {themeModeSuggestion ? `${getAppThemeLabel(themeModeSuggestion.targetTheme)}로 전환` : "전환"}
+              {themeModeSuggestion
+                ? `${getAppThemeLabel(themeModeSuggestion.targetTheme)}로 전환`
+                : "전환"}
             </button>
             <button
               type="button"
               onClick={closeThemeModeSuggestion}
-              className="flex h-11 w-full items-center justify-center rounded-xl bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
+              className="flex h-11 w-full items-center justify-center rounded-xl bg-transparent px-4 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             >
               그대로 두기
             </button>
@@ -642,119 +770,109 @@ export function ChatSettingsDrawer({
         destructive
         onOpenChange={setIsLeaveConfirmOpen}
         onConfirm={() => {
-          setIsLeaveConfirmOpen(false)
-          onLeaveChat?.()
+          setIsLeaveConfirmOpen(false);
+          onLeaveChat?.();
         }}
       />
     </>
-  )
+  );
 }
 
-function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-muted-foreground">{icon}</span>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-    </div>
-  )
-}
-
-function SettingsSquareLink({
-  href,
-  label,
-  onClick,
-  backgroundImage,
+function SettingsSection({
+  title,
   icon,
+  open,
+  onToggle,
+  children,
 }: {
-  href: string
-  label: string
-  onClick: () => void
-  backgroundImage?: string
-  icon?: React.ReactNode
+  title: string;
+  icon: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={cn(
-        "group relative flex aspect-square min-h-[72px] overflow-hidden rounded-lg border border-border bg-background/60 p-2 text-center transition-colors hover:bg-accent",
-        backgroundImage && "bg-cover bg-center",
-      )}
-      style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : undefined}
-    >
-      {backgroundImage && (
-        <span className="absolute inset-0 bg-[rgba(999,999,999,0.8)] transition-colors group-hover:bg-[rgba(999,999,999,0.72)] dark:bg-black/35 dark:group-hover:bg-black/25" />
-      )}
-      <span
-        className={cn(
-          "relative mt-auto flex w-full items-center justify-center gap-1.5 text-center text-sm font-semibold leading-tight",
-          backgroundImage ? "text-neutral-950 drop-shadow-sm dark:text-white dark:drop-shadow" : "text-foreground",
-        )}
+    <section className="border-b border-border">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex h-11 w-full items-center gap-2.5 px-4 text-left text-foreground transition-colors hover:bg-accent/60"
+        aria-expanded={open}
       >
-        {icon}
-        <span className="block truncate">{label}</span>
-      </span>
-    </Link>
-  )
+        <span className="text-muted-foreground">{icon}</span>
+        <h3 className="flex-1 text-[12px] font-semibold">{title}</h3>
+        {open ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+      {open && <div className="px-4 pb-5">{children}</div>}
+    </section>
+  );
 }
 
-function SettingsMiniLink({
+function SettingsShortcut({
   href,
   label,
   onClick,
+  icon,
+  badge,
 }: {
-  href: string
-  label: string
-  onClick: () => void
+  href?: string;
+  label: string;
+  onClick: () => void;
+  icon: React.ReactNode;
+  badge?: string;
 }) {
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className="flex min-h-0 items-center justify-center rounded-xl border border-border bg-muted/40 px-2 text-center text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-    >
-      {label}
+  const content = (
+    <>
+      <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-mist-50 text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground">
+        {icon}
+        {badge && (
+          <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-bold leading-4 text-primary-foreground">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className="w-full truncate text-center text-[11px] font-medium text-muted-foreground group-hover:text-foreground">
+        {label}
+      </span>
+    </>
+  );
+
+  const className =
+    "group flex min-w-0 flex-col items-center gap-2 rounded-lg px-1 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  return href ? (
+    <Link href={href} onClick={onClick} className={className}>
+      {content}
     </Link>
-  )
-}
-
-function SettingsMiniButton({
-  label,
-  onClick,
-}: {
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-h-0 items-center justify-center rounded-xl border border-border bg-muted/40 px-2 text-center text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-    >
-      {label}
+  ) : (
+    <button type="button" onClick={onClick} className={className}>
+      {content}
     </button>
-  )
+  );
 }
 
-function PersonaSquareButton({
+function PersonaShortcut({
   persona,
   href,
   onClick,
 }: {
-  persona?: StoryPersona
-  href: string
-  onClick: () => void
+  persona?: StoryPersona;
+  href: string;
+  onClick: () => void;
 }) {
-  const label = "현재 자아"
-  const fallback = persona?.name?.trim()?.slice(0, 1) || "나"
+  const label = "현재 자아";
+  const fallback = persona?.name?.trim()?.slice(0, 1) || "나";
 
   return (
     <Link
       href={href}
       onClick={onClick}
-      className="group relative flex aspect-square min-h-[82px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-border bg-muted/40 p-2 text-center transition-colors hover:bg-muted"
+      className="group flex min-w-0 flex-col items-center gap-2 rounded-lg px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background ring-1 ring-border transition-opacity group-hover:opacity-35">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 transition-colors group-hover:bg-primary/20">
         {persona?.avatarUrl ? (
           <img
             src={persona.avatarUrl}
@@ -762,22 +880,20 @@ function PersonaSquareButton({
             className="h-full w-full object-cover"
           />
         ) : (
-          <span className="text-base font-bold text-muted-foreground">
-            {fallback}
-          </span>
+          <span className="text-[14px] font-bold text-primary">{fallback}</span>
         )}
       </span>
-      <span className="mt-auto min-w-0 max-w-full leading-tight transition-opacity group-hover:opacity-20">
-        {persona?.name && (
-          <span className="block truncate text-[10px] font-medium leading-tight text-muted-foreground">{persona.name}</span>
-        )}
-        <span className="block truncate text-sm font-semibold leading-tight text-foreground">{label}</span>
-      </span>
-      <span className="absolute inset-0 flex items-center justify-center bg-background/45 text-sm font-semibold text-foreground opacity-0 backdrop-blur-[2px] transition-opacity group-hover:opacity-100">
-        변경
+      <span className="w-full truncate text-center text-[11px] font-medium text-muted-foreground group-hover:text-foreground">
+        {label}
       </span>
     </Link>
-  )
+  );
+}
+
+function getAutoCommandIcon(commandId: string) {
+  if (commandId === "phone") return <Smartphone className="h-4 w-4" />;
+  if (commandId === "sns") return <MessageSquareHeart className="h-4 w-4" />;
+  return <ChartNoAxesColumnIncreasing className="h-4 w-4" />;
 }
 
 function SliderSetting({
@@ -789,19 +905,23 @@ function SliderSetting({
   value,
   onChange,
 }: {
-  label: string
-  valueText: string
-  min: number
-  max: number
-  step?: number
-  value: number
-  onChange: (value: number) => void
+  label: string;
+  valueText: string;
+  min: number;
+  max: number;
+  step?: number;
+  value: number;
+  onChange: (value: number) => void;
 }) {
   return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs font-medium text-foreground">{label}</span>
-        <span className="text-xs text-muted-foreground">{valueText}</span>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between mb-0">
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {label}
+        </span>
+        <span className="text-[11px] font-semibold tabular-nums text-foreground">
+          {valueText}
+        </span>
       </div>
       <input
         type="range"
@@ -810,10 +930,10 @@ function SliderSetting({
         step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-background accent-primary [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-md"
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-border [&::-moz-range-thumb]:bg-background [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-border [&::-webkit-slider-thumb]:bg-background [&::-webkit-slider-thumb]:shadow-sm"
       />
     </div>
-  )
+  );
 }
 
 function ToggleRow({
@@ -822,25 +942,25 @@ function ToggleRow({
   checked,
   onClick,
 }: {
-  title: string
-  description: string
-  checked: boolean
-  onClick: () => void
+  title: string;
+  description: string;
+  checked: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-background/50 px-2.5 py-2">
+    <div className="flex items-center justify-between gap-3 rounded-md px-2 py-2">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
+        <p className="text-[11px] font-medium text-foreground">{title}</p>
+        <p className="truncate text-[9px] text-muted-foreground">
+          {description}
+        </p>
       </div>
       <button
         type="button"
         onClick={onClick}
         className={cn(
           "h-6 w-11 shrink-0 rounded-full border p-0.5 transition-colors",
-          checked
-            ? "border-blue-500 bg-blue-500 dark:border-sky-400 dark:bg-sky-500"
-            : "border-border bg-border dark:bg-neutral-700",
+          checked ? "border-primary bg-primary" : "border-border bg-muted",
         )}
         aria-pressed={checked}
       >
@@ -852,60 +972,32 @@ function ToggleRow({
         />
       </button>
     </div>
-  )
-}
-
-function CompactInfoRow({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: React.ReactNode
-  title: string
-  description: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg bg-background/50 px-2.5 py-2">
-      <span className="shrink-0 text-muted-foreground">{icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
-      </div>
-      {action}
-    </div>
-  )
+  );
 }
 
 function DangerRow({
   icon,
   title,
-  description,
-  buttonText,
   onClick,
+  withDivider = false,
 }: {
-  icon: React.ReactNode
-  title: string
-  description: string
-  buttonText: string
-  onClick?: () => void
+  icon: React.ReactNode;
+  title: string;
+  onClick?: () => void;
+  withDivider?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg px-2.5 py-2">
-      <span className="shrink-0 text-red-600 dark:text-red-300">{icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{description}</p>
-      </div>
-      <button
-        type="button"
-        onClick={onClick}
-        className="rounded-md border border-red-700 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-950 transition-colors hover:bg-red-100 dark:border-red-500 dark:bg-red-950 dark:text-red-50 dark:hover:bg-red-900"
-      >
-        {buttonText}
-      </button>
-    </div>
-  )
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex h-11 w-full items-center gap-2.5 px-3.5 text-left text-destructive transition-colors hover:bg-destructive/5",
+        withDivider && "border-t border-destructive/30",
+      )}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="flex-1 text-[12px] font-medium">{title}</span>
+      <ChevronRight className="h-4 w-4" />
+    </button>
+  );
 }
-

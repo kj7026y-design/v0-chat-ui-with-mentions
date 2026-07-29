@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   formatEditedCommandContent,
   getCommandEditableContent,
+  getCommandTitle,
 } from "../lib/chat-command-editing"
 
 test("status command editor hides tags and the protected title", () => {
@@ -97,4 +98,8 @@ test("phone command editor hides phone markup and keeps visible line breaks", ()
     formatEditedCommandContent(content, "phone", editable),
     /^📱 휴대폰\n17:36/u,
   )
+})
+
+test("image is a recognized command id for failed-message retries", () => {
+  assert.equal(getCommandTitle("", "image"), "이미지")
 })

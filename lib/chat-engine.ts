@@ -324,32 +324,93 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
   return clip(promptParts.join(". "), 1400)
 }
 
-interface ImagenGenerationResponse {
+export function normalizeImagePromptModelOutput(content: string) {
+  const triggerPrompt = content.match(/\[TRIGGER_IMG:\s*([\s\S]*?)\]/iu)?.[1]
+  const normalized = (triggerPrompt || content)
+    .replace(/^```(?:text|prompt)?\s*/iu, "")
+    .replace(/\s*```$/u, "")
+    .replace(/^(?:image prompt|prompt)\s*:\s*/iu, "")
+    .replace(/\s+/gu, " ")
+    .trim()
+
+  if (!normalized || !/[A-Za-z]{3}/u.test(normalized)) {
+    throw new Error("Gemini 2.5 Pro가 유효한 영문 이미지 프롬프트를 반환하지 않았습니다.")
+  }
+  return clip(normalized, 1_800)
+}
+
+export const IMAGE_PROMPT_MODEL_ID = "gemini-pro" satisfies ChatModelId
+
+export async function generateImagePromptWithGeminiPro(
+  sceneContext: string,
+  fetcher: typeof fetch = fetch,
+) {
+  const response = await fetcher("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      modelId: IMAGE_PROMPT_MODEL_ID,
+      roleplayEnabled: false,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "Create one production-ready English prompt for a text-to-image model from the supplied private story context.",
+            "Return only the English visual prompt with no title, label, explanation, markdown, quotation marks, or TRIGGER_IMG tag.",
+            "Describe the current action, both fictional adult subjects, appearance, expressions, body language, environment, composition, lighting, and mood.",
+            "Translate dialogue into visible action and expression rather than written words.",
+            "The resulting image must be a full-bleed narrative scene, not a character sheet, profile card, poster, title card, or interface.",
+            "Do not request visible text, names, captions, subtitles, speech bubbles, signs, logos, or watermarks.",
+          ].join(" "),
+        },
+        {
+          role: "user",
+          content: `Private scene context:\n${sceneContext}`,
+        },
+      ],
+    }),
+  })
+
+  const data = await response.json().catch(() => null) as {
+    result?: string
+    content?: string
+    error?: string
+  } | null
+  if (!response.ok) {
+    throw new Error(data?.error || `Gemini 2.5 Pro 이미지 프롬프트 생성에 실패했습니다: ${response.status}`)
+  }
+
+  return normalizeImagePromptModelOutput(data?.result ?? data?.content ?? "")
+}
+
+interface ImageGenerationResponse {
   imageUrl?: string
   model?: string
-  provider?: "google-imagen" | "google-gemini-image"
+  provider?: "fal"
   error?: string
 }
 
-async function generateGoogleImage(prompt: string) {
+async function generateFalImage(prompt: string) {
   const response = await fetch("/api/images/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
   })
-  const result = await response.json().catch(() => ({})) as ImagenGenerationResponse
+  const result = await response.json().catch(() => ({})) as ImageGenerationResponse
 
   if (!response.ok) {
-    throw new Error(result.error || "Google Imagen 이미지 생성에 실패했습니다.")
+    throw new Error(result.error || "Fal 이미지 생성에 실패했습니다.")
   }
-  if (!result.imageUrl?.startsWith("data:image/")) {
-    throw new Error("Google Imagen이 올바른 이미지 데이터를 반환하지 않았습니다.")
+  if (!result.imageUrl || !/^(?:https?:\/\/|data:image\/)/u.test(result.imageUrl)) {
+    throw new Error("Fal이 올바른 이미지 데이터를 반환하지 않았습니다.")
   }
 
   return {
     imageUrl: result.imageUrl,
-    model: result.model || "imagen-3.0-generate-001",
-    provider: result.provider || "google-imagen",
+    model: result.model || "fal-ai/pony-v7",
+    provider: result.provider || "fal",
   }
 }
 
@@ -1209,6 +1270,7 @@ export async function runCommand(
   command: string,
   characterName: string,
   context?: ImageCommandContext,
+  modelId: ChatModelId = DEFAULT_CHAT_MODEL_ID,
 ): Promise<CommandResult> {
   const normalized = command.replace(/^\//, "").trim()
 
@@ -1281,8 +1343,9 @@ export async function runCommand(
   }
 
   if (normalized === "이미지") {
-    const prompt = buildImagePrompt(characterName, context)
-    const generatedImage = await generateGoogleImage(prompt)
+    const sceneContext = buildImagePrompt(characterName, context)
+    const prompt = await generateImagePromptWithGeminiPro(sceneContext)
+    const generatedImage = await generateFalImage(prompt)
     return {
       kind: "message",
       message: {

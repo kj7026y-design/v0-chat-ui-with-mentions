@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { getChatModelConfig } from "@/lib/chat-models"
 import {
+  HybridChatError,
+  hasHybridChatRequestShape,
+  runHybridChat,
+} from "@/lib/hybrid-chat"
+import {
   ChatApiError,
   type ChatRequestBody,
   isRoleplayRequest,
@@ -11,7 +16,19 @@ import {
 } from "@/lib/rp/pipeline"
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null) as ChatRequestBody | null
+  const rawBody = await request.json().catch(() => null) as unknown
+
+  if (hasHybridChatRequestShape(rawBody)) {
+    try {
+      return NextResponse.json(await runHybridChat(rawBody))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Hybrid chat API failed"
+      const status = error instanceof HybridChatError ? error.status : 502
+      return NextResponse.json({ error: message }, { status })
+    }
+  }
+
+  const body = rawBody as ChatRequestBody | null
   const normalizedBody = normalizeBody(body)
   const { modelId, messages, fallbackPrompt } = normalizedBody
 

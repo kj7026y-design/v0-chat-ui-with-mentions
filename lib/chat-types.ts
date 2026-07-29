@@ -6,7 +6,7 @@ import type {
 } from "@/lib/generation-runs"
 
 export type ChatMessageStatus = "pending" | "streaming" | "completed" | "failed" | "repaired"
-export type ChatCommandId = "phone" | "sns" | "status" | "audience" | "summary"
+export type ChatCommandId = "phone" | "sns" | "status" | "audience" | "summary" | "image"
 
 export interface ChatMessageCandidateCompanion {
   messageId: string

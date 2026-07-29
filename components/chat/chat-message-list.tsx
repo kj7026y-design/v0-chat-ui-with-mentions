@@ -57,7 +57,7 @@ function getChatThemeTextPalette(backgroundColor: string) {
       }
     : {
         text: "#1F2937",
-        mutedText: "var(--color-gray-400)",
+        mutedText: "var(--color-gray-600)",
         panelBg: "rgba(255,255,255,0.58)",
         panelBorder: "rgba(17,24,39,0.12)",
         indicator: "rgba(31,41,55,0.52)",
@@ -990,6 +990,9 @@ function BubbleMessageBubble({
         <div
           className={cn(
             "relative w-fit max-w-[82%] rounded-2xl sm:max-w-[80%]",
+            message.imageUrl && !displayContent
+              ? "overflow-hidden p-0"
+              : "px-4 py-2.5",
             isUser && "ml-auto",
           )}
           style={bubbleStyle}
@@ -1011,7 +1014,7 @@ function BubbleMessageBubble({
               onError={() => setImageLoadFailed(true)}
               className={cn(
                 "mb-2 max-h-80 w-full rounded-xl object-cover",
-                !message.content && "mb-0",
+                !displayContent && "mb-0 rounded-2xl",
               )}
             />
           )}

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { buildImagePrompt, type ImageCommandContext } from "../lib/chat-engine"
+import {
+  buildImagePrompt,
+  generateImagePromptWithGeminiPro,
+  IMAGE_PROMPT_MODEL_ID,
+  normalizeImagePromptModelOutput,
+  type ImageCommandContext,
+} from "../lib/chat-engine"
 import type { StoryCharacter, StoryPersona, StoryWork } from "../lib/storychat-storage"
 
 test("scene image prompts omit title-card copy and private character names", () => {
@@ -37,4 +43,40 @@ test("scene image prompts omit title-card copy and private character names", () 
   assert.match(prompt, /젖은 갈색 코트와 짧은 머리/u)
   assert.match(prompt, /not a character introduction/i)
   assert.match(prompt, /no visible text in any language/i)
+})
+
+test("image prompt model output cleanup removes wrappers and trigger syntax", () => {
+  assert.equal(
+    normalizeImagePromptModelOutput(
+      "[TRIGGER_IMG: two fictional adults sharing an umbrella, cinematic rainy street]",
+    ),
+    "two fictional adults sharing an umbrella, cinematic rainy street",
+  )
+  assert.equal(
+    normalizeImagePromptModelOutput("```prompt\nImage prompt: moonlit apartment interior\n```"),
+    "moonlit apartment interior",
+  )
+})
+
+test("image prompt generation always uses Gemini 2.5 Pro", async () => {
+  let requestBody: Record<string, unknown> | undefined
+  const fetcher: typeof fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
+    return new Response(JSON.stringify({
+      result: "two fictional adults facing each other in a quiet apartment, cinematic lighting",
+    }), { status: 200 })
+  }
+
+  const prompt = await generateImagePromptWithGeminiPro(
+    "Private scene context",
+    fetcher,
+  )
+
+  assert.equal(IMAGE_PROMPT_MODEL_ID, "gemini-pro")
+  assert.equal(requestBody?.modelId, IMAGE_PROMPT_MODEL_ID)
+  assert.equal(requestBody?.roleplayEnabled, false)
+  assert.equal(
+    prompt,
+    "two fictional adults facing each other in a quiet apartment, cinematic lighting",
+  )
 })

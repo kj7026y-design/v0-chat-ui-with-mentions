@@ -8,6 +8,7 @@ const DEFAULT_COMMAND_TITLES: Record<CommandId, string> = {
   status: "📊 상태창",
   audience: "시청자 반응",
   summary: "요약",
+  image: "이미지",
 }
 
 function decodeCommandMarkup(value: string) {
@@ -24,6 +25,7 @@ function isCommandTitleLine(line: string, commandId: CommandId) {
   if (commandId === "sns") return /INSTAGRAM/iu.test(line)
   if (commandId === "status") return /상태창/u.test(line)
   if (commandId === "audience") return /시청자\s*반응/u.test(line)
+  if (commandId === "image") return /이미지/u.test(line)
   return /요약/u.test(line)
 }
 
