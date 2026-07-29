@@ -347,7 +347,7 @@ export function ChatSettingsDrawer({
             <Link
               href="/credits"
               onClick={onClose}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-mist-50 px-3 text-[11px] font-semibold text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-setting-el px-3 text-[11px] font-semibold text-foreground transition-colors hover:bg-accent"
             >
               <Gem className="h-4 w-4 text-muted-foreground" />
               <span className="tabular-nums">
@@ -418,9 +418,9 @@ export function ChatSettingsDrawer({
                       type="button"
                       onClick={() => handleChatThemeChange(theme.id)}
                       className={cn(
-                        "relative flex min-w-0 flex-col gap-3 rounded-lg p-1.5 text-center bg-mist-50",
+                        "relative flex min-w-0 flex-col gap-3 rounded-lg p-1.5 text-center bg-setting-el",
                         isSelected
-                          ? "text-foreground bg-mist-200"
+                          ? "text-foreground bg-setting-el-selected"
                           : "text-muted-foreground",
                       )}
                       aria-pressed={isSelected}
@@ -527,8 +527,8 @@ export function ChatSettingsDrawer({
                         className={cn(
                           "relative inline-flex h-8 items-center gap-2 rounded-full px-3 text-[11px] font-semibold transition-colors",
                           checked
-                            ? "bg-primary/10 text-primary"
-                            : "bg-mist-50 text-muted-foreground hover:bg-accent",
+                            ? "bg-setting-el-selected text-primary"
+                            : "bg-setting-el text-muted-foreground hover:bg-accent",
                           disabled && "cursor-not-allowed opacity-40",
                         )}
                         aria-pressed={checked}
@@ -827,7 +827,7 @@ function SettingsShortcut({
 }) {
   const content = (
     <>
-      <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-mist-50 text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground">
+      <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-setting-el text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground">
         {icon}
         {badge && (
           <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[8px] font-bold leading-4 text-primary-foreground">

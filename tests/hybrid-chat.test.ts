@@ -29,9 +29,22 @@ test("selected chat model generates text before Fal renders the image", async ()
   const textRequests: Array<{ modelId?: string; messages: Array<{ role: string; content: string }> }> = []
   const fetcher: typeof fetch = async (input, init) => {
     const url = String(input)
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    const body = init?.body
+      ? JSON.parse(String(init.body)) as Record<string, unknown>
+      : {}
     requests.push({ url, body })
 
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify({
+        request_id: "main-request",
+        status_url: "https://queue.fal.run/fal-ai/flux/dev/requests/main-request/status",
+        response_url: "https://queue.fal.run/fal-ai/flux/dev/requests/main-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/flux/dev/requests/main-request/cancel",
+      }), { status: 200 })
+    }
+    if (url.endsWith("/status?logs=1")) {
+      return new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 })
+    }
     return new Response(JSON.stringify({
       images: [{ url: "https://cdn.example.com/generated.jpg" }],
     }), { status: 200 })
@@ -69,18 +82,31 @@ test("selected chat model generates text before Fal renders the image", async ()
   assert.equal(textRequests.length, 1)
   assert.equal(textRequests[0]?.modelId, "gemini-pro")
   assert.equal(textRequests[0]?.messages.at(-1)?.content, "지금 장면을 이어줘")
-  assert.equal(requests.length, 1)
+  assert.equal(requests.length, 3)
+  assert.match(requests[0]?.url || "", /^https:\/\/queue\.fal\.run\//u)
   assert.match(
     String(requests[0]?.body.prompt),
-    /masterpiece, best quality, highly detailed, 8k, /u,
+    /^\[VISUAL STYLE\]/u,
   )
-  assert.match(String(requests[0]?.body.prompt), /zero visible writing/u)
+  assert.match(
+    String(requests[0]?.body.prompt),
+    /premium Korean romance illustration aesthetic rendered as refined semi-realistic 2\.5D digital art/u,
+  )
+  assert.match(
+    String(requests[0]?.body.prompt),
+    /\[CURRENT STORY SCENE\]\s+two fictional adults sharing an umbrella on a rainy street/u,
+  )
+  assert.doesNotMatch(
+    String(requests[0]?.body.prompt),
+    /Korean romance web novel cover style|beautiful and delicate 2\.5D CG|ultra high res/u,
+  )
   assert.equal(requests[0]?.body.image_size, "square_hd")
   assert.equal(requests[0]?.body.num_images, 1)
-  assert.equal(requests[0]?.body.num_inference_steps, 40)
+  assert.equal(requests[0]?.body.num_inference_steps, 28)
   assert.equal(requests[0]?.body.guidance_scale, 3.5)
-  assert.equal(requests[0]?.body.noise_source, "gpu")
-  assert.equal(requests[0]?.body.enable_safety_checker, true)
+  assert.equal(requests[0]?.body.acceleration, "none")
+  assert.equal(requests[0]?.body.noise_source, undefined)
+  assert.equal(requests[0]?.body.enable_safety_checker, false)
   assert.equal(requests[0]?.body.output_format, "jpeg")
 })
 
@@ -88,13 +114,26 @@ test("Fal main-model failure retries fast-sdxl with fallback-specific tuning", a
   const requests: Array<{ url: string; body: Record<string, unknown> }> = []
   const fetcher: typeof fetch = async (input, init) => {
     const url = String(input)
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+    const body = init?.body
+      ? JSON.parse(String(init.body)) as Record<string, unknown>
+      : {}
     requests.push({ url, body })
 
-    if (url.endsWith("/pony-v7")) {
+    if (init?.method === "POST" && url.endsWith("/flux/dev")) {
       return new Response(JSON.stringify({
         error: { message: "main model unavailable" },
       }), { status: 503 })
+    }
+    if (init?.method === "POST" && url.endsWith("/fast-sdxl")) {
+      return new Response(JSON.stringify({
+        request_id: "fallback-request",
+        status_url: "https://queue.fal.run/fal-ai/fast-sdxl/requests/fallback-request/status",
+        response_url: "https://queue.fal.run/fal-ai/fast-sdxl/requests/fallback-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/fast-sdxl/requests/fallback-request/cancel",
+      }), { status: 200 })
+    }
+    if (url.endsWith("/status?logs=1")) {
+      return new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 })
     }
 
     return new Response(JSON.stringify({
@@ -124,14 +163,16 @@ test("Fal main-model failure retries fast-sdxl with fallback-specific tuning", a
       text: "문을 열었다.",
       image: "https://cdn.example.com/fallback.jpg",
     })
-    assert.equal(requests.length, 2)
-    assert.match(requests[0]?.url || "", /\/pony-v7$/u)
-    assert.equal(requests[0]?.body.num_inference_steps, 40)
+    assert.equal(requests.length, 4)
+    assert.match(requests[0]?.url || "", /\/flux\/dev$/u)
+    assert.equal(requests[0]?.body.num_inference_steps, 28)
     assert.equal(requests[0]?.body.guidance_scale, 3.5)
-    assert.equal(requests[0]?.body.noise_source, "gpu")
+    assert.equal(requests[0]?.body.acceleration, "none")
+    assert.equal(requests[0]?.body.enable_safety_checker, false)
     assert.match(requests[1]?.url || "", /\/fast-sdxl$/u)
     assert.equal(requests[1]?.body.num_inference_steps, 4)
     assert.equal(requests[1]?.body.guidance_scale, 1.75)
+    assert.equal(requests[1]?.body.enable_safety_checker, false)
     assert.equal(requests[1]?.body.format, "jpeg")
     assert.equal(requests[1]?.body.output_format, undefined)
   } finally {
@@ -145,12 +186,36 @@ test("Fal main-model timeout immediately retries the fast-sdxl fallback", async 
     const url = String(input)
     requests.push(url)
 
-    if (url.endsWith("/pony-v7")) {
+    if (init?.method === "POST" && url.endsWith("/flux/dev")) {
+      return new Response(JSON.stringify({
+        request_id: "slow-main-request",
+        status_url: "https://queue.fal.run/fal-ai/flux/dev/requests/slow-main-request/status",
+        response_url: "https://queue.fal.run/fal-ai/flux/dev/requests/slow-main-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/flux/dev/requests/slow-main-request/cancel",
+      }), { status: 200 })
+    }
+    if (url.endsWith("/slow-main-request/status?logs=1")) {
       return await new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => {
           reject(new DOMException("aborted", "AbortError"))
         }, { once: true })
       })
+    }
+    if (url.endsWith("/slow-main-request/cancel")) {
+      return new Response(JSON.stringify({ status: "CANCELLATION_REQUESTED" }), {
+        status: 202,
+      })
+    }
+    if (init?.method === "POST" && url.endsWith("/fast-sdxl")) {
+      return new Response(JSON.stringify({
+        request_id: "timeout-fallback-request",
+        status_url: "https://queue.fal.run/fal-ai/fast-sdxl/requests/timeout-fallback-request/status",
+        response_url: "https://queue.fal.run/fal-ai/fast-sdxl/requests/timeout-fallback-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/fast-sdxl/requests/timeout-fallback-request/cancel",
+      }), { status: 200 })
+    }
+    if (url.endsWith("/timeout-fallback-request/status?logs=1")) {
+      return new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 })
     }
 
     return new Response(JSON.stringify({
@@ -178,8 +243,9 @@ test("Fal main-model timeout immediately retries the fast-sdxl fallback", async 
     )
 
     assert.equal(result.image, "https://cdn.example.com/timeout-fallback.jpg")
-    assert.equal(requests.length, 2)
-    assert.match(requests[1] || "", /\/fast-sdxl$/u)
+    assert.equal(requests.length, 6)
+    assert.match(requests[2] || "", /\/slow-main-request\/cancel$/u)
+    assert.match(requests[3] || "", /\/fast-sdxl$/u)
   } finally {
     console.warn = originalConsoleWarn
   }

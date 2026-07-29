@@ -1,21 +1,37 @@
-"use client"
+"use client";
 
-import { useState, useRef, useEffect, type ReactNode, type RefObject, type UIEvent } from "react"
-import { Send, Image as ImageIcon, MessageCircle, X, Zap, Asterisk, FastForward, AtSign } from "lucide-react"
-import { AlertModal } from "@/components/ui/app-modal"
-import { SLASH_COMMANDS } from "@/lib/chat-types"
-import { hasUnclosedActionMarker } from "@/lib/rp-input-parser"
-import { cn } from "@/lib/utils"
+import { AlertModal } from "@/components/ui/app-modal";
+import { SLASH_COMMANDS } from "@/lib/chat-types";
+import { hasUnclosedActionMarker } from "@/lib/rp-input-parser";
+import { cn } from "@/lib/utils";
+import {
+  Asterisk,
+  AtSign,
+  Image as ImageIcon,
+  MessageCircle,
+  Send,
+  Sparkles,
+  X,
+  Zap,
+} from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+  type UIEvent,
+} from "react";
 
-type CharacterContextMode = "mention" | "speech"
+type CharacterContextMode = "mention" | "speech";
 
 export interface ChatInputCharacter {
-  id: string
-  name: string
-  emoji?: string
-  avatarUrl?: string
-  role?: string
-  summary?: string
+  id: string;
+  name: string;
+  emoji?: string;
+  avatarUrl?: string;
+  role?: string;
+  summary?: string;
 }
 
 interface ChatInputProps {
@@ -24,12 +40,12 @@ interface ChatInputProps {
     mentionedTargets?: string[],
     image?: { url: string; name?: string },
     options?: { autoAdvance?: boolean },
-  ) => void
-  onCommand: (command: string) => void
-  characters?: ChatInputCharacter[]
-  disabled?: boolean
-  insertTextRequest?: { id: number; text: string } | null
-  imageGenerationNotice?: string
+  ) => void;
+  onCommand: (command: string) => void;
+  characters?: ChatInputCharacter[];
+  disabled?: boolean;
+  insertTextRequest?: { id: number; text: string } | null;
+  imageGenerationNotice?: string;
 }
 
 // Character targets for mentions
@@ -37,88 +53,102 @@ const MENTION_TARGETS = [
   { id: "hongGilDong", name: "홍길동", emoji: "🧑‍🦱" },
   { id: "imugi", name: "이무기", emoji: "🐉" },
   { id: "extra", name: "엑스트라", emoji: "👥" },
-]
+];
 
 function buildMentionNameToId(characters: ChatInputCharacter[]) {
   return new Map([
     ...characters.map((target) => [target.name, target.id] as const),
     ["모두", "all"] as const,
-  ])
+  ]);
 }
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function extractTypedMentions(value: string, characters: ChatInputCharacter[]): string[] {
-  const mentionNameToId = buildMentionNameToId(characters)
-  const mentionIds = new Set<string>()
+function extractTypedMentions(
+  value: string,
+  characters: ChatInputCharacter[],
+): string[] {
+  const mentionNameToId = buildMentionNameToId(characters);
+  const mentionIds = new Set<string>();
   const mentionNames = [...mentionNameToId.keys()]
     .sort((a, b) => b.length - a.length)
     .map(escapeRegExp)
-    .join("|")
-  if (!mentionNames) return []
+    .join("|");
+  if (!mentionNames) return [];
 
-  const mentionPattern = new RegExp(`(^|\\s)@(${mentionNames})(?=\\s|$)`, "gu")
-  let match: RegExpExecArray | null
+  const mentionPattern = new RegExp(`(^|\\s)@(${mentionNames})(?=\\s|$)`, "gu");
+  let match: RegExpExecArray | null;
 
   while ((match = mentionPattern.exec(value)) !== null) {
-    const mentionId = mentionNameToId.get(match[2])
-    if (mentionId) mentionIds.add(mentionId)
+    const mentionId = mentionNameToId.get(match[2]);
+    if (mentionId) mentionIds.add(mentionId);
   }
 
-  return [...mentionIds]
+  return [...mentionIds];
 }
 
-function withAutoMentionSpace(nextValue: string, previousValue: string, characters: ChatInputCharacter[]): string {
+function withAutoMentionSpace(
+  nextValue: string,
+  previousValue: string,
+  characters: ChatInputCharacter[],
+): string {
   if (nextValue.length <= previousValue.length || nextValue.endsWith(" ")) {
-    return nextValue
+    return nextValue;
   }
 
-  const mentionNames = [...buildMentionNameToId(characters).keys()].map(escapeRegExp).join("|")
-  if (!mentionNames) return nextValue
+  const mentionNames = [...buildMentionNameToId(characters).keys()]
+    .map(escapeRegExp)
+    .join("|");
+  if (!mentionNames) return nextValue;
 
-  const completedMentionPattern = new RegExp(
-    `(^|\\s)@(${mentionNames})$`,
-  )
+  const completedMentionPattern = new RegExp(`(^|\\s)@(${mentionNames})$`);
 
-  return completedMentionPattern.test(nextValue) ? `${nextValue} ` : nextValue
+  return completedMentionPattern.test(nextValue) ? `${nextValue} ` : nextValue;
 }
 
 function getActiveMentionToken(value: string, caretPosition: number) {
-  const beforeCaret = value.slice(0, caretPosition)
-  const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/)
-  if (!match) return null
-  const token = match[0]
-  const leadingSpaceLength = token.startsWith(" ") ? 1 : 0
-  const start = caretPosition - token.length + leadingSpaceLength
+  const beforeCaret = value.slice(0, caretPosition);
+  const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/);
+  if (!match) return null;
+  const token = match[0];
+  const leadingSpaceLength = token.startsWith(" ") ? 1 : 0;
+  const start = caretPosition - token.length + leadingSpaceLength;
   return {
     start,
     end: caretPosition,
     query: match[2] ?? "",
-  }
+  };
 }
 
-function renderHighlightedInput(value: string, characters: ChatInputCharacter[]) {
-  if (!value) return null
+function renderHighlightedInput(
+  value: string,
+  characters: ChatInputCharacter[],
+) {
+  if (!value) return null;
 
   const names = [...characters.map((character) => character.name), "모두"]
     .filter(Boolean)
-    .sort((a, b) => b.length - a.length)
+    .sort((a, b) => b.length - a.length);
 
-  const parts: ReactNode[] = []
-  let index = 0
+  const parts: ReactNode[] = [];
+  let index = 0;
 
   while (index < value.length) {
-    const matchedName = names.find((name) => value.startsWith(`@${name}`, index) || value.startsWith(`ⓣ${name}`, index))
+    const matchedName = names.find(
+      (name) =>
+        value.startsWith(`@${name}`, index) ||
+        value.startsWith(`ⓣ${name}`, index),
+    );
     if (!matchedName) {
-      parts.push(value[index])
-      index += 1
-      continue
+      parts.push(value[index]);
+      index += 1;
+      continue;
     }
 
-    const prefix = value.startsWith("@", index) ? "@" : "ⓣ"
-    const token = `${prefix}${matchedName}`
+    const prefix = value.startsWith("@", index) ? "@" : "ⓣ";
+    const token = `${prefix}${matchedName}`;
     parts.push(
       <span
         key={`${token}-${index}`}
@@ -126,482 +156,530 @@ function renderHighlightedInput(value: string, characters: ChatInputCharacter[])
       >
         {token}
       </span>,
-    )
-    index += token.length
+    );
+    index += token.length;
   }
 
-  return parts
+  return parts;
 }
 
-function shouldRenderHighlightedInput(value: string, characters: ChatInputCharacter[]) {
-  if (!value) return false
+function shouldRenderHighlightedInput(
+  value: string,
+  characters: ChatInputCharacter[],
+) {
+  if (!value) return false;
   return [...characters.map((character) => character.name), "모두"]
     .filter(Boolean)
-    .some((name) => value.includes(`@${name}`) || value.includes(`ⓣ${name}`))
+    .some((name) => value.includes(`@${name}`) || value.includes(`ⓣ${name}`));
 }
 
-export function ChatInput({ onSendMessage, onCommand, characters, disabled = false, insertTextRequest, imageGenerationNotice }: ChatInputProps) {
-  const mentionCharacters = characters?.length ? characters : MENTION_TARGETS
-  const [input, setInput] = useState("")
-  const [showCommands, setShowCommands] = useState(false)
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0)
-  const [contextMode, setContextMode] = useState<CharacterContextMode | null>(null)
-  const [mentionQuery, setMentionQuery] = useState("")
-  const [selectedContextIndex, setSelectedContextIndex] = useState(0)
-  const [activeMentionRange, setActiveMentionRange] = useState<{ start: number; end: number } | null>(null)
-  const [attachedImage, setAttachedImage] = useState<{ url: string; name?: string } | null>(null)
-  const [alertMessage, setAlertMessage] = useState("")
-  const [isMobile, setIsMobile] = useState(false)
-  const [isQuickBarDragging, setIsQuickBarDragging] = useState(false)
-  const [inputScrollTop, setInputScrollTop] = useState(0)
-  const [isInputMultiline, setIsInputMultiline] = useState(false)
-  const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const quickBarRef = useRef<HTMLDivElement>(null)
-  const commandPopupRef = useRef<HTMLDivElement>(null)
-  const commandButtonRef = useRef<HTMLButtonElement>(null)
-  const characterContextRef = useRef<HTMLDivElement>(null)
-  const mentionButtonRef = useRef<HTMLButtonElement>(null)
-  const speechButtonRef = useRef<HTMLButtonElement>(null)
-  const quickBarDragStartXRef = useRef(0)
-  const quickBarScrollStartRef = useRef(0)
-  const quickBarHasDraggedRef = useRef(false)
-  const suppressQuickButtonClickRef = useRef(false)
+export function ChatInput({
+  onSendMessage,
+  onCommand,
+  characters,
+  disabled = false,
+  insertTextRequest,
+  imageGenerationNotice,
+}: ChatInputProps) {
+  const mentionCharacters = characters?.length ? characters : MENTION_TARGETS;
+  const [input, setInput] = useState("");
+  const [showCommands, setShowCommands] = useState(false);
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [contextMode, setContextMode] = useState<CharacterContextMode | null>(
+    null,
+  );
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [selectedContextIndex, setSelectedContextIndex] = useState(0);
+  const [activeMentionRange, setActiveMentionRange] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
+  const [attachedImage, setAttachedImage] = useState<{
+    url: string;
+    name?: string;
+  } | null>(null);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
+  const [isQuickBarDragging, setIsQuickBarDragging] = useState(false);
+  const [inputScrollTop, setInputScrollTop] = useState(0);
+  const [isInputMultiline, setIsInputMultiline] = useState(false);
+  const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const quickBarRef = useRef<HTMLDivElement>(null);
+  const commandPopupRef = useRef<HTMLDivElement>(null);
+  const commandButtonRef = useRef<HTMLButtonElement>(null);
+  const characterContextRef = useRef<HTMLDivElement>(null);
+  const mentionButtonRef = useRef<HTMLButtonElement>(null);
+  const speechButtonRef = useRef<HTMLButtonElement>(null);
+  const quickBarDragStartXRef = useRef(0);
+  const quickBarScrollStartRef = useRef(0);
+  const quickBarHasDraggedRef = useRef(false);
+  const suppressQuickButtonClickRef = useRef(false);
 
   const filteredCommands = SLASH_COMMANDS.filter((cmd) =>
     showCommands && (!input || input.startsWith("/"))
-      ? cmd.name.toLowerCase().includes(input.startsWith("/") ? input.slice(1).toLowerCase() : "")
-      : false
-  )
+      ? cmd.name
+          .toLowerCase()
+          .includes(input.startsWith("/") ? input.slice(1).toLowerCase() : "")
+      : false,
+  );
 
   // Detect mobile environment
   useEffect(() => {
     const checkMobile = () => {
-      const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0
-      const isNarrowScreen = window.innerWidth <= 768
-      setIsMobile(isTouchDevice || isNarrowScreen)
-    }
-    
-    checkMobile()
-    window.addEventListener("resize", checkMobile)
-    return () => window.removeEventListener("resize", checkMobile)
-  }, [])
+      const isTouchDevice =
+        "ontouchstart" in window || navigator.maxTouchPoints > 0;
+      const isNarrowScreen = window.innerWidth <= 768;
+      setIsMobile(isTouchDevice || isNarrowScreen);
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   useEffect(() => {
     if (input.startsWith("/") && input.length > 0) {
-      setShowCommands(true)
-      setSelectedCommandIndex(0)
+      setShowCommands(true);
+      setSelectedCommandIndex(0);
     } else {
-      setShowCommands(false)
+      setShowCommands(false);
     }
-  }, [input])
+  }, [input]);
 
   // Auto-resize textarea
   useEffect(() => {
-    const textarea = textareaRef.current
+    const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = "auto"
-      const lineHeight = 24 // Approximate line height
-      const maxLines = 4
-      const maxHeight = lineHeight * maxLines
-      const newHeight = Math.min(textarea.scrollHeight, maxHeight)
-      textarea.style.height = `${newHeight + 2}px`
-      setIsInputMultiline(newHeight > lineHeight + 2)
-      setInputScrollTop(textarea.scrollTop)
+      textarea.style.height = "auto";
+      const lineHeight = 24; // Approximate line height
+      const maxLines = 4;
+      const maxHeight = lineHeight * maxLines;
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${newHeight + 2}px`;
+      setIsInputMultiline(newHeight > lineHeight + 2);
+      setInputScrollTop(textarea.scrollTop);
     }
-  }, [input])
+  }, [input]);
 
   useEffect(() => {
-    if (!disabled) return
-    setShowCommands(false)
-    closeCharacterContext()
-  }, [disabled])
+    if (!disabled) return;
+    setShowCommands(false);
+    closeCharacterContext();
+  }, [disabled]);
 
   useEffect(() => {
-    if (!showCommands) return
+    if (!showCommands) return;
 
     const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (commandPopupRef.current?.contains(target)) return
-      if (commandButtonRef.current?.contains(target)) return
-      setShowCommands(false)
-    }
+      const target = event.target as Node;
+      if (commandPopupRef.current?.contains(target)) return;
+      if (commandButtonRef.current?.contains(target)) return;
+      setShowCommands(false);
+    };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowCommands(false)
-    }
+      if (event.key === "Escape") setShowCommands(false);
+    };
 
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [showCommands])
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showCommands]);
 
   useEffect(() => {
-    if (contextMode === null) return
+    if (contextMode === null) return;
 
     const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node
-      if (characterContextRef.current?.contains(target)) return
-      if (mentionButtonRef.current?.contains(target)) return
-      if (speechButtonRef.current?.contains(target)) return
-      closeCharacterContext()
-    }
+      const target = event.target as Node;
+      if (characterContextRef.current?.contains(target)) return;
+      if (mentionButtonRef.current?.contains(target)) return;
+      if (speechButtonRef.current?.contains(target)) return;
+      closeCharacterContext();
+    };
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeCharacterContext()
-    }
+      if (event.key === "Escape") closeCharacterContext();
+    };
 
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [contextMode])
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMode]);
 
   useEffect(() => {
-    if (!insertTextRequest || disabled) return
-    insertAtCursor(insertTextRequest.text)
-  }, [insertTextRequest])
+    if (!insertTextRequest || disabled) return;
+    insertAtCursor(insertTextRequest.text);
+  }, [insertTextRequest]);
 
   // Handle image button click
   const handleImageClick = () => {
-    if (disabled) return
-    fileInputRef.current?.click()
-  }
+    if (disabled) return;
+    fileInputRef.current?.click();
+  };
 
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
+    const files = e.target.files;
     if (disabled) {
-      e.target.value = ""
-      return
+      e.target.value = "";
+      return;
     }
-    const file = files?.[0]
+    const file = files?.[0];
 
     if (file) {
       if (!file.type.startsWith("image/")) {
-        setAlertMessage("이미지 파일만 첨부할 수 있어요.")
-        e.target.value = ""
-        return
+        setAlertMessage("이미지 파일만 첨부할 수 있어요.");
+        e.target.value = "";
+        return;
       }
 
-      const reader = new FileReader()
+      const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === "string") {
-          setAttachedImage({ url: reader.result, name: file.name })
+          setAttachedImage({ url: reader.result, name: file.name });
         }
-      }
-      reader.readAsDataURL(file)
+      };
+      reader.readAsDataURL(file);
     }
     // Reset input so same file can be selected again
-    e.target.value = ""
-  }
+    e.target.value = "";
+  };
 
   // Handle command button click
   const handleCommandClick = () => {
-    if (disabled) return
-    closeCharacterContext()
+    if (disabled) return;
+    closeCharacterContext();
     if (showCommands) {
-      setShowCommands(false)
-      textareaRef.current?.focus()
-      return
+      setShowCommands(false);
+      textareaRef.current?.focus();
+      return;
     }
-    setShowCommands(true)
-    setSelectedCommandIndex(0)
-    textareaRef.current?.focus()
-  }
+    setShowCommands(true);
+    setSelectedCommandIndex(0);
+    textareaRef.current?.focus();
+  };
 
   const closeCharacterContext = () => {
-    setContextMode(null)
-    setMentionQuery("")
-    setSelectedContextIndex(0)
-    setActiveMentionRange(null)
-  }
+    setContextMode(null);
+    setMentionQuery("");
+    setSelectedContextIndex(0);
+    setActiveMentionRange(null);
+  };
 
   const openCharacterContext = (mode: CharacterContextMode) => {
-    if (disabled) return
-    setShowCommands(false)
+    if (disabled) return;
+    setShowCommands(false);
     if (contextMode === mode) {
-      closeCharacterContext()
-      return
+      closeCharacterContext();
+      return;
     }
-    setContextMode(mode)
-    setMentionQuery("")
-    setSelectedContextIndex(0)
-    setActiveMentionRange(null)
-  }
+    setContextMode(mode);
+    setMentionQuery("");
+    setSelectedContextIndex(0);
+    setActiveMentionRange(null);
+  };
 
-  const insertAtCursor = (text: string, range?: { start: number; end: number } | null) => {
-    const textarea = textareaRef.current
-    const start = range?.start ?? textarea?.selectionStart ?? input.length
-    const end = range?.end ?? textarea?.selectionEnd ?? input.length
-    const before = input.slice(0, start)
-    const after = input.slice(end)
-    const needsLeadingSpace = before.length > 0 && !/\s$/.test(before)
-    const nextValue = `${before}${needsLeadingSpace ? " " : ""}${text}${after}`
-    const nextCursor = before.length + (needsLeadingSpace ? 1 : 0) + text.length
+  const insertAtCursor = (
+    text: string,
+    range?: { start: number; end: number } | null,
+  ) => {
+    const textarea = textareaRef.current;
+    const start = range?.start ?? textarea?.selectionStart ?? input.length;
+    const end = range?.end ?? textarea?.selectionEnd ?? input.length;
+    const before = input.slice(0, start);
+    const after = input.slice(end);
+    const needsLeadingSpace = before.length > 0 && !/\s$/.test(before);
+    const nextValue = `${before}${needsLeadingSpace ? " " : ""}${text}${after}`;
+    const nextCursor =
+      before.length + (needsLeadingSpace ? 1 : 0) + text.length;
 
-    setInput(nextValue)
-    closeCharacterContext()
+    setInput(nextValue);
+    closeCharacterContext();
     window.requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-      textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
-    })
-  }
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   const insertActionMarker = () => {
-    if (disabled) return
+    if (disabled) return;
 
-    const textarea = textareaRef.current
-    const start = textarea?.selectionStart ?? input.length
-    const end = textarea?.selectionEnd ?? input.length
-    const selectedText = input.slice(start, end)
-    const before = input.slice(0, start)
-    const after = input.slice(end)
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? input.length;
+    const end = textarea?.selectionEnd ?? input.length;
+    const selectedText = input.slice(start, end);
+    const before = input.slice(0, start);
+    const after = input.slice(end);
 
     if (selectedText) {
-      const nextValue = `${before}*${selectedText}*${after}`
-      const nextCursor = start + selectedText.length + 2
-      setInput(nextValue)
-      closeCharacterContext()
+      const nextValue = `${before}*${selectedText}*${after}`;
+      const nextCursor = start + selectedText.length + 2;
+      setInput(nextValue);
+      closeCharacterContext();
       window.requestAnimationFrame(() => {
-        textareaRef.current?.focus()
-        textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
-      })
-      return
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+      });
+      return;
     }
 
-    const nextValue = `${before}**${after}`
-    const nextCursor = start + 1
-    setInput(nextValue)
-    closeCharacterContext()
+    const nextValue = `${before}**${after}`;
+    const nextCursor = start + 1;
+    setInput(nextValue);
+    closeCharacterContext();
     window.requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-      textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
-    })
-  }
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   const insertCharacterLine = (character: ChatInputCharacter) => {
-    const textarea = textareaRef.current
-    const start = textarea?.selectionStart ?? input.length
-    const end = textarea?.selectionEnd ?? input.length
-    const selectedText = input.slice(start, end).trim()
-    const before = input.slice(0, start).trimEnd()
-    const after = input.slice(end).trimStart()
-    const template = `ⓣ${character.name}: ${selectedText}`
-    const leading = before ? `${before}\n\n` : ""
-    const trailing = after ? `\n\n${after}` : ""
-    const nextValue = `${leading}${template}${trailing}`
-    const nextCursor = leading.length + template.length
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? input.length;
+    const end = textarea?.selectionEnd ?? input.length;
+    const selectedText = input.slice(start, end).trim();
+    const before = input.slice(0, start).trimEnd();
+    const after = input.slice(end).trimStart();
+    const template = `ⓣ${character.name}: ${selectedText}`;
+    const leading = before ? `${before}\n\n` : "";
+    const trailing = after ? `\n\n${after}` : "";
+    const nextValue = `${leading}${template}${trailing}`;
+    const nextCursor = leading.length + template.length;
 
-    setInput(nextValue)
-    closeCharacterContext()
+    setInput(nextValue);
+    closeCharacterContext();
     window.requestAnimationFrame(() => {
-      textareaRef.current?.focus()
-      textareaRef.current?.setSelectionRange(nextCursor, nextCursor)
-    })
-  }
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
 
   const handleCharacterSelect = (target: ChatInputCharacter | "all") => {
-    if (disabled) return
+    if (disabled) return;
     if (target === "all") {
-      insertAtCursor("@모두 ", activeMentionRange)
-      return
+      insertAtCursor("@모두 ", activeMentionRange);
+      return;
     }
 
     if (contextMode === "speech") {
-      insertCharacterLine(target)
-      return
+      insertCharacterLine(target);
+      return;
     }
 
-    insertAtCursor(`@${target.name} `, activeMentionRange)
-  }
+    insertAtCursor(`@${target.name} `, activeMentionRange);
+  };
 
   const handleQuickBarWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (!quickBarRef.current) return
-    const scrollDelta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-    quickBarRef.current.scrollLeft += scrollDelta
-  }
+    if (!quickBarRef.current) return;
+    const scrollDelta =
+      Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    quickBarRef.current.scrollLeft += scrollDelta;
+  };
 
   const handleQuickBarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || !quickBarRef.current) return
+    if (e.button !== 0 || !quickBarRef.current) return;
 
-    setIsQuickBarDragging(true)
-    quickBarHasDraggedRef.current = false
-    quickBarDragStartXRef.current = e.clientX
-    quickBarScrollStartRef.current = quickBarRef.current.scrollLeft
-  }
+    setIsQuickBarDragging(true);
+    quickBarHasDraggedRef.current = false;
+    quickBarDragStartXRef.current = e.clientX;
+    quickBarScrollStartRef.current = quickBarRef.current.scrollLeft;
+  };
 
   const handleQuickBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isQuickBarDragging || !quickBarRef.current) return
+    if (!isQuickBarDragging || !quickBarRef.current) return;
 
-    const dragDistance = e.clientX - quickBarDragStartXRef.current
+    const dragDistance = e.clientX - quickBarDragStartXRef.current;
     if (Math.abs(dragDistance) > 4) {
-      quickBarHasDraggedRef.current = true
-      suppressQuickButtonClickRef.current = true
+      quickBarHasDraggedRef.current = true;
+      suppressQuickButtonClickRef.current = true;
     }
-    quickBarRef.current.scrollLeft = quickBarScrollStartRef.current - dragDistance
-  }
+    quickBarRef.current.scrollLeft =
+      quickBarScrollStartRef.current - dragDistance;
+  };
 
   const stopQuickBarDrag = () => {
-    setIsQuickBarDragging(false)
+    setIsQuickBarDragging(false);
     if (suppressQuickButtonClickRef.current) {
       window.setTimeout(() => {
-        suppressQuickButtonClickRef.current = false
-      }, 0)
+        suppressQuickButtonClickRef.current = false;
+      }, 0);
     }
-  }
+  };
 
   const handleQuickBarClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!suppressQuickButtonClickRef.current && !quickBarHasDraggedRef.current) return
-    e.preventDefault()
-    e.stopPropagation()
-    quickBarHasDraggedRef.current = false
-  }
+    if (!suppressQuickButtonClickRef.current && !quickBarHasDraggedRef.current)
+      return;
+    e.preventDefault();
+    e.stopPropagation();
+    quickBarHasDraggedRef.current = false;
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (disabled) return
-    const nextValue = withAutoMentionSpace(e.target.value, input, mentionCharacters)
-    setInput(nextValue)
-    setInputScrollTop(e.target.scrollTop)
+    if (disabled) return;
+    const nextValue = withAutoMentionSpace(
+      e.target.value,
+      input,
+      mentionCharacters,
+    );
+    setInput(nextValue);
+    setInputScrollTop(e.target.scrollTop);
 
-    const mentionToken = getActiveMentionToken(nextValue, e.target.selectionStart)
+    const mentionToken = getActiveMentionToken(
+      nextValue,
+      e.target.selectionStart,
+    );
     if (mentionToken) {
-      setContextMode("mention")
-      setMentionQuery(mentionToken.query)
-      setSelectedContextIndex(0)
-      setActiveMentionRange({ start: mentionToken.start, end: mentionToken.end })
-      return
+      setContextMode("mention");
+      setMentionQuery(mentionToken.query);
+      setSelectedContextIndex(0);
+      setActiveMentionRange({
+        start: mentionToken.start,
+        end: mentionToken.end,
+      });
+      return;
     }
 
     if (contextMode === "mention" && activeMentionRange) {
-      closeCharacterContext()
+      closeCharacterContext();
     }
-  }
+  };
 
   const handleInputScroll = (e: UIEvent<HTMLTextAreaElement>) => {
-    setInputScrollTop(e.currentTarget.scrollTop)
-  }
+    setInputScrollTop(e.currentTarget.scrollTop);
+  };
 
   const handleSubmit = (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (disabled) return
-    const shouldAutoAdvance = isAutoAdvanceEnabled && !input.trim() && !attachedImage
-    if (!input.trim() && !attachedImage && !shouldAutoAdvance) return
+    e?.preventDefault();
+    if (disabled) return;
+    const shouldAutoAdvance = isAutoAdvanceEnabled && !attachedImage;
+    if (!input.trim() && !attachedImage && !shouldAutoAdvance) return;
 
-    if (shouldAutoAdvance) {
-      onSendMessage("", undefined, undefined, { autoAdvance: true })
-      closeCharacterContext()
-      return
+    if (shouldAutoAdvance && !input.trim()) {
+      onSendMessage("", undefined, undefined, { autoAdvance: true });
+      closeCharacterContext();
+      return;
     }
 
     // Check if it's a command
     if (input.trim().startsWith("/") && !attachedImage) {
-      const commandName = input.slice(1).trim()
+      const commandName = input.slice(1).trim();
       const matchedCommand = SLASH_COMMANDS.find(
-        (cmd) => cmd.name.toLowerCase() === commandName.toLowerCase()
-      )
+        (cmd) => cmd.name.toLowerCase() === commandName.toLowerCase(),
+      );
       if (matchedCommand) {
-        onCommand(matchedCommand.name)
-        setInput("")
-        setShowCommands(false)
-        return
+        onCommand(matchedCommand.name);
+        setInput("");
+        setShowCommands(false);
+        return;
       }
     }
 
-    const speechNames = mentionCharacters.map((character) => escapeRegExp(character.name)).join("|")
+    const speechNames = mentionCharacters
+      .map((character) => escapeRegExp(character.name))
+      .join("|");
     const speechTemplatePattern = speechNames
-      ? new RegExp(`(?:^|(?:\\r?\\n){2,})ⓣ(?:${speechNames}):\\s*(?=(?:\\r?\\n){2,}|$)`, "u")
-      : null
+      ? new RegExp(
+          `(?:^|(?:\\r?\\n){2,})ⓣ(?:${speechNames}):\\s*(?=(?:\\r?\\n){2,}|$)`,
+          "u",
+        )
+      : null;
     if (speechTemplatePattern?.test(input.trim())) {
-      setAlertMessage("대사 내용을 입력하세요.")
-      return
+      setAlertMessage("대사 내용을 입력하세요.");
+      return;
     }
 
     if (hasUnclosedActionMarker(input)) {
-      setAlertMessage("지문 표시(*)가 닫히지 않았어요. *내용* 형태로 닫은 뒤 전송해 주세요.")
-      return
+      setAlertMessage(
+        "지문 표시(*)가 닫히지 않았어요. *내용* 형태로 닫은 뒤 전송해 주세요.",
+      );
+      return;
     }
 
-    const mentionedTargets = extractTypedMentions(input, mentionCharacters)
+    const mentionedTargets = extractTypedMentions(input, mentionCharacters);
 
     onSendMessage(
       input.trim(),
       mentionedTargets.length > 0 ? mentionedTargets : undefined,
       attachedImage ?? undefined,
-    )
-    setInput("")
-    setAttachedImage(null)
-    setInputScrollTop(0)
-    closeCharacterContext()
-    
+      shouldAutoAdvance ? { autoAdvance: true } : undefined,
+    );
+    setInput("");
+    setAttachedImage(null);
+    setInputScrollTop(0);
+    closeCharacterContext();
+
     // Reset textarea height
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto"
+      textareaRef.current.style.height = "auto";
     }
-  }
+  };
 
   const handleCommandSelect = (commandName: string) => {
-    if (disabled) return
-    onCommand(commandName)
-    setInput("")
-    setShowCommands(false)
-  }
+    if (disabled) return;
+    onCommand(commandName);
+    setInput("");
+    setShowCommands(false);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (disabled) {
-      e.preventDefault()
-      return
+      e.preventDefault();
+      return;
     }
     if (contextMode !== null && contextTargets.length > 0) {
       if (e.key === "Escape") {
-        e.preventDefault()
-        closeCharacterContext()
-        return
+        e.preventDefault();
+        closeCharacterContext();
+        return;
       }
       if (e.key === "ArrowDown") {
-        e.preventDefault()
-        setSelectedContextIndex((index) => Math.min(index + 1, contextTargets.length - 1))
-        return
+        e.preventDefault();
+        setSelectedContextIndex((index) =>
+          Math.min(index + 1, contextTargets.length - 1),
+        );
+        return;
       }
       if (e.key === "ArrowUp") {
-        e.preventDefault()
-        setSelectedContextIndex((index) => Math.max(index - 1, 0))
-        return
+        e.preventDefault();
+        setSelectedContextIndex((index) => Math.max(index - 1, 0));
+        return;
       }
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault()
-        handleCharacterSelect(contextTargets[selectedContextIndex])
-        return
+        e.preventDefault();
+        handleCharacterSelect(contextTargets[selectedContextIndex]);
+        return;
       }
     }
 
     // Command navigation
     if (showCommands && filteredCommands.length > 0) {
       if (e.key === "Escape") {
-        e.preventDefault()
-        setShowCommands(false)
-        return
+        e.preventDefault();
+        setShowCommands(false);
+        return;
       }
       if (e.key === "ArrowDown") {
-        e.preventDefault()
+        e.preventDefault();
         setSelectedCommandIndex((prev) =>
-          prev < filteredCommands.length - 1 ? prev + 1 : prev
-        )
-        return
+          prev < filteredCommands.length - 1 ? prev + 1 : prev,
+        );
+        return;
       } else if (e.key === "ArrowUp") {
-        e.preventDefault()
-        setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : prev))
-        return
+        e.preventDefault();
+        setSelectedCommandIndex((prev) => (prev > 0 ? prev - 1 : prev));
+        return;
       } else if (e.key === "Enter") {
-        e.preventDefault()
-        handleCommandSelect(filteredCommands[selectedCommandIndex].name)
-        return
+        e.preventDefault();
+        handleCommandSelect(filteredCommands[selectedCommandIndex].name);
+        return;
       }
     }
 
@@ -613,24 +691,28 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
       } else {
         // Desktop: Enter sends, Shift+Enter creates newline
         if (!e.shiftKey) {
-          e.preventDefault()
-          handleSubmit()
+          e.preventDefault();
+          handleSubmit();
         }
       }
     }
-  }
+  };
 
   const filteredContextCharacters = mentionCharacters.filter((character) => {
-    const query = mentionQuery.trim()
-    if (!query) return true
-    return character.name.includes(query)
-  })
-  const shouldShowAllMention = contextMode === "mention" && "모두".includes(mentionQuery.trim())
+    const query = mentionQuery.trim();
+    if (!query) return true;
+    return character.name.includes(query);
+  });
+  const shouldShowAllMention =
+    contextMode === "mention" && "모두".includes(mentionQuery.trim());
   const contextTargets: Array<ChatInputCharacter | "all"> = [
     ...(shouldShowAllMention ? ["all" as const] : []),
     ...filteredContextCharacters,
-  ]
-  const showHighlightedInput = shouldRenderHighlightedInput(input, mentionCharacters)
+  ];
+  const showHighlightedInput = shouldRenderHighlightedInput(
+    input,
+    mentionCharacters,
+  );
 
   return (
     <div className="relative mx-3 mb-[calc(0.75rem+env(safe-area-inset-bottom))] rounded-lg pt-2">
@@ -672,7 +754,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
                   "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition",
                   index === selectedCommandIndex
                     ? "bg-accent"
-                    : "hover:bg-accent"
+                    : "hover:bg-accent",
                 )}
               >
                 <span className="text-lg">{cmd.icon}</span>
@@ -750,15 +832,21 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
           aria-label="지문 삽입"
           title="지문 삽입"
         >
-          <Asterisk className="w-3.5 h-3.5" />
+          <Asterisk className="w-4 h-4" />
         </button>
         <button
           type="button"
           onClick={() => setIsAutoAdvanceEnabled((enabled) => !enabled)}
           disabled={disabled}
           aria-pressed={isAutoAdvanceEnabled}
-          aria-label={isAutoAdvanceEnabled ? "자동 진행 끄기" : "자동 진행 켜기"}
-          title={isAutoAdvanceEnabled ? "자동 진행 켜짐 · 빈 메시지를 전송하면 이야기가 진행됩니다" : "자동 진행 켜기"}
+          aria-label={
+            isAutoAdvanceEnabled ? "자동 진행 끄기" : "자동 진행 켜기"
+          }
+          title={
+            isAutoAdvanceEnabled
+              ? "자동 진행 켜짐 · 전개를 입력하거나 빈 메시지로 이어갈 수 있습니다"
+              : "자동 진행 켜기"
+          }
           className={cn(
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
             isAutoAdvanceEnabled
@@ -766,7 +854,7 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
               : "bg-secondary/90 text-secondary-foreground hover:bg-accent",
           )}
         >
-          <FastForward className="h-3.5 w-3.5" />
+          <Sparkles className="h-[13px] w-[13px]" />
         </button>
 
         {/* Divider */}
@@ -845,7 +933,11 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
             onScroll={handleInputScroll}
             onKeyDown={handleKeyDown}
             disabled={disabled}
-            placeholder={isAutoAdvanceEnabled ? "빈 상태로 전송하면 자동 진행" : "줄바꿈 두번으로 말풍선 분리"}
+            placeholder={
+              isAutoAdvanceEnabled
+                ? "원하는 전개 입력(미입력 후 전송시 자동 진행)"
+                : "줄바꿈 두번으로 말풍선 분리"
+            }
             rows={1}
             className={cn(
               "relative z-10 max-h-26 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
@@ -853,22 +945,33 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
               disabled && "cursor-not-allowed opacity-60",
             )}
           />
-          
+
           {/* Send Button */}
           <button
             type="submit"
-            disabled={disabled || (!input.trim() && !attachedImage && !isAutoAdvanceEnabled)}
+            disabled={
+              disabled ||
+              (!input.trim() && !attachedImage && !isAutoAdvanceEnabled)
+            }
             className={cn(
               "flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full transition-colors",
               input.trim() || attachedImage || isAutoAdvanceEnabled
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-secondary text-muted-foreground"
+                : "bg-secondary text-muted-foreground",
             )}
-            aria-label={!input.trim() && !attachedImage && isAutoAdvanceEnabled ? "스토리 자동 진행" : "전송"}
+            aria-label={
+              isAutoAdvanceEnabled && !attachedImage
+                ? input.trim()
+                  ? "입력한 전개로 스토리 자동 진행"
+                  : "스토리 자동 진행"
+                : "전송"
+            }
           >
-            {!input.trim() && !attachedImage && isAutoAdvanceEnabled
-              ? <FastForward className="h-4 w-4" />
-              : <Send className="h-4 w-4" />}
+            {isAutoAdvanceEnabled && !attachedImage ? (
+              <Sparkles className="h-[13px] w-[13px]" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </button>
         </div>
       </form>
@@ -876,22 +979,22 @@ export function ChatInput({ onSendMessage, onCommand, characters, disabled = fal
         open={Boolean(alertMessage)}
         message={alertMessage}
         onOpenChange={(open) => {
-          if (!open) setAlertMessage("")
+          if (!open) setAlertMessage("");
         }}
       />
     </div>
-  )
+  );
 }
 
 interface CharacterContextBoxProps {
-  popoverRef: RefObject<HTMLDivElement | null>
-  open: boolean
-  mode: CharacterContextMode
-  characters: ChatInputCharacter[]
-  showAll: boolean
-  selectedIndex: number
-  onSelect: (target: ChatInputCharacter | "all") => void
-  onClose: () => void
+  popoverRef: RefObject<HTMLDivElement | null>;
+  open: boolean;
+  mode: CharacterContextMode;
+  characters: ChatInputCharacter[];
+  showAll: boolean;
+  selectedIndex: number;
+  onSelect: (target: ChatInputCharacter | "all") => void;
+  onClose: () => void;
 }
 
 function CharacterContextBox({
@@ -905,17 +1008,17 @@ function CharacterContextBox({
   onClose,
 }: CharacterContextBoxProps) {
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
-    }
+      if (event.key === "Escape") onClose();
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [onClose, open])
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, open]);
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <div
@@ -951,8 +1054,12 @@ function CharacterContextBox({
               @
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-medium text-foreground">모두</span>
-              <span className="block truncate text-xs text-muted-foreground">모든 캐릭터를 멘션</span>
+              <span className="block text-sm font-medium text-foreground">
+                모두
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                모든 캐릭터를 멘션
+              </span>
             </span>
           </button>
         )}
@@ -978,7 +1085,9 @@ function CharacterContextBox({
               </span>
             )}
             <span className="min-w-0">
-              <span className="block text-sm font-medium text-foreground">{character.name}</span>
+              <span className="block text-sm font-medium text-foreground">
+                {character.name}
+              </span>
               {(character.role || character.summary) && (
                 <span className="block truncate text-xs text-muted-foreground">
                   {character.role || character.summary}
@@ -988,9 +1097,11 @@ function CharacterContextBox({
           </button>
         ))}
         {!showAll && characters.length === 0 && (
-          <p className="px-3 py-6 text-center text-xs text-muted-foreground">일치하는 캐릭터가 없어요.</p>
+          <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+            일치하는 캐릭터가 없어요.
+          </p>
         )}
       </div>
     </div>
-  )
+  );
 }

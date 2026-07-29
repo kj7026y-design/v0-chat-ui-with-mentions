@@ -15,6 +15,8 @@ import {
   runRoleplayPipeline,
 } from "@/lib/rp/pipeline"
 
+export const maxDuration = 180
+
 export async function POST(request: Request) {
   const rawBody = await request.json().catch(() => null) as unknown
 

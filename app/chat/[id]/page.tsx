@@ -21,6 +21,7 @@ import {
   buildUserMessages,
   fitAssistantReplyToTurnBudget,
   generateAssistantReply,
+  generateFalImage,
   getAssistantReplyLengthBudget,
   getDialogueAssistCharCount,
   getMessageContentCharCount,
@@ -63,6 +64,7 @@ import {
   IMAGE_GENERATION_CREDIT_COST,
   attachMediaToMessage,
   chargeImageGenerationCredit,
+  deleteGeneratedMedia,
   getCurrentUserId,
   getImageGenerationUsage,
   incrementFreeImageGenerationUsage,
@@ -788,9 +790,10 @@ export default function ChatPage() {
     options?: { autoAdvance?: boolean },
   ) => {
     const displayContent = content.trim()
-    const isAutoAdvance = options?.autoAdvance === true && !displayContent && !image
+    const isAutoAdvance = options?.autoAdvance === true && !image
+    const hasAutoAdvanceDirective = isAutoAdvance && Boolean(displayContent)
     if (!displayContent && !image && !isAutoAdvance) return
-    const parsedInputs = isAutoAdvance
+    const parsedInputs = isAutoAdvance && !hasAutoAdvanceDirective
       ? []
       : parseChatInputSegments(displayContent, chatInputCharacters, mentions)
     if (parsedInputs.some((input) => input.kind === "character_line" && input.isEmptyLine)) {
@@ -818,7 +821,7 @@ export default function ChatPage() {
 
     const confirmedMessages = finalizeMessageCandidates(messages)
     const turnId = makeTurnId()
-    const userMessages = isAutoAdvance
+    const userMessages = isAutoAdvance && !hasAutoAdvanceDirective
       ? []
       : buildUserMessages(displayContent, chatInputCharacters, mentions, image).map((message) => ({
           ...message,
@@ -827,10 +830,11 @@ export default function ChatPage() {
             : {}),
           turnId,
           status: "completed" as const,
+          ...(isAutoAdvance ? { isAutoAdvance: true } : {}),
         }))
     const latestUserMessage = userMessages.at(-1)
     const modelContent = isAutoAdvance
-      ? AUTO_ADVANCE_MODEL_CONTENT
+      ? displayContent || AUTO_ADVANCE_MODEL_CONTENT
       : latestUserMessage?.originalContent || latestUserMessage?.content || displayContent
     const openingMessageId = selectedIntroScenario
       ? `intro-${chatId}-${selectedIntroScenario.id}`
@@ -971,6 +975,9 @@ export default function ChatPage() {
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
             autoAdvance: isAutoAdvance,
+            autoAdvanceDirective: hasAutoAdvanceDirective
+              ? displayContent
+              : undefined,
             answerLength,
             onStreamEvent: handleStreamEvent,
           },
@@ -987,7 +994,7 @@ export default function ChatPage() {
       const nextRuntimeStatus = buildNextRuntimeStatus({
         baseStatus: baseChatStoryStatus,
         previousStatus: runtimeStoryStatus,
-        userContent: isAutoAdvance ? "" : displayContent,
+        userContent: displayContent,
         replyContent: reply.content,
       })
       const nextChatStoryStatus = {
@@ -1084,7 +1091,7 @@ export default function ChatPage() {
       : retrySourceUserMessage?.turnId || payloadTurnId || makeTurnId()
     const retryUserContent = retrySourceUserMessage?.content.trim() || retryPayload.content
     const retryModelContent = retryIsAutoAdvance
-      ? AUTO_ADVANCE_MODEL_CONTENT
+      ? retryUserContent || AUTO_ADVANCE_MODEL_CONTENT
       : retryUserContent
     const refreshedRetryPayload = {
       ...retryPayload,
@@ -1158,6 +1165,10 @@ export default function ChatPage() {
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
             autoAdvance: retryIsAutoAdvance,
+            autoAdvanceDirective:
+              retryIsAutoAdvance && retryUserContent !== AUTO_ADVANCE_MODEL_CONTENT
+                ? retryUserContent
+                : undefined,
             retryAttempt: true,
             regenerationAvoidContent: retryPayload.regenerationAvoidContent,
             answerLength,
@@ -1352,9 +1363,11 @@ export default function ChatPage() {
     const targetMessage = messages[targetIndex]
     if (targetIndex < 0 || !targetMessage) return
 
-    if (targetMessage.commandId) {
-      const commandName = COMMAND_NAME_BY_ID[targetMessage.commandId]
-      const isImageCommand = targetMessage.commandId === "image"
+    const targetCommandId = targetMessage.commandId
+      ?? (targetMessage.imageUrl ? "image" : undefined)
+    if (targetCommandId) {
+      const commandName = COMMAND_NAME_BY_ID[targetCommandId]
+      const isImageCommand = targetCommandId === "image"
       if (!commandName) {
         toast.error("다시 생성할 명령어를 찾지 못했어요.")
         return
@@ -1391,6 +1404,9 @@ export default function ChatPage() {
           })
           regeneratedMessage = { ...result.message, mediaId: media.id }
           attachMediaToMessage(messageId, media.id)
+          if (targetMessage.mediaId && targetMessage.mediaId !== media.id) {
+            deleteGeneratedMedia(targetMessage.mediaId)
+          }
         }
 
         setMessages((prev) =>
@@ -1401,7 +1417,7 @@ export default function ChatPage() {
                   ...regeneratedMessage,
                   id: message.id,
                   turnId: message.turnId,
-                  commandId: isImageCommand ? undefined : targetMessage.commandId,
+                  commandId: targetCommandId,
                   timestamp: new Date(),
                   status: "completed",
                   isGenerationError: false,
@@ -1453,13 +1469,15 @@ export default function ChatPage() {
       ? messages.filter((message) => message.turnId === targetMessage.turnId)
       : []
     const messagesBeforeTarget = messages.slice(0, targetIndex)
-    const sourceUserMessage = isAutoAdvanceRewrite
-      ? undefined
-      : messagesBeforeTarget.findLast((message) =>
-          message.type === "user" && message.turnId === targetMessage.turnId && message.content.trim()
-        ) ?? messagesBeforeTarget.findLast((message) => message.type === "user" && message.content.trim())
+    const sourceUserMessage = messagesBeforeTarget.findLast((message) =>
+      message.type === "user" && message.turnId === targetMessage.turnId && message.content.trim()
+    ) ?? (
+      isAutoAdvanceRewrite
+        ? undefined
+        : messagesBeforeTarget.findLast((message) => message.type === "user" && message.content.trim())
+    )
     const userContent = isAutoAdvanceRewrite
-      ? AUTO_ADVANCE_MODEL_CONTENT
+      ? sourceUserMessage?.content.trim() || AUTO_ADVANCE_MODEL_CONTENT
       : (sourceUserMessage?.content || "").trim()
     if (!userContent) {
       toast.error("다시 생성할 사용자 메시지를 찾지 못했어요.")
@@ -1509,6 +1527,10 @@ export default function ChatPage() {
           onStreamEvent: handleRewriteStreamEvent,
           regenerationAvoidContent,
           autoAdvance: isAutoAdvanceRewrite,
+          autoAdvanceDirective:
+            isAutoAdvanceRewrite && userContent !== AUTO_ADVANCE_MODEL_CONTENT
+              ? userContent
+              : undefined,
           answerLength,
         },
       )
@@ -1602,6 +1624,88 @@ export default function ChatPage() {
 
     const confirmedMessages = finalizeMessageCandidates(messages)
     const targetMessage = confirmedMessages.find((message) => message.id === messageId)
+    if (targetMessage?.imageUrl) {
+      const userId = getCurrentUserId()
+      const usage = getImageGenerationUsage(userId)
+      const shouldUseFreeImage =
+        usage.freeImageGenerationsUsed < FREE_IMAGE_GENERATION_LIMIT
+      if (!shouldUseFreeImage && credits < IMAGE_GENERATION_CREDIT_COST) {
+        setIsImageLimitModalOpen(true)
+        return
+      }
+
+      setRegeneratingMessageId(messageId)
+      setIsTyping(true)
+      setTypingLabel("이미지 수정 중")
+      setTypingVariant("image")
+
+      try {
+        const generatedImage = await generateFalImage(trimmedContent)
+        const media = saveGeneratedMedia({
+          imageUrl: generatedImage.imageUrl,
+          prompt: trimmedContent,
+          provider: generatedImage.provider,
+          workId: currentWork?.id,
+          chatId,
+          characterId: currentCharacter?.id,
+          userId,
+          messageId: targetMessage.id,
+          title: `${characterName} 수정 이미지`,
+        })
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  type: "ai",
+                  commandId: "image",
+                  content: "",
+                  originalContent: trimmedContent,
+                  imageUrl: generatedImage.imageUrl,
+                  imageName: `${characterName} AI 이미지.jpg`,
+                  mediaId: media.id,
+                  provider: generatedImage.provider,
+                  model: generatedImage.model,
+                  status: "completed",
+                  isGenerationError: false,
+                  generationErrorMessage: undefined,
+                }
+              : message,
+          ),
+        )
+        attachMediaToMessage(targetMessage.id, media.id)
+        if (targetMessage.mediaId && targetMessage.mediaId !== media.id) {
+          deleteGeneratedMedia(targetMessage.mediaId)
+        }
+        if (shouldUseFreeImage) {
+          incrementFreeImageGenerationUsage(userId)
+        } else {
+          if (!spendCredit(
+            IMAGE_GENERATION_CREDIT_COST,
+            "이미지 수정",
+            `${characterName} 이미지 프롬프트 수정`,
+          )) {
+            throw new Error("Insufficient credits")
+          }
+          chargeImageGenerationCredit(userId)
+        }
+        setEditedMessageIds((prev) => new Set(prev).add(messageId))
+        toast.success("수정한 프롬프트로 이미지를 생성했어요.")
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "수정한 이미지 생성에 실패했어요.",
+        )
+      } finally {
+        setRegeneratingMessageId(null)
+        setIsTyping(false)
+        setTypingLabel(undefined)
+        setTypingVariant("text")
+      }
+      return
+    }
+
     const storedContent = targetMessage?.commandId
       ? formatEditedCommandContent(
           targetMessage.content,
@@ -1714,6 +1818,10 @@ export default function ChatPage() {
   }
 
   const handleDeleteMessage = (messageId: string) => {
+    const targetMessage = messages.find((message) => message.id === messageId)
+    if (targetMessage?.mediaId) {
+      deleteGeneratedMedia(targetMessage.mediaId)
+    }
     setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
     persistedMessageFingerprintsRef.current.delete(messageId)
     if (isHistoryPersistenceEnabled) {

@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
+@import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -12,9 +12,9 @@
   --popover-foreground: oklch(0.98 0 0);
   --primary: oklch(0.98 0 0);
   --primary-foreground: oklch(0.09 0 0);
-  --secondary: oklch(0.30 0 0);
+  --secondary: oklch(0.3 0 0);
   --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.30 0 0);
+  --muted: oklch(0.3 0 0);
   --muted-foreground: oklch(0.72 0 0);
   --accent: oklch(0.36 0 0);
   --accent-foreground: oklch(0.98 0 0);
@@ -33,10 +33,12 @@
   --sidebar-foreground: oklch(0.98 0 0);
   --sidebar-primary: oklch(0.98 0 0);
   --sidebar-primary-foreground: oklch(0.09 0 0);
-  --sidebar-accent: oklch(0.30 0 0);
+  --sidebar-accent: oklch(0.3 0 0);
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.46 0 0);
   --sidebar-ring: oklch(0.68 0 0);
+  --setting-el-bg: oklch(0.95 0 0);
+  --setting-el-selected: oklch(0.82 0 0 / 1);
 }
 
 .light {
@@ -72,6 +74,8 @@
   --sidebar-accent-foreground: oklch(0.15 0 0);
   --sidebar-border: oklch(0.88 0 0);
   --sidebar-ring: oklch(0.65 0 0);
+  --setting-el-bg: oklch(0.95 0 0);
+  --setting-el-selected: oklch(0.82 0 0 / 1);
 }
 
 .dark {
@@ -83,9 +87,9 @@
   --popover-foreground: oklch(0.98 0 0);
   --primary: oklch(0.98 0 0);
   --primary-foreground: oklch(0.09 0 0);
-  --secondary: oklch(0.30 0 0);
+  --secondary: oklch(0.3 0 0);
   --secondary-foreground: oklch(0.98 0 0);
-  --muted: oklch(0.30 0 0);
+  --muted: oklch(0.3 0 0);
   --muted-foreground: oklch(0.72 0 0);
   --accent: oklch(0.36 0 0);
   --accent-foreground: oklch(0.98 0 0);
@@ -103,15 +107,17 @@
   --sidebar-foreground: oklch(0.98 0 0);
   --sidebar-primary: oklch(0.98 0 0);
   --sidebar-primary-foreground: oklch(0.09 0 0);
-  --sidebar-accent: oklch(0.30 0 0);
+  --sidebar-accent: oklch(0.3 0 0);
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.46 0 0);
   --sidebar-ring: oklch(0.68 0 0);
+  --setting-el-bg: oklch(0.4 0 0);
+  --setting-el-selected: oklch(0.82 0 0 / 1);
 }
 
 @theme inline {
-  --font-sans: 'Geist', 'Geist Fallback';
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --font-sans: "Geist", "Geist Fallback";
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -148,6 +154,8 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-setting-el: var(--setting-el-bg);
+  --color-setting-el-selected: var(--setting-el-selected);
 }
 
 @layer base {
@@ -204,9 +212,12 @@
 
 /* blur effect */
 .back-blur {
-  background: linear-gradient(0deg,rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0) 100%);
+  background: linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.8) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
 }
-
 
 /* Hide Next.js Dev Overlay Indicator badge to prevent blocking UI headers */
 nextjs-portal,

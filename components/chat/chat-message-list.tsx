@@ -166,8 +166,8 @@ const chatThemes: Record<ChatThemeId, ChatThemeConfig> = {
 };
 
 function getEditTargetMessage(message: ChatMessage, messages: ChatMessage[]) {
-  if (!message.imageUrl || message.content.trim() || !message.turnId)
-    return message;
+  if (message.imageUrl) return message;
+  if (message.content.trim() || !message.turnId) return message;
 
   return (
     [...messages]
@@ -204,7 +204,8 @@ function getLatestEditableMessageId(messages: ChatMessage[]) {
       editTarget.type === "ai" ||
       isCharacterLine ||
       isCommandMessage;
-    if (isEditable && editTarget.content.trim()) return editTarget.id;
+    if (isEditable && (editTarget.content.trim() || editTarget.imageUrl))
+      return editTarget.id;
   }
   return null;
 }
@@ -563,9 +564,11 @@ function BubbleMessageBubble({
   onSaveMessageEdit,
 }: BubbleMessageBubbleProps) {
   const [isBranching, setIsBranching] = useState(false);
-  const editableInitialContent = message.commandId
-    ? getCommandEditableContent(message.content, message.commandId)
-    : normalizeMessageNewlines(editInitialContent);
+  const editableInitialContent = message.imageUrl
+    ? message.originalContent?.trim() || ""
+    : message.commandId
+      ? getCommandEditableContent(message.content, message.commandId)
+      : normalizeMessageNewlines(editInitialContent);
   const [editDraft, setEditDraft] = useState(() => editableInitialContent);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const isCharacterLine = Boolean(
@@ -588,7 +591,12 @@ function BubbleMessageBubble({
   }, [message.imageUrl]);
 
   if (message.id === regeneratingMessageId) {
-    return message.commandId ? (
+    return message.commandId === "image" || message.imageUrl ? (
+      <BubbleImageGeneratingIndicator
+        label={typingLabel ?? "이미지 재생성 중"}
+        themeConfig={themeConfig}
+      />
+    ) : message.commandId ? (
       <BubbleCommandGeneratingIndicator
         label={typingLabel ?? "명령어 재생성 중"}
         themeConfig={themeConfig}
@@ -1124,8 +1132,8 @@ function BubbleMessageBubble({
       )}
 
       {/* Author Tools - only the latest message can be edited or deleted. */}
-      {isLatest &&
-        (isUser || isAI || isCharacterLine) &&
+      {(message.imageUrl ||
+        (isLatest && (isUser || isAI || isCharacterLine))) &&
         !isEditing &&
         !disabled && (
           <div className="animate-in fade-in slide-in-from-top-1 duration-150">
@@ -1137,6 +1145,7 @@ function BubbleMessageBubble({
               isEdited={isEdited}
               canRewrite={isAI}
               disabled={disabled}
+              itemType={message.imageUrl ? "image" : "message"}
             />
           </div>
         )}
@@ -1814,7 +1823,7 @@ function BubbleCommandGeneratingIndicator({
       <div
         role="status"
         aria-live="polite"
-        className="flex max-w-[92%] items-center gap-2 rounded-xl border px-3 py-2.5"
+        className="flex max-w-[92%] flex-col items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5"
         style={{
           backgroundColor: themeTextPalette.panelBg,
           borderColor: themeTextPalette.panelBorder,
@@ -1891,16 +1900,6 @@ function BubbleImageGeneratingIndicator({
         }}
       >
         <div className="flex aspect-square max-h-80 min-h-48 w-full flex-col items-center justify-center gap-3 px-4 text-center">
-          <p
-            className="text-sm font-medium"
-            style={{ color: themeTextPalette.mutedText }}
-            aria-live="polite"
-          >
-            {baseLabel}
-            <span className="inline-block w-5 text-left">
-              {".".repeat(dotCount)}
-            </span>
-          </p>
           <div className="flex items-center gap-1.5">
             <span
               className="h-2 w-2 animate-bounce rounded-full [animation-delay:0ms]"
@@ -1915,6 +1914,16 @@ function BubbleImageGeneratingIndicator({
               style={{ backgroundColor: themeTextPalette.indicator }}
             />
           </div>
+          <p
+            className="text-sm font-medium"
+            style={{ color: themeTextPalette.mutedText }}
+            aria-live="polite"
+          >
+            {baseLabel}
+            {/* <span className="inline-block w-5 text-left">
+              {".".repeat(dotCount)}
+            </span> */}
+          </p>
         </div>
       </div>
     </div>

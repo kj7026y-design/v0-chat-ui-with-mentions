@@ -7,7 +7,8 @@ const nextConfig = {
     "192.168.1.120",
     "192.168.1.164",
     "192.168.1.179",
-    "192.168.1.110"
+    "192.168.1.110",
+    "192.168.1.49",
   ],
   typescript: {
     ignoreBuildErrors: true,
@@ -15,6 +16,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-}
+};
 
-export default nextConfig
+export default nextConfig;

@@ -26,6 +26,7 @@ import {
 } from "@/lib/chat-commands"
 import { getVisibleCommandContent } from "@/lib/chat-commands/shared"
 import type { ImageCommandContext } from "@/lib/chat-commands/types"
+import { IMAGE_SCENE_SYSTEM_INSTRUCTION } from "@/lib/image-prompt-policy"
 
 export {
   buildAudienceReactionContent,
@@ -112,6 +113,7 @@ export type GenerateAssistantReplyOptions = {
   regenerationAvoidContent?: string
   retryAttempt?: boolean
   autoAdvance?: boolean
+  autoAdvanceDirective?: string
   bypassRoleplayRules?: boolean
   debugRawRoleplayStream?: boolean
   answerLength?: AssistantReplyLengthBudget
@@ -258,7 +260,7 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
   const personaName = persona?.name || status?.personaName || "user persona"
 
   const promptParts = [
-    "full-bleed cinematic story scene from an ongoing moment, never promotional artwork",
+    "current private story context for one specific visible moment",
     "show the primary fictional character and the second fictional character together in the same physical scene",
     latestUserAction
       ? `latest turn context to translate into silent visual action rather than written or spoken words: ${latestUserAction}`
@@ -292,33 +294,6 @@ export function buildImagePrompt(characterName: string, context: ImageCommandCon
     recentFlow
       ? `silent scene continuity context; translate every line into expression, posture, action, and setting only: ${recentFlow}`
       : "",
-    [
-      "high quality fantasy concept art",
-      "cinematic composition",
-      "dramatic moody lighting",
-      "detailed background",
-      "sharp focus",
-      "rich atmosphere",
-      "high detail digital illustration",
-      "natural scene filling the entire frame",
-      "not a character introduction",
-      "not a character sheet",
-      "not a profile card",
-      "not a poster",
-      "not a title card",
-      "not a social media post",
-      "no typography",
-      "no visible text in any language",
-      "no names",
-      "no captions",
-      "no labels",
-      "no subtitles",
-      "no speech bubbles",
-      "no signs",
-      "no interface",
-      "no logo",
-      "no watermark",
-    ].join(", "),
   ].filter(Boolean)
 
   return clip(promptParts.join(". "), 1400)
@@ -359,10 +334,12 @@ export async function generateImagePromptWithGeminiPro(
           content: [
             "Create one production-ready English prompt for a text-to-image model from the supplied private story context.",
             "Return only the English visual prompt with no title, label, explanation, markdown, quotation marks, or TRIGGER_IMG tag.",
+            IMAGE_SCENE_SYSTEM_INSTRUCTION,
             "Describe the current action, both fictional adult subjects, appearance, expressions, body language, environment, composition, lighting, and mood.",
             "Translate dialogue into visible action and expression rather than written words.",
-            "The resulting image must be a full-bleed narrative scene, not a character sheet, profile card, poster, title card, or interface.",
-            "Do not request visible text, names, captions, subtitles, speech bubbles, signs, logos, or watermarks.",
+            "Return only scene-specific visible information; the renderer prepends the visual style separately.",
+            "Do not add or repeat art-style, medium, rendering, or quality-booster terms such as book cover style, web novel style, 2.5D, photorealistic, cinematic film still, concept art, masterpiece, best quality, or ultra high resolution.",
+            "Use concrete lighting sources and visibility requirements instead of generic style phrases.",
           ].join(" "),
         },
         {
@@ -392,7 +369,7 @@ interface ImageGenerationResponse {
   error?: string
 }
 
-async function generateFalImage(prompt: string) {
+export async function generateFalImage(prompt: string) {
   const response = await fetch("/api/images/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -409,7 +386,7 @@ async function generateFalImage(prompt: string) {
 
   return {
     imageUrl: result.imageUrl,
-    model: result.model || "fal-ai/pony-v7",
+    model: result.model || "fal-ai/flux/dev",
     provider: result.provider || "fal",
   }
 }
@@ -1099,6 +1076,7 @@ async function generatePollinationsReply(
     regenerationAvoidContent: options.regenerationAvoidContent,
     retryAttempt: options.retryAttempt,
     autoAdvance: options.autoAdvance,
+    autoAdvanceDirective: options.autoAdvanceDirective,
     previousAssistantContent,
     messages: outboundMessages,
     bypassRoleplayRules,
@@ -1351,6 +1329,7 @@ export async function runCommand(
       message: {
         id: makeId(),
         type: "ai",
+        commandId: "image",
         content: "",
         imageUrl: generatedImage.imageUrl,
         imageName: `${characterName} AI 이미지.jpg`,

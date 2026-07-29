@@ -10,7 +10,7 @@ import {
 } from "../lib/chat-engine"
 import type { StoryCharacter, StoryPersona, StoryWork } from "../lib/storychat-storage"
 
-test("scene image prompts omit title-card copy and private character names", () => {
+test("scene context omits title-card copy, private names, and rendering-style keywords", () => {
   const context: ImageCommandContext = {
     work: {
       title: "강태현 캐릭터 소개",
@@ -41,8 +41,10 @@ test("scene image prompts omit title-card copy and private character names", () 
   assert.doesNotMatch(prompt, /김여자/u)
   assert.match(prompt, /검은 머리와 짙은 회색 셔츠/u)
   assert.match(prompt, /젖은 갈색 코트와 짧은 머리/u)
-  assert.match(prompt, /not a character introduction/i)
-  assert.match(prompt, /no visible text in any language/i)
+  assert.doesNotMatch(
+    prompt,
+    /concept art|digital illustration|masterpiece|best quality|ultra high res|cinematic film still|book cover style/i,
+  )
 })
 
 test("image prompt model output cleanup removes wrappers and trigger syntax", () => {
@@ -63,7 +65,7 @@ test("image prompt generation always uses Gemini 2.5 Pro", async () => {
   const fetcher: typeof fetch = async (_input, init) => {
     requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>
     return new Response(JSON.stringify({
-      result: "two fictional adults facing each other in a quiet apartment, cinematic lighting",
+      result: "two fictional adults facing each other in a quiet apartment, warm ceiling light keeping both faces clearly visible",
     }), { status: 200 })
   }
 
@@ -77,6 +79,9 @@ test("image prompt generation always uses Gemini 2.5 Pro", async () => {
   assert.equal(requestBody?.roleplayEnabled, false)
   assert.equal(
     prompt,
-    "two fictional adults facing each other in a quiet apartment, cinematic lighting",
+    "two fictional adults facing each other in a quiet apartment, warm ceiling light keeping both faces clearly visible",
   )
+  const messages = requestBody?.messages as Array<{ role: string; content: string }>
+  assert.match(messages[0]?.content || "", /renderer prepends the visual style separately/i)
+  assert.match(messages[0]?.content || "", /Do not add or repeat art-style/i)
 })

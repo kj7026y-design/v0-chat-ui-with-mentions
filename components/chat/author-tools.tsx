@@ -13,6 +13,7 @@ interface AuthorToolsProps {
   isEdited?: boolean
   canRewrite?: boolean
   disabled?: boolean
+  itemType?: "message" | "image"
 }
 
 export function AuthorTools({ 
@@ -23,19 +24,21 @@ export function AuthorTools({
   isEdited,
   canRewrite = true,
   disabled = false,
+  itemType = "message",
 }: AuthorToolsProps) {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const isImage = itemType === "image"
   const tools = [
     { 
       icon: RefreshCw, 
-      label: "다시 쓰기", 
+      label: isImage ? "새로 생성" : "다시 쓰기",
       action: () => onRewrite?.(messageId),
       className: "hover:text-foreground hover:bg-accent",
       visible: canRewrite,
     },
     { 
       icon: Pencil, 
-      label: "문장 수정", 
+      label: isImage ? "프롬프트 수정" : "문장 수정",
       action: () => onEdit?.(messageId),
       className: "hover:text-purple-400 hover:bg-purple-900/30",
       visible: true,
@@ -74,10 +77,12 @@ export function AuthorTools({
           "text-muted-foreground text-[11px] font-medium",
           "transition-all duration-150 hover:text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50",
         )}
-        title="기억 삭제"
+        title={isImage ? "이미지 삭제" : "기억 삭제"}
       >
         <Trash2 className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">기억 삭제</span>
+        <span className="hidden sm:inline">
+          {isImage ? "이미지 삭제" : "기억 삭제"}
+        </span>
       </button>
       
       {/* Edited indicator */}
@@ -87,8 +92,12 @@ export function AuthorTools({
 
       <ConfirmModal
         open={isDeleteConfirmOpen}
-        title="메시지를 삭제할까요?"
-        message="삭제한 메시지는 되돌릴 수 없어요. 이 메시지를 채팅에서 삭제합니다."
+        title={isImage ? "이미지를 삭제할까요?" : "메시지를 삭제할까요?"}
+        message={
+          isImage
+            ? "삭제한 이미지는 되돌릴 수 없어요. 채팅과 갤러리에서 이 이미지를 삭제합니다."
+            : "삭제한 메시지는 되돌릴 수 없어요. 이 메시지를 채팅에서 삭제합니다."
+        }
         confirmText="삭제"
         destructive
         onOpenChange={setIsDeleteConfirmOpen}

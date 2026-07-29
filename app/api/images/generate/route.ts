@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { generateFalImageFromPrompt } from "@/lib/hybrid-chat"
 
 export const runtime = "nodejs"
-export const maxDuration = 45
+export const maxDuration = 150
 
 const MAX_IMAGE_PROMPT_LENGTH = 4_000
 
