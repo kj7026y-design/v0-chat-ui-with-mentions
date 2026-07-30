@@ -174,7 +174,7 @@ test("AC09 regeneration uses edited visible input instead of stale model metadat
   assert.doesNotMatch(modelContext, /^\[김여자의 대사\]\s*"준비는 됐어 알려줄 수 있어\?"$/mu)
 })
 
-test("AC10 guided auto advance keeps the typed scene direction as an author instruction", () => {
+test("AC10 guided auto advance treats typed text as story source, not user intent", () => {
   const directive =
     "한민준과 강태현이 갑자기 만난 상황을 연출하고 두 사람의 대화도 출력해줘."
   const messages = [
@@ -205,9 +205,29 @@ test("AC10 guided auto advance keeps the typed scene direction as an author inst
   assert.equal(compiled.turnPolicy.autoAdvance, true)
   assert.equal(compiled.turnPolicy.guidedAutoAdvance, true)
   assert.equal(compiled.autoAdvanceDirective, directive)
-  assert.match(compiled.responseGoal, /즉시 실제 사건으로 구현/u)
-  assert.match(finalInput, /자동 진행 - 사용자의 장면 연출 지시/u)
+  assert.equal(compiled.latestInput.kind, "ooc_instruction")
+  assert.equal(compiled.latestInput.dialogue, undefined)
+  assert.equal(compiled.latestInput.action, undefined)
+  assert.doesNotMatch(compiled.latestInput.intent, /사용자가 지정한|김여자의/u)
+  assert.match(compiled.responseGoal, /작가용 전개 참고 소스/u)
+  assert.match(finalInput, /자동 진행 - 작가용 전개 참고 소스/u)
   assert.match(finalInput, /한민준과 강태현이 갑자기 만난 상황/u)
-  assert.match(finalInput, /인물과 요청된 대화를 장면에 포함/u)
+  assert.match(finalInput, /사용자가 말하거나 행동하거나 의도한 장면 속 사건이 아니다/u)
+  assert.doesNotMatch(finalInput, /\[김여자의 (?:대사|행동|의도)\]/u)
   assert.doesNotMatch(finalInput, /사용자가 새 행동이나 대사를 입력하지 않고 침묵/u)
+})
+
+test("AC11 persisted auto advance source never returns to user-dialogue context", () => {
+  const message = buildUserMessages(
+    "강태현이 복도 끝에서 낯선 인물과 마주친다.",
+    characters,
+  )[0]
+  message.isAutoAdvance = true
+
+  const modelContext = formatMessageForAIContext(message)
+
+  assert.match(modelContext, /^\[자동 진행 - 전개 참고 소스\]/u)
+  assert.match(modelContext, /작가용 소스로만 사용/u)
+  assert.match(modelContext, /사용자가 말하거나 행동하거나 의도한 장면 속 사건이 아니다/u)
+  assert.doesNotMatch(modelContext, /\[사용자의 (?:대사|행동|의도)\]/u)
 })

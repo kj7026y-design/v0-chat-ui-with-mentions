@@ -37,9 +37,9 @@ test("selected chat model generates text before Fal renders the image", async ()
     if (init?.method === "POST") {
       return new Response(JSON.stringify({
         request_id: "main-request",
-        status_url: "https://queue.fal.run/fal-ai/flux/dev/requests/main-request/status",
-        response_url: "https://queue.fal.run/fal-ai/flux/dev/requests/main-request/response",
-        cancel_url: "https://queue.fal.run/fal-ai/flux/dev/requests/main-request/cancel",
+        status_url: "https://queue.fal.run/fal-ai/flux-lora/requests/main-request/status",
+        response_url: "https://queue.fal.run/fal-ai/flux-lora/requests/main-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/flux-lora/requests/main-request/cancel",
       }), { status: 200 })
     }
     if (url.endsWith("/status?logs=1")) {
@@ -86,25 +86,25 @@ test("selected chat model generates text before Fal renders the image", async ()
   assert.match(requests[0]?.url || "", /^https:\/\/queue\.fal\.run\//u)
   assert.match(
     String(requests[0]?.body.prompt),
-    /^\[VISUAL STYLE\]/u,
+    /^\[ART DIRECTION\]/u,
   )
   assert.match(
     String(requests[0]?.body.prompt),
-    /premium Korean romance illustration aesthetic rendered as refined semi-realistic 2\.5D digital art/u,
+    /ornate, high-gloss Korean romantic-fantasy illustration/u,
   )
   assert.match(
     String(requests[0]?.body.prompt),
-    /\[CURRENT STORY SCENE\]\s+two fictional adults sharing an umbrella on a rainy street/u,
+    /\[CURRENT SCENE\]\s+two fictional adults sharing an umbrella on a rainy street/u,
   )
   assert.doesNotMatch(
     String(requests[0]?.body.prompt),
     /Korean romance web novel cover style|beautiful and delicate 2\.5D CG|ultra high res/u,
   )
-  assert.equal(requests[0]?.body.image_size, "square_hd")
+  assert.equal(requests[0]?.body.image_size, "portrait_4_3")
   assert.equal(requests[0]?.body.num_images, 1)
   assert.equal(requests[0]?.body.num_inference_steps, 28)
-  assert.equal(requests[0]?.body.guidance_scale, 3.5)
-  assert.equal(requests[0]?.body.acceleration, "none")
+  assert.equal(requests[0]?.body.guidance_scale, 4.5)
+  assert.equal(requests[0]?.body.acceleration, undefined)
   assert.equal(requests[0]?.body.noise_source, undefined)
   assert.equal(requests[0]?.body.enable_safety_checker, false)
   assert.equal(requests[0]?.body.output_format, "jpeg")
@@ -119,7 +119,7 @@ test("Fal main-model failure retries fast-sdxl with fallback-specific tuning", a
       : {}
     requests.push({ url, body })
 
-    if (init?.method === "POST" && url.endsWith("/flux/dev")) {
+    if (init?.method === "POST" && url.endsWith("/flux-lora")) {
       return new Response(JSON.stringify({
         error: { message: "main model unavailable" },
       }), { status: 503 })
@@ -164,10 +164,10 @@ test("Fal main-model failure retries fast-sdxl with fallback-specific tuning", a
       image: "https://cdn.example.com/fallback.jpg",
     })
     assert.equal(requests.length, 4)
-    assert.match(requests[0]?.url || "", /\/flux\/dev$/u)
+    assert.match(requests[0]?.url || "", /\/flux-lora$/u)
     assert.equal(requests[0]?.body.num_inference_steps, 28)
-    assert.equal(requests[0]?.body.guidance_scale, 3.5)
-    assert.equal(requests[0]?.body.acceleration, "none")
+    assert.equal(requests[0]?.body.guidance_scale, 4.5)
+    assert.equal(requests[0]?.body.acceleration, undefined)
     assert.equal(requests[0]?.body.enable_safety_checker, false)
     assert.match(requests[1]?.url || "", /\/fast-sdxl$/u)
     assert.equal(requests[1]?.body.num_inference_steps, 4)
@@ -186,12 +186,12 @@ test("Fal main-model timeout immediately retries the fast-sdxl fallback", async 
     const url = String(input)
     requests.push(url)
 
-    if (init?.method === "POST" && url.endsWith("/flux/dev")) {
+    if (init?.method === "POST" && url.endsWith("/flux-lora")) {
       return new Response(JSON.stringify({
         request_id: "slow-main-request",
-        status_url: "https://queue.fal.run/fal-ai/flux/dev/requests/slow-main-request/status",
-        response_url: "https://queue.fal.run/fal-ai/flux/dev/requests/slow-main-request/response",
-        cancel_url: "https://queue.fal.run/fal-ai/flux/dev/requests/slow-main-request/cancel",
+        status_url: "https://queue.fal.run/fal-ai/flux-lora/requests/slow-main-request/status",
+        response_url: "https://queue.fal.run/fal-ai/flux-lora/requests/slow-main-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/flux-lora/requests/slow-main-request/cancel",
       }), { status: 200 })
     }
     if (url.endsWith("/slow-main-request/status?logs=1")) {
@@ -286,4 +286,55 @@ test("Fal failure preserves the sanitized selected-model text with a null image"
     console.error = originalConsoleError
     console.warn = originalConsoleWarn
   }
+})
+
+test("LoRA entries from env are included in flux-lora request body", async () => {
+  const requests: Array<{ url: string; body: Record<string, unknown> }> = []
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input)
+    const body = init?.body
+      ? JSON.parse(String(init.body)) as Record<string, unknown>
+      : {}
+    requests.push({ url, body })
+
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify({
+        request_id: "lora-request",
+        status_url: "https://queue.fal.run/fal-ai/flux-lora/requests/lora-request/status",
+        response_url: "https://queue.fal.run/fal-ai/flux-lora/requests/lora-request/response",
+        cancel_url: "https://queue.fal.run/fal-ai/flux-lora/requests/lora-request/cancel",
+      }), { status: 200 })
+    }
+    if (url.endsWith("/status?logs=1")) {
+      return new Response(JSON.stringify({ status: "COMPLETED" }), { status: 200 })
+    }
+    return new Response(JSON.stringify({
+      images: [{ url: "https://cdn.example.com/lora-generated.jpg" }],
+    }), { status: 200 })
+  }
+
+  const result = await runHybridChat(
+    { message: "장면을 그려줘", chatHistory: [] },
+    {
+      fetcher,
+      env: {
+        FAL_KEY: "fal-test-key",
+        FAL_LORA_PATH: "https://example.com/my-style.safetensors",
+        FAL_LORA_SCALE: "0.8",
+      },
+      textGenerator: async () => ({
+        content: "달빛 아래 서 있었다. [TRIGGER_IMG: an adult standing under moonlight]",
+        modelId: "free",
+        provider: "gemini",
+      }),
+    },
+  )
+
+  assert.equal(result.image, "https://cdn.example.com/lora-generated.jpg")
+  const submitBody = requests[0]?.body
+  assert.ok(Array.isArray(submitBody?.loras))
+  const loras = submitBody.loras as Array<{ path: string; scale: number }>
+  assert.equal(loras.length, 1)
+  assert.equal(loras[0]?.path, "https://example.com/my-style.safetensors")
+  assert.equal(loras[0]?.scale, 0.8)
 })

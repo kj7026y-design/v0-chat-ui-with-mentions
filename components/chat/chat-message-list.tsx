@@ -7,6 +7,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { Check, Copy } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { type ChatMessage } from "@/lib/chat-types";
 import {
@@ -569,6 +570,9 @@ function BubbleMessageBubble({
     : message.commandId
       ? getCommandEditableContent(message.content, message.commandId)
       : normalizeMessageNewlines(editInitialContent);
+  const copyText = message.commandId
+    ? getCommandEditableContent(message.content, message.commandId)
+    : normalizeMessageNewlines(message.content);
   const [editDraft, setEditDraft] = useState(() => editableInitialContent);
   const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const isCharacterLine = Boolean(
@@ -615,7 +619,7 @@ function BubbleMessageBubble({
     return (
       <div className="flex justify-start">
         <div
-          className="max-w-[92%] rounded-xl border px-3 py-3 shadow-sm"
+          className="max-w-[92%] rounded-xl border px-3 py-3"
           style={{
             backgroundColor: themeTextPalette.panelBg,
             borderColor: "rgba(220,38,38,0.35)",
@@ -775,6 +779,7 @@ function BubbleMessageBubble({
           <BranchButton
             disabled={disabled}
             isBranching={isBranching}
+            copyText={copyText}
             onClick={() => {
               if (disabled) return;
               setIsBranching(true);
@@ -831,8 +836,11 @@ function BubbleMessageBubble({
     !message.imageUrl && shouldRenderMessageSegments(displayMessage, segments);
   const composerParts =
     isUser && !message.imageUrl ? parseComposerInput(displayContent) : [];
+  const isAutoAdvanceSource =
+    isUser && message.isAutoAdvance === true && Boolean(displayContent);
   const shouldRenderComposerParts =
     isUser &&
+    !isAutoAdvanceSource &&
     (composerParts.some((part) => part.type === "action") ||
       composerParts.length > 1);
 
@@ -877,6 +885,7 @@ function BubbleMessageBubble({
           <BranchButton
             disabled={disabled}
             isBranching={isBranching}
+            copyText={copyText}
             onClick={() => {
               if (disabled) return;
               setIsBranching(true);
@@ -958,6 +967,7 @@ function BubbleMessageBubble({
           <BranchButton
             disabled={disabled}
             isBranching={isBranching}
+            copyText={copyText}
             onClick={() => {
               if (disabled) return;
               setIsBranching(true);
@@ -1051,6 +1061,11 @@ function BubbleMessageBubble({
               className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
               style={{ fontSize: textSize, lineHeight }}
             >
+              {isAutoAdvanceSource && (
+                <span className="mr-2 inline-block font-semibold text-amber-300">
+                  자동진행
+                </span>
+              )}
               {renderHighlightedMentions(displayContent, mentionNames)}
             </p>
           )}
@@ -1155,6 +1170,7 @@ function BubbleMessageBubble({
         <BranchButton
           disabled={disabled}
           isBranching={isBranching}
+          copyText={copyText}
           onClick={() => {
             if (disabled) return;
             setIsBranching(true);
@@ -1711,15 +1727,46 @@ function EditMessageForm({
 function BranchButton({
   disabled,
   isBranching,
+  copyText,
   onClick,
 }: {
   disabled: boolean;
   isBranching: boolean;
+  copyText: string;
   onClick: () => void;
 }) {
+  const [isCopied, setIsCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isCopied) return;
+    const timeout = window.setTimeout(() => setIsCopied(false), 1_500);
+    return () => window.clearTimeout(timeout);
+  }, [isCopied]);
+
+  const handleCopy = async () => {
+    const normalizedCopyText = copyText.trim();
+    if (disabled || !normalizedCopyText) return;
+
+    try {
+      await navigator.clipboard.writeText(normalizedCopyText);
+      setIsCopied(true);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = normalizedCopyText;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      if (copied) setIsCopied(true);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-3 -mx-1 -mt-1">
+    <div className="-mx-1 -mt-1 flex items-center gap-1">
       <button
+        type="button"
         onClick={onClick}
         disabled={disabled || isBranching}
         className={cn(
@@ -1742,6 +1789,20 @@ function BranchButton({
           />
         </svg>
         <span>{isBranching ? "분기 생성 중..." : "여기서부터 분기"}</span>
+      </button>
+      <button
+        type="button"
+        onClick={handleCopy}
+        disabled={disabled || !copyText.trim()}
+        aria-label={isCopied ? "복사됨" : "메시지 복사"}
+        title={isCopied ? "복사됨" : "메시지 복사"}
+        className="flex h-6 w-6 shrink-0 items-center justify-center text-[var(--chat-theme-muted-text)] transition-colors hover:text-[var(--chat-theme-text)] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isCopied ? (
+          <Check className="h-3 w-3" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3 w-3" aria-hidden="true" />
+        )}
       </button>
     </div>
   );

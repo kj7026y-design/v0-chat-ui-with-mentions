@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import {
   Asterisk,
   AtSign,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Image as ImageIcon,
   MessageCircle,
   Send,
@@ -204,6 +206,7 @@ export function ChatInput({
   const [inputScrollTop, setInputScrollTop] = useState(0);
   const [isInputMultiline, setIsInputMultiline] = useState(false);
   const [isAutoAdvanceEnabled, setIsAutoAdvanceEnabled] = useState(false);
+  const [isQuickBarVisible, setIsQuickBarVisible] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const quickBarRef = useRef<HTMLDivElement>(null);
@@ -784,105 +787,85 @@ export function ChatInput({
       />
 
       {/* Quick Action Bar */}
-      <div
-        ref={quickBarRef}
-        onWheel={handleQuickBarWheel}
-        onMouseDown={handleQuickBarMouseDown}
-        onMouseMove={handleQuickBarMouseMove}
-        onMouseUp={stopQuickBarDrag}
-        onMouseLeave={stopQuickBarDrag}
-        onClickCapture={handleQuickBarClickCapture}
-        className={cn(
-          "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none",
-          isQuickBarDragging ? "cursor-grabbing" : "cursor-grab",
-        )}
-      >
-        {/* Fixed Actions */}
-        <button
-          type="button"
-          onClick={handleImageClick}
-          disabled={disabled}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="이미지 첨부"
-          title="이미지 첨부"
-        >
-          <ImageIcon className="w-3.5 h-3.5" />
-        </button>
-        {imageGenerationNotice && (
-          <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
-            {imageGenerationNotice}
-          </span>
-        )}
-        <button
-          ref={commandButtonRef}
-          type="button"
-          onClick={handleCommandClick}
-          disabled={disabled}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="명령어"
-          title="명령어"
-        >
-          <Zap className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={insertActionMarker}
-          disabled={disabled}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="지문 삽입"
-          title="지문 삽입"
-        >
-          <Asterisk className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setIsAutoAdvanceEnabled((enabled) => !enabled)}
-          disabled={disabled}
-          aria-pressed={isAutoAdvanceEnabled}
-          aria-label={
-            isAutoAdvanceEnabled ? "자동 진행 끄기" : "자동 진행 켜기"
-          }
-          title={
-            isAutoAdvanceEnabled
-              ? "자동 진행 켜짐 · 전개를 입력하거나 빈 메시지로 이어갈 수 있습니다"
-              : "자동 진행 켜기"
-          }
+      {isQuickBarVisible && (
+        <div
+          ref={quickBarRef}
+          onWheel={handleQuickBarWheel}
+          onMouseDown={handleQuickBarMouseDown}
+          onMouseMove={handleQuickBarMouseMove}
+          onMouseUp={stopQuickBarDrag}
+          onMouseLeave={stopQuickBarDrag}
+          onClickCapture={handleQuickBarClickCapture}
           className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-            isAutoAdvanceEnabled
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-secondary/90 text-secondary-foreground hover:bg-accent",
+            "mb-1.5 flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide select-none",
+            isQuickBarDragging ? "cursor-grabbing" : "cursor-grab",
           )}
         >
-          <Sparkles className="h-[13px] w-[13px]" />
-        </button>
+          {/* Fixed Actions */}
+          <button
+            type="button"
+            onClick={handleImageClick}
+            disabled={disabled}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="이미지 첨부"
+            title="이미지 첨부"
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+          </button>
+          {imageGenerationNotice && (
+            <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
+              {imageGenerationNotice}
+            </span>
+          )}
+          <button
+            ref={commandButtonRef}
+            type="button"
+            onClick={handleCommandClick}
+            disabled={disabled}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="명령어"
+            title="명령어"
+          >
+            <Zap className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={insertActionMarker}
+            disabled={disabled}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="지문 삽입"
+            title="지문 삽입"
+          >
+            <Asterisk className="w-4 h-4" />
+          </button>
 
-        {/* Divider */}
-        <div className="h-4 w-px flex-shrink-0 bg-border" />
+          {/* Divider */}
+          <div className="h-4 w-px flex-shrink-0 bg-border" />
 
-        <button
-          ref={mentionButtonRef}
-          type="button"
-          onClick={() => openCharacterContext("mention")}
-          disabled={disabled}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="캐릭터 멘션하기"
-          title="캐릭터 멘션하기"
-        >
-          <AtSign className="h-3.5 w-3.5" />
-        </button>
-        <button
-          ref={speechButtonRef}
-          type="button"
-          onClick={() => openCharacterContext("speech")}
-          disabled={disabled}
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label="캐릭터 대사 삽입하기"
-          title="캐릭터 대사 삽입하기"
-        >
-          <MessageCircle className="h-3.5 w-3.5" />
-        </button>
-      </div>
+          <button
+            ref={mentionButtonRef}
+            type="button"
+            onClick={() => openCharacterContext("mention")}
+            disabled={disabled}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="캐릭터 멘션하기"
+            title="캐릭터 멘션하기"
+          >
+            <AtSign className="h-3.5 w-3.5" />
+          </button>
+          <button
+            ref={speechButtonRef}
+            type="button"
+            onClick={() => openCharacterContext("speech")}
+            disabled={disabled}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary/90 p-0 text-secondary-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="캐릭터 대사 삽입하기"
+            title="캐릭터 대사 삽입하기"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {attachedImage && (
         <div className="mb-2 flex items-center gap-2 rounded-lg bg-secondary p-2">
@@ -911,10 +894,29 @@ export function ChatInput({
       <form onSubmit={handleSubmit} className="flex items-end gap-2">
         <div
           className={cn(
-            "relative flex flex-1 items-end gap-5 bg-input/65 pr-1 pl-3 py-1",
-            isInputMultiline ? "rounded-2xl" : "rounded-4xl",
+            "relative flex flex-1 gap-2 bg-input/65 p-1",
+            isInputMultiline
+              ? "rounded-2xl items-end"
+              : "rounded-4xl items-center",
           )}
         >
+          {/* Quick Bar Toggle Button (왼쪽) */}
+          <button
+            type="button"
+            onClick={() => setIsQuickBarVisible((prev) => !prev)}
+            disabled={disabled}
+            aria-label={isQuickBarVisible ? "퀵 버튼 숨기기" : "퀵 버튼 보이기"}
+            title={isQuickBarVisible ? "퀵 버튼 숨기기" : "퀵 버튼 보이기"}
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50 bg-secondary/90 text-secondary-foreground hover:bg-accent",
+            )}
+          >
+            {isQuickBarVisible ? (
+              <ChevronsDownUp className="h-[13px] w-[13px]" />
+            ) : (
+              <ChevronsUpDown className="h-[13px] w-[13px]" />
+            )}
+          </button>
           {showHighlightedInput && (
             <div
               aria-hidden="true"
@@ -935,16 +937,40 @@ export function ChatInput({
             disabled={disabled}
             placeholder={
               isAutoAdvanceEnabled
-                ? "원하는 전개 입력(미입력 후 전송시 자동 진행)"
+                ? "원하는 전개 입력. 빈칸 전송시 자동 진행"
                 : "줄바꿈 두번으로 말풍선 분리"
             }
             rows={1}
             className={cn(
-              "relative z-10 max-h-26 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
+              "relative z-10 max-h-26 flex-1 resize-none overflow-y-auto bg-transparent text-[15px] lh-[26px] leading-6 outline-none caret-foreground placeholder:text-muted-foreground whitespace-pre-wrap break-words [word-break:keep-all]",
               showHighlightedInput ? "text-transparent" : "text-foreground",
               disabled && "cursor-not-allowed opacity-60",
             )}
           />
+
+          {/* Auto Advance (자동입력) Button */}
+          <button
+            type="button"
+            onClick={() => setIsAutoAdvanceEnabled((enabled) => !enabled)}
+            disabled={disabled}
+            aria-pressed={isAutoAdvanceEnabled}
+            aria-label={
+              isAutoAdvanceEnabled ? "자동 진행 끄기" : "자동 진행 켜기"
+            }
+            title={
+              isAutoAdvanceEnabled
+                ? "자동 진행 켜짐 · 전개를 입력하거나 빈 메시지로 이어갈 수 있습니다"
+                : "자동 진행 켜기"
+            }
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full p-0 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+              isAutoAdvanceEnabled
+                ? "bg-primary text-primary-foreground hover:bg-primary/80"
+                : "bg-secondary/90 text-secondary-foreground hover:bg-accent",
+            )}
+          >
+            <Sparkles className="h-[11px] w-[11px]" />
+          </button>
 
           {/* Send Button */}
           <button
@@ -967,11 +993,7 @@ export function ChatInput({
                 : "전송"
             }
           >
-            {isAutoAdvanceEnabled && !attachedImage ? (
-              <Sparkles className="h-[13px] w-[13px]" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
+            <Send className="h-4 w-4" />
           </button>
         </div>
       </form>

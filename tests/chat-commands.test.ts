@@ -256,6 +256,8 @@ test("auto command estimate and actual output stay inside the combined turn budg
 
   assert.ok(assistChars > 0)
   assert.ok(budget.maxChars + assistChars <= budget.totalMaxChars)
-  assert.equal(budget.minChars, 700)
+  assert.equal(budget.minChars, 630)
+  assert.equal(budget.maxChars, 700)
+  assert.ok(budget.minChars < budget.maxChars)
   assert.equal(budget.totalMaxChars, 1500)
 })

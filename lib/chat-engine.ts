@@ -199,7 +199,13 @@ export function getAssistantReplyLengthBudget(dialogueAssistChars: number): Assi
     1,
     Math.min(DEFAULT_MAX_ANSWER_CHARS, totalMaxChars - normalizedAssistChars),
   )
-  const minChars = Math.min(DEFAULT_MIN_ANSWER_CHARS, maxChars)
+  // Keep a usable generation range when automatic command output consumes most
+  // of the turn budget. An exact 700~700 contract rejects otherwise complete
+  // responses for being only a few characters short.
+  const minChars = Math.min(
+    DEFAULT_MIN_ANSWER_CHARS,
+    Math.max(1, Math.floor(maxChars * 0.9)),
+  )
 
   return {
     minChars,
@@ -554,6 +560,16 @@ export function formatMessageForAIContext(message: ChatMessage) {
       dialogue: message.content,
     })
     return `[사용자 작성 캐릭터 대사]\n${authoredLine}\n[상태] 이 대사는 이미 장면에서 발화되었다. 그대로 반복하지 말고 직후부터 이어간다.`
+  }
+
+  if (message.type === "user" && message.isAutoAdvance) {
+    return `[자동 진행 - 전개 참고 소스]
+${message.content.trim()}
+
+[해석 규칙]
+- 위 내용은 사용자가 말하거나 행동하거나 의도한 장면 속 사건이 아니다.
+- 다음 전개를 구성할 때 참고하는 작가용 소스로만 사용한다.
+- 문장을 등장인물의 대사로 인용하거나 사용자의 감정·반응·속마음으로 바꾸지 않는다.`
   }
 
   if (message.type === "user") {

@@ -1,6 +1,8 @@
 export type GenerationRunStatus = "streaming" | "completed" | "failed"
 export type GenerationValidationStatus = "passed" | "accepted_with_warnings" | "repaired" | "fallback" | "failed"
-export type GenerationProviderOutcome = "empty-visible-output"
+export type GenerationProviderOutcome =
+  | "empty-visible-output"
+  | `provider-prompt-block:${string}`
 export type GenerationTimeoutStage =
   | "request"
   | "input-normalizer"

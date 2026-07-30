@@ -7,14 +7,17 @@
  * - scenePrompt 안에서는 그림체를 다시 지정하지 않는 것을 권장한다.
  */
 export const IMAGE_DEFAULT_ART_STYLE = [
-  "Apply the visual rendering language of premium Korean commercial romance illustration to a natural narrative scene.",
-  "Use polished painterly realism with idealized beauty, realistic adult anatomy, elegant Korean facial features, and emotionally expressive eyes.",
-  "Render the characters as meticulously painted digital illustrations rather than photographs, animation, webtoon drawings, or 3D models.",
-  "Use softly painted skin with natural tonal variation, refined facial planes, delicate highlights, detailed flowing hair, elegant silhouettes, and sophisticated fabric rendering.",
-  "Faces should be exceptionally attractive and harmoniously proportioned while retaining believable human structure and mature adult features.",
-  "Use luminous, romantic lighting, controlled contrast, rich but refined colors, and graceful cinematic depth.",
-  "Maintain clean, sophisticated commercial illustration quality with a sensual and emotionally immersive atmosphere.",
-  "The finished image should resemble premium Korean romance key artwork placed inside an actual story moment, without any cover typography, poster composition, decorative framing, or graphic-design layout.",
+  "Apply the rendering language of an ornate, high-gloss Korean romantic-fantasy illustration to a natural narrative scene.",
+  "Render the entire scene as a meticulously finished digital illustration with delicate, precise contour work and smooth airbrushed gradient shading.",
+  "Use an elegant Korean romance-fantasy manhwa influence: graceful elongated adult silhouettes, refined facial rendering, sophisticated expressions, and beautifully controlled anatomy.",
+  "Render clear luminous skin with soft blush, finely modeled facial planes, delicate eyelashes, jewel-like eyes, glossy lips, and silky hair composed of many flowing individual strands.",
+  "Use clean, polished edges around the characters, with soft atmospheric blending in light, fabric, hair, and background depth.",
+  "Render clothing, folds, lace, jewelry, glass, metal, marble, and interior materials with intricate decorative detail and luxurious surface highlights.",
+  "Use pearlescent highlights, soft bloom, translucent light, champagne-gold and ivory illumination, restrained pastel accents, and selective jewel-like sparkle effects.",
+  "Maintain a bright, delicate, romantic, and lavish finish even when the scene takes place at night.",
+  "The result must look like a highly polished classic Korean romantic-fantasy webnovel illustration, not like a photograph, movie frame, modern game render, or flat animation.",
+  "Apply only this rendering language to the actual story scene.",
+  "Do not reproduce a book-cover layout, title area, decorative border, ornamental frame, typography, promotional composition, or character showcase.",
 ].join(" ");
 
 export const IMAGE_SCENE_SYSTEM_INSTRUCTION = [
@@ -98,6 +101,15 @@ export const IMAGE_TEXT_NEGATIVE_PROMPT = [
   "extra limbs",
 ].join(", ");
 
+export const IMAGE_STYLE_EXCLUSIONS = [
+  "Do not use photorealism or live-action photography.",
+  "Do not use semi-realistic 2.5D rendering.",
+  "Do not use plastic 3D CG, game-character rendering, or doll-like materials.",
+  "Do not use rough painterly brushwork, western fantasy concept art, or matte painting.",
+  "Do not use flat webtoon coloring, heavy comic outlines, simple cel shading, or generic modern anime rendering.",
+  "Do not use muted movie color grading, realistic skin pores, harsh photographic shadows, or gritty film texture.",
+].join(" ");
+
 export function applyImageScenePolicy(
   scenePrompt: string,
   artStyle: string = IMAGE_DEFAULT_ART_STYLE,
@@ -111,25 +123,28 @@ export function applyImageScenePolicy(
   return [
     "[ART DIRECTION]",
     artStyle.trim(),
+    IMAGE_STYLE_EXCLUSIONS,
 
     "[OUTPUT FORMAT]",
     "Create exactly one continuous full-bleed illustrated narrative scene.",
-    "Show a naturally occurring moment inside the story, not a cover, poster, character showcase, promotional portrait, or designed composition.",
-    "Do not render text, borders, panels, decorative framing, or interface elements.",
+    "Show a naturally occurring moment inside the story.",
+    "Do not create a cover, poster, title area, character showcase, decorative frame, promotional portrait, or designed layout.",
+    "Do not render text, borders, panels, typography, logos, captions, or interface elements.",
 
     "[STORY PRIORITIES]",
-    "Depict the exact current story beat rather than reducing the prompt to a generic romantic mood.",
-    "Preserve the supplied character identities, physical appearance, relationship progression, location, and immediately preceding context.",
-    "Express the scene through specific visible behavior: gaze direction, facial tension, hand placement, posture, physical distance, environmental interaction, and active movement.",
+    "Depict the exact current story beat rather than reducing it to a generic romantic pose.",
+    "Preserve the supplied character identities, appearance, relationship progression, location, previous story context, and current action.",
+    "Express the event through visible posture, hand placement, gaze direction, facial tension, physical distance, environmental contact, and active movement.",
 
     "[VISUAL PRIORITIES]",
-    "Keep the main characters' faces aesthetically refined, emotionally readable, and clearly illuminated.",
-    "Prioritize polished painterly illustration, idealized beauty, and expressive character rendering over photographic realism.",
-    "Use cinematic framing and depth without producing a live-action movie still.",
-    "Keep the environment coherent and immersive, but subordinate it to the current character interaction.",
-    "Dark scenes must retain luminous skin tones, visible eyes, readable expressions, and controlled shadow detail.",
+    "Use the supplied art direction consistently across the characters, clothing, environment, lighting, and all visible objects.",
+    "Preserve the ornate, luminous, high-gloss illustration finish without adding a cover layout.",
+    "Keep faces and actions clearly readable.",
+    "Night scenes must remain rich and luminous rather than becoming dark, photographic, or underexposed.",
+    "Prioritize the current physical action and spatial relationship over a generic close-up of two faces.",
 
     "[CURRENT SCENE]",
     scene,
   ].join("\n\n");
 }
+

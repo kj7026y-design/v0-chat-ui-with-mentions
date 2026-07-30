@@ -7,10 +7,26 @@ import {
 } from "../lib/rp/validation/ai-quality-judge"
 import {
   compileRoleplayContext,
+  getGeminiPromptBlockReason,
+  getGeminiPromptBlockOutcome,
   normalizeGeneratedRoleplayOutput,
   recoverRoleplayOutputDeterministically,
   validateRoleplayOutput,
 } from "../lib/rp/pipeline"
+
+test("Gemini provider prompt blocks are detected even without a finish reason", () => {
+  assert.equal(
+    getGeminiPromptBlockReason({ blockReason: "PROHIBITED_CONTENT" }),
+    "PROHIBITED_CONTENT",
+  )
+  assert.equal(
+    getGeminiPromptBlockOutcome({ blockReason: "PROHIBITED_CONTENT" }),
+    "provider-prompt-block:PROHIBITED_CONTENT",
+  )
+  assert.equal(getGeminiPromptBlockReason({}), undefined)
+  assert.equal(getGeminiPromptBlockOutcome({}), undefined)
+  assert.equal(getGeminiPromptBlockReason(null), undefined)
+})
 
 test("character interpretation of the user's spoken consent is not an objective user-state assertion", () => {
   const output = [

@@ -97,12 +97,14 @@ export function buildModelBackground({
   characterName,
   userName,
   latestUserIntent,
+  autoAdvanceSource,
   currentScene,
 }: {
   background?: string
   characterName: string
   userName: string
   latestUserIntent?: string
+  autoAdvanceSource?: string
   currentScene?: string
 }) {
   const story = parseStoryBackground(background, characterName, userName)
@@ -122,15 +124,19 @@ export function buildModelBackground({
 - 톤: ${tone}
 - 동의/진행: ${story.consentRule}
 - 진행 규칙: ${story.progressionRule}
-- 해석 규칙: 이번 턴 입력과 의도가 세계관 설명보다 우선한다.
+- 해석 규칙: ${autoAdvanceSource ? "자동 진행 참고 소스는 사용자의 발화·행동·의도가 아니며, 다음 전개를 구성하는 작가용 재료로만 사용한다." : "이번 턴 입력과 의도가 세계관 설명보다 우선한다."}
 - 계약 규칙: 계약 종료, 계약 갱신, 계약 유예는 지금 주고받는 말과 행동에 따라 달라질 수 있다.
-${latestUserIntent ? `- 이번 턴 의도: ${latestUserIntent}` : "- 이번 턴 의도: 정규화 결과를 따른다."}
+${autoAdvanceSource
+    ? `- 자동 진행 참고 소스: ${autoAdvanceSource}`
+    : latestUserIntent
+      ? `- 이번 턴 의도: ${latestUserIntent}`
+      : "- 이번 턴 의도: 정규화 결과를 따른다."}
 ${currentScene ? `- 현재 장면 요약: ${currentScene}` : ""}
 
 [세계관 사용 규칙]
 - 세계관은 분위기와 관계의 참고 정보다.
 - 세계관 문장을 현재 턴의 확정 행동으로 오해하지 않는다.
-- 이번 턴 입력과 의도가 세계관보다 우선한다.
+- ${autoAdvanceSource ? "자동 진행 참고 소스를 사용자의 대사·행동·감정·동의로 해석하지 않는다." : "이번 턴 입력과 의도가 세계관보다 우선한다."}
 - 계약 종료, 계약 갱신, 계약 유예는 지금 주고받는 말과 행동에 따라 달라질 수 있다.
 - 배경 설명을 답변에 그대로 반복하지 않는다.
 

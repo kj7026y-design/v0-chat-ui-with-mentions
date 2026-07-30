@@ -4,7 +4,7 @@ import {
   applyImageScenePolicy,
 } from "@/lib/image-prompt-policy";
 
-const DEFAULT_FAL_IMAGE_ENDPOINT = "https://queue.fal.run/fal-ai/flux/dev";
+const DEFAULT_FAL_IMAGE_ENDPOINT = "https://queue.fal.run/fal-ai/flux-lora";
 const DEFAULT_FAL_FALLBACK_IMAGE_ENDPOINT =
   "https://queue.fal.run/fal-ai/fast-sdxl";
 const DEFAULT_FAL_IMAGE_TIMEOUT_MS = 90_000;
@@ -83,11 +83,17 @@ interface FalQueueStatus {
   error_type?: string;
 }
 
+interface FalLoraEntry {
+  path: string;
+  scale?: number;
+}
+
 interface FalImageRequestOptions {
   endpoint: string;
   fallback: boolean;
   timeoutMs: number;
   enableSafetyChecker: boolean;
+  loras?: FalLoraEntry[];
 }
 
 export interface FalGeneratedImage {
@@ -305,30 +311,35 @@ function buildFalImageRequestBody(
   prompt: string,
   fallback: boolean,
   enableSafetyChecker: boolean,
+  loras?: FalLoraEntry[],
 ) {
   const usesFastSdxlSchema = /\/fast-sdxl\/?$/u.test(endpoint);
   const usesFluxDevSchema = /\/flux\/dev\/?$/u.test(endpoint);
+  const usesFluxLoraSchema = /\/flux-lora\/?$/u.test(endpoint);
   const tuning = fallback
     ? {
         num_inference_steps: 4,
         guidance_scale: 1.75,
       }
-    : usesFluxDevSchema
+    : usesFluxDevSchema || usesFluxLoraSchema
       ? {
           num_inference_steps: 28,
-          guidance_scale: 3.5,
-          acceleration: "none",
+          guidance_scale: 4.5,
         }
       : {
           num_inference_steps: 25,
           guidance_scale: 3.5,
         };
 
+  const loraEntries =
+    usesFluxLoraSchema && loras && loras.length > 0 ? { loras } : {};
+
   return {
     prompt,
-    image_size: "square_hd",
+    image_size: "portrait_4_3",
     num_images: 1,
     ...tuning,
+    ...loraEntries,
     enable_safety_checker: enableSafetyChecker,
     ...(usesFastSdxlSchema
       ? { negative_prompt: IMAGE_TEXT_NEGATIVE_PROMPT }
@@ -387,6 +398,7 @@ async function requestFalImage(
             prompt,
             options.fallback,
             options.enableSafetyChecker,
+            options.loras,
           ),
         ),
       },
@@ -561,6 +573,12 @@ export async function generateFalImageFromPrompt(
     throw new Error("FAL_KEY가 설정되어 있지 않습니다.");
   }
 
+  const loraPath = env.FAL_LORA_PATH?.trim();
+  const loraScale = Number(env.FAL_LORA_SCALE);
+  const loras: FalLoraEntry[] = loraPath
+    ? [{ path: loraPath, scale: Number.isFinite(loraScale) ? loraScale : 1.0 }]
+    : [];
+
   const mainOptions: FalImageRequestOptions = {
     endpoint: env.FAL_IMAGE_ENDPOINT?.trim() || DEFAULT_FAL_IMAGE_ENDPOINT,
     fallback: false,
@@ -569,6 +587,7 @@ export async function generateFalImageFromPrompt(
       DEFAULT_FAL_IMAGE_TIMEOUT_MS,
     ),
     enableSafetyChecker: false,
+    loras,
   };
   const fallbackOptions: FalImageRequestOptions = {
     endpoint:
