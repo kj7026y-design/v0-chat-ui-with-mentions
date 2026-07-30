@@ -1,9 +1,8 @@
-import { AUTO_COMMAND_IDS, MAX_COMMAND_SUGGESTIONS, type ChatMessage } from "@/lib/chat-types"
+import type { ChatMessage } from "@/lib/chat-types"
 import {
   DEFAULT_CHAT_MODEL_ID,
   DEFAULT_MAX_ANSWER_CHARS,
   DEFAULT_MIN_ANSWER_CHARS,
-  MAX_TURN_CONTENT_CHARS,
   getChatModelConfig,
   type ChatModelId,
 } from "@/lib/chat-models"
@@ -24,7 +23,6 @@ import {
   buildStatusBar,
   buildSummaryCommandContent,
 } from "@/lib/chat-commands"
-import { getVisibleCommandContent } from "@/lib/chat-commands/shared"
 import type { ImageCommandContext } from "@/lib/chat-commands/types"
 import { IMAGE_SCENE_SYSTEM_INSTRUCTION } from "@/lib/image-prompt-policy"
 
@@ -190,28 +188,14 @@ export interface AssistantReplyLengthBudget {
   totalMaxChars: number
 }
 
-export function getAssistantReplyLengthBudget(dialogueAssistChars: number): AssistantReplyLengthBudget {
-  const normalizedAssistChars = Math.max(0, Math.floor(dialogueAssistChars))
-  const totalMaxChars = normalizedAssistChars > 0
-    ? MAX_TURN_CONTENT_CHARS
-    : DEFAULT_MAX_ANSWER_CHARS
-  const maxChars = Math.max(
-    1,
-    Math.min(DEFAULT_MAX_ANSWER_CHARS, totalMaxChars - normalizedAssistChars),
-  )
-  // Keep a usable generation range when automatic command output consumes most
-  // of the turn budget. An exact 700~700 contract rejects otherwise complete
-  // responses for being only a few characters short.
-  const minChars = Math.min(
-    DEFAULT_MIN_ANSWER_CHARS,
-    Math.max(1, Math.floor(maxChars * 0.9)),
-  )
-
+export function getAssistantReplyLengthBudget(_dialogueAssistChars: number): AssistantReplyLengthBudget {
+  // Command output is auxiliary UI content and does not consume the character
+  // budget reserved for the character's narrative reply.
   return {
-    minChars,
-    maxChars,
-    dialogueAssistChars: normalizedAssistChars,
-    totalMaxChars,
+    minChars: DEFAULT_MIN_ANSWER_CHARS,
+    maxChars: DEFAULT_MAX_ANSWER_CHARS,
+    dialogueAssistChars: 0,
+    totalMaxChars: DEFAULT_MAX_ANSWER_CHARS,
   }
 }
 
@@ -622,24 +606,18 @@ export function formatIntroForAIContext(intro?: ChatIntroContext | null) {
 }
 
 export function getDialogueAssistCharCount(
-  commandIds: string[],
-  characterName: string,
-  context?: ImageCommandContext,
+  _commandIds: string[],
+  _characterName: string,
+  _context?: ImageCommandContext,
 ) {
-  const estimatedChars = commandIds
-    .filter((commandId) => AUTO_COMMAND_IDS.includes(commandId))
-    .slice(0, MAX_COMMAND_SUGGESTIONS)
-    .reduce((total, commandId) => {
-      if (commandId === "phone") return total + 1_000
-      if (commandId === "sns") return total + 650
-      if (commandId === "status") return total + 350
-      return total
-    }, 0)
-  return Math.min(estimatedChars, MAX_TURN_CONTENT_CHARS - DEFAULT_MIN_ANSWER_CHARS)
+  return 0
 }
 
 export function getMessageContentCharCount(messages: ChatMessage[]) {
-  return messages.reduce((total, message) => total + countTextChars(getVisibleCommandContent(message.content)), 0)
+  return messages.reduce(
+    (total, message) => message.commandId ? total : total + countTextChars(message.content),
+    0,
+  )
 }
 
 export function fitAssistantReplyToTurnBudget(content: string, dialogueAssistChars: number) {
@@ -1344,7 +1322,7 @@ export async function runCommand(
       kind: "message",
       message: {
         id: makeId(),
-        type: "ai",
+        type: "status_img",
         commandId: "image",
         content: "",
         imageUrl: generatedImage.imageUrl,

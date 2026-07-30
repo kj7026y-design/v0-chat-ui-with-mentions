@@ -78,36 +78,119 @@ function getMentionDisplayNames(mentions: string[] | undefined): string[] {
   return mentions.map((id) => MENTION_NAMES[id] || id);
 }
 
-function renderHighlightedMentions(content: string, names: string[]) {
+function renderSearchHighlightedText(
+  content: string,
+  searchQuery: string,
+  isActiveSearchResult: boolean,
+  keyPrefix: string,
+) {
+  const query = searchQuery.trim();
+  if (!query) return content;
+
+  const normalizedContent = content.toLocaleLowerCase("ko-KR");
+  const normalizedQuery = query.toLocaleLowerCase("ko-KR");
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let matchIndex = normalizedContent.indexOf(normalizedQuery);
+
+  while (matchIndex >= 0) {
+    if (matchIndex > cursor) {
+      parts.push(content.slice(cursor, matchIndex));
+    }
+    const matchEnd = matchIndex + query.length;
+    parts.push(
+      <mark
+        key={`${keyPrefix}-search-${matchIndex}`}
+        className="rounded-[2px] px-0.5"
+        style={{
+          backgroundColor: isActiveSearchResult
+            ? "rgba(250, 204, 21, 0.95)"
+            : "rgba(253, 224, 71, 0.55)",
+          color: "#111827",
+        }}
+      >
+        {content.slice(matchIndex, matchEnd)}
+      </mark>,
+    );
+    cursor = matchEnd;
+    matchIndex = normalizedContent.indexOf(normalizedQuery, cursor);
+  }
+
+  if (cursor < content.length) {
+    parts.push(content.slice(cursor));
+  }
+  return parts;
+}
+
+function renderHighlightedMentions(
+  content: string,
+  names: string[],
+  searchQuery = "",
+  isActiveSearchResult = false,
+) {
   const mentionNames = [...new Set([...names, ...Object.values(MENTION_NAMES)])]
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
 
-  if (mentionNames.length === 0) return content;
+  if (mentionNames.length === 0) {
+    return renderSearchHighlightedText(
+      content,
+      searchQuery,
+      isActiveSearchResult,
+      "plain",
+    );
+  }
 
   const parts: ReactNode[] = [];
   let index = 0;
+  let plainStart = 0;
 
   while (index < content.length) {
     const matchedName = mentionNames.find((name) =>
       content.startsWith(`@${name}`, index),
     );
     if (!matchedName) {
-      parts.push(content[index]);
       index += 1;
       continue;
     }
 
+    if (plainStart < index) {
+      parts.push(
+        renderSearchHighlightedText(
+          content.slice(plainStart, index),
+          searchQuery,
+          isActiveSearchResult,
+          `plain-${plainStart}`,
+        ),
+      );
+    }
     const token = `@${matchedName}`;
     parts.push(
       <span
         key={`${token}-${index}`}
         className="mention-token rounded-md border px-1 py-0.5 font-semibold"
       >
-        {token}
+        {renderSearchHighlightedText(
+          token,
+          searchQuery,
+          isActiveSearchResult,
+          `mention-${index}`,
+        )}
       </span>,
     );
     index += token.length;
+    plainStart = index;
+  }
+
+  if (plainStart < content.length) {
+    parts.push(
+      renderSearchHighlightedText(
+        content.slice(plainStart),
+        searchQuery,
+        isActiveSearchResult,
+        `plain-${plainStart}`,
+      ),
+    );
   }
 
   return parts;
@@ -316,6 +399,8 @@ interface ChatMessageListProps {
   textSize?: number;
   lineHeight?: number;
   characters?: ChatMessageCharacterProfile[];
+  searchQuery?: string;
+  activeSearchMessageId?: string;
 }
 
 export function ChatMessageList({
@@ -338,6 +423,8 @@ export function ChatMessageList({
   textSize = 16,
   lineHeight = 1.5,
   characters = [],
+  searchQuery = "",
+  activeSearchMessageId,
 }: ChatMessageListProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -400,7 +487,7 @@ export function ChatMessageList({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 px-4 py-4",
+        "flex flex-col gap-5 px-4 py-4",
         isInitialScene ? "pb-44" : "pb-4",
       )}
       style={
@@ -430,55 +517,68 @@ export function ChatMessageList({
                 (extraMessage) => extraMessage.id === latestEditableMessageId,
               ));
           return (
-            <BubbleMessageBubble
+            <div
               key={message.id}
-              message={message}
-              extraMessages={extraMessages}
-              typingLabel={typingLabel}
-              regeneratingMessageId={regeneratingMessageId}
-              onRewrite={onRewriteMessage}
-              onSelectCandidate={onSelectMessageCandidate}
-              onRetry={onRetryFailedMessage}
-              onDelete={onDeleteMessage}
-              onBranch={onBranchFromMessage}
-              isEdited={editedMessageIds.has(editTarget.id)}
-              editedMessageIds={editedMessageIds}
-              themeConfig={themeConfig}
-              textSize={textSize}
-              lineHeight={lineHeight}
-              characters={characters}
-              isLatest={isLatestEditableTarget}
-              latestEditableMessageId={latestEditableMessageId}
-              canBranch={
-                (message.type === "ai" ||
-                  message.type === "status" ||
-                  message.type === "inner-thought") &&
-                (!message.turnId ||
-                  messages[index + 1 + extraMessages.length]?.turnId !==
-                    message.turnId)
-              }
-              editInitialContent={editTarget.content}
-              isEditing={editingMessageId === message.id}
-              editingMessageId={editingMessageId}
-              disabled={disabled}
-              onStartEdit={() => {
-                if (disabled) return;
-                setEditingMessageId(message.id);
-              }}
-              onStartMessageEdit={(targetMessageId) => {
-                if (disabled) return;
-                setEditingMessageId(targetMessageId);
-              }}
-              onCancelEdit={() => setEditingMessageId(null)}
-              onSaveEdit={(nextContent) => {
-                onEditMessage?.(editTarget.id, nextContent);
-                setEditingMessageId(null);
-              }}
-              onSaveMessageEdit={(targetMessageId, nextContent) => {
-                onEditMessage?.(targetMessageId, nextContent);
-                setEditingMessageId(null);
-              }}
-            />
+              data-chat-message-id={message.id}
+              className={cn(
+                "w-full scroll-mt-14",
+                message.commandId && index > 0 && "-mt-4",
+              )}
+            >
+              <BubbleMessageBubble
+                message={message}
+                extraMessages={extraMessages}
+                typingLabel={typingLabel}
+                regeneratingMessageId={regeneratingMessageId}
+                onRewrite={onRewriteMessage}
+                onSelectCandidate={onSelectMessageCandidate}
+                onRetry={onRetryFailedMessage}
+                onDelete={onDeleteMessage}
+                onBranch={onBranchFromMessage}
+                isEdited={editedMessageIds.has(editTarget.id)}
+                editedMessageIds={editedMessageIds}
+                themeConfig={themeConfig}
+                textSize={textSize}
+                lineHeight={lineHeight}
+                characters={characters}
+                searchQuery={searchQuery}
+                isActiveSearchResult={message.id === activeSearchMessageId}
+                activeSearchMessageId={activeSearchMessageId}
+                isLatest={isLatestEditableTarget}
+                latestEditableMessageId={latestEditableMessageId}
+                canBranch={
+                  !message.imageUrl &&
+                  message.type !== "status_img" &&
+                  (message.type === "ai" ||
+                    message.type === "status" ||
+                    message.type === "inner-thought") &&
+                  (!message.turnId ||
+                    messages[index + 1 + extraMessages.length]?.turnId !==
+                      message.turnId)
+                }
+                editInitialContent={editTarget.content}
+                isEditing={editingMessageId === message.id}
+                editingMessageId={editingMessageId}
+                disabled={disabled}
+                onStartEdit={() => {
+                  if (disabled) return;
+                  setEditingMessageId(message.id);
+                }}
+                onStartMessageEdit={(targetMessageId) => {
+                  if (disabled) return;
+                  setEditingMessageId(targetMessageId);
+                }}
+                onCancelEdit={() => setEditingMessageId(null)}
+                onSaveEdit={(nextContent) => {
+                  onEditMessage?.(editTarget.id, nextContent);
+                  setEditingMessageId(null);
+                }}
+                onSaveMessageEdit={(targetMessageId, nextContent) => {
+                  onEditMessage?.(targetMessageId, nextContent);
+                  setEditingMessageId(null);
+                }}
+              />
+            </div>
           );
         })(),
       )}
@@ -521,6 +621,9 @@ interface BubbleMessageBubbleProps {
   textSize: number;
   lineHeight: number;
   characters: ChatMessageCharacterProfile[];
+  searchQuery: string;
+  isActiveSearchResult: boolean;
+  activeSearchMessageId?: string;
   isLatest: boolean;
   latestEditableMessageId: string | null;
   canBranch: boolean;
@@ -551,6 +654,9 @@ function BubbleMessageBubble({
   textSize,
   lineHeight,
   characters,
+  searchQuery,
+  isActiveSearchResult,
+  activeSearchMessageId,
   isLatest,
   latestEditableMessageId,
   canBranch,
@@ -579,7 +685,7 @@ function BubbleMessageBubble({
     message.isUserAuthoredCharacterLine && message.speakerType === "character",
   );
   const isUser = message.type === "user" && !isCharacterLine;
-  const isAI = message.type === "ai";
+  const isAI = message.type === "ai" || message.type === "status_img";
   const isEvent = message.type === "event";
   const isInnerThought = message.type === "inner-thought";
   const isStatus = message.type === "status";
@@ -633,7 +739,12 @@ function BubbleMessageBubble({
               lineHeight: Math.max(1.45, lineHeight),
             }}
           >
-            {message.content || "답변을 생성하지 못했어요."}
+            {renderSearchHighlightedText(
+              message.content || "답변을 생성하지 못했어요.",
+              searchQuery,
+              isActiveSearchResult,
+              `${message.id}-error`,
+            )}
           </p>
           <button
             type="button"
@@ -688,7 +799,12 @@ function BubbleMessageBubble({
                 className="mt-0.5 text-lg font-semibold"
                 style={{ color: themeTextPalette.text }}
               >
-                {message.content}
+                {renderSearchHighlightedText(
+                  message.content,
+                  searchQuery,
+                  isActiveSearchResult,
+                  `${message.id}-event-title`,
+                )}
               </h4>
             </div>
           </div>
@@ -700,7 +816,12 @@ function BubbleMessageBubble({
                 className="text-sm leading-relaxed"
                 style={{ color: themeTextPalette.mutedText }}
               >
-                {message.eventDescription}
+                {renderSearchHighlightedText(
+                  message.eventDescription,
+                  searchQuery,
+                  isActiveSearchResult,
+                  `${message.id}-event-description`,
+                )}
               </p>
             </div>
           )}
@@ -715,6 +836,13 @@ function BubbleMessageBubble({
     const isInstagramCommand = isStatus && message.commandId === "sns";
     const isStatusCommand = isStatus && message.commandId === "status";
     const isCommandMessage = Boolean(message.commandId);
+    const renderCommandSearchText = (text: string, key: string) =>
+      renderSearchHighlightedText(
+        text,
+        searchQuery,
+        isActiveSearchResult,
+        `${message.id}-${key}`,
+      );
 
     return (
       <div className="flex flex-col items-start gap-2">
@@ -734,20 +862,28 @@ function BubbleMessageBubble({
                 content={message.content}
                 textColor={themeTextPalette.text}
                 mutedTextColor={themeTextPalette.mutedText}
+                renderSearchText={renderCommandSearchText}
               />
             ) : isStatusCommand ? (
               <StatusCommandContent
                 content={message.content}
                 textColor={themeTextPalette.text}
+                renderSearchText={renderCommandSearchText}
               />
             ) : isPhoneCommand ? (
               <PhoneCommandContent
                 content={message.content}
                 textColor={themeTextPalette.text}
+                renderSearchText={renderCommandSearchText}
               />
             ) : (
               <p className="whitespace-pre-wrap break-words [word-break:keep-all]">
-                {message.content}
+                {renderSearchHighlightedText(
+                  message.content,
+                  searchQuery,
+                  isActiveSearchResult,
+                  `${message.id}-status`,
+                )}
               </p>
             )}
           </div>
@@ -844,6 +980,84 @@ function BubbleMessageBubble({
     (composerParts.some((part) => part.type === "action") ||
       composerParts.length > 1);
 
+  if (isAutoAdvanceSource) {
+    const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg);
+    const narrationStyle = {
+      color: themeTextPalette.mutedText,
+      fontSize: textSize,
+      lineHeight: Math.max(1.45, lineHeight),
+      "--mention-bg": narrationMentionStyle.bg,
+      "--mention-text": narrationMentionStyle.text,
+      "--mention-border": narrationMentionStyle.border,
+    } as CSSProperties;
+    const autoAdvanceLabelColor = isDarkColor(themeConfig.preview.bg)
+      ? "var(--color-amber-300)"
+      : "var(--color-amber-700)";
+
+    return (
+      <div className="flex w-full flex-col items-end gap-2">
+        <p
+          className="max-w-[82%] whitespace-pre-wrap break-words px-1.5 py-0.5 text-right [word-break:keep-all] sm:max-w-[80%] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
+          style={narrationStyle}
+        >
+          <span
+            className="mr-2 inline-block font-semibold"
+            style={{ color: autoAdvanceLabelColor }}
+          >
+            자동진행
+          </span>
+          {renderHighlightedMentions(
+            displayContent,
+            mentionNames,
+            searchQuery,
+            isActiveSearchResult,
+          )}
+        </p>
+
+        {isEditing && (
+          <EditMessageForm
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            disabled={disabled}
+            isUser
+            onCancelEdit={onCancelEdit}
+            onSaveEdit={onSaveEdit}
+          />
+        )}
+
+        {isLatest && !isEditing && !disabled && (
+          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+            <AuthorTools
+              messageId={message.id}
+              onRewrite={onRewrite}
+              onEdit={onStartEdit}
+              onDelete={onDelete}
+              isEdited={isEdited}
+              canRewrite={false}
+              disabled={disabled}
+            />
+          </div>
+        )}
+
+        {canBranch && !isEditing && (
+          <BranchButton
+            disabled={disabled}
+            isBranching={isBranching}
+            copyText={copyText}
+            onClick={() => {
+              if (disabled) return;
+              setIsBranching(true);
+              setTimeout(() => {
+                onBranch?.(message.id);
+                setIsBranching(false);
+              }, 800);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (shouldRenderComposerParts) {
     return (
       <div className="flex flex-col items-end gap-2">
@@ -854,6 +1068,8 @@ function BubbleMessageBubble({
           textSize={textSize}
           lineHeight={lineHeight}
           bubbleStyle={bubbleStyle}
+          searchQuery={searchQuery}
+          isActiveSearchResult={isActiveSearchResult}
         />
 
         {isEditing && (
@@ -910,6 +1126,9 @@ function BubbleMessageBubble({
           themeConfig={themeConfig}
           textSize={textSize}
           lineHeight={lineHeight}
+          searchQuery={searchQuery}
+          isActiveSearchResult={isActiveSearchResult}
+          activeSearchMessageId={activeSearchMessageId}
           isEdited={Boolean(isEdited)}
           isCharacterLine={isCharacterLine}
           extraMessages={extraMessages}
@@ -1018,7 +1237,12 @@ function BubbleMessageBubble({
           {isCharacterLine && message.speakerName && (
             <div className="mb-1 flex items-center gap-1.5">
               <span className="text-xs font-semibold opacity-90">
-                {message.speakerName}
+                {renderSearchHighlightedText(
+                  message.speakerName,
+                  searchQuery,
+                  isActiveSearchResult,
+                  `${message.id}-speaker`,
+                )}
               </span>
               <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] opacity-70">
                 직접 작성
@@ -1061,12 +1285,12 @@ function BubbleMessageBubble({
               className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
               style={{ fontSize: textSize, lineHeight }}
             >
-              {isAutoAdvanceSource && (
-                <span className="mr-2 inline-block font-semibold text-amber-300">
-                  자동진행
-                </span>
+              {renderHighlightedMentions(
+                displayContent,
+                mentionNames,
+                searchQuery,
+                isActiveSearchResult,
               )}
-              {renderHighlightedMentions(displayContent, mentionNames)}
             </p>
           )}
           {!displayContent && message.status === "streaming" && (
@@ -1123,6 +1347,14 @@ function BubbleMessageBubble({
             textSize={textSize}
             lineHeight={lineHeight}
             themeConfig={themeConfig}
+            searchQuery={searchQuery}
+            activeSearchMessageId={
+              extraMessages.some(
+                (extraMessage) => extraMessage.id === activeSearchMessageId,
+              )
+                ? activeSearchMessageId
+                : undefined
+            }
             latestEditableMessageId={latestEditableMessageId}
             editingMessageId={editingMessageId}
             editedMessageIds={editedMessageIds}
@@ -1147,8 +1379,8 @@ function BubbleMessageBubble({
       )}
 
       {/* Author Tools - only the latest message can be edited or deleted. */}
-      {(message.imageUrl ||
-        (isLatest && (isUser || isAI || isCharacterLine))) &&
+      {isLatest &&
+        (isUser || isAI || isCharacterLine) &&
         !isEditing &&
         !disabled && (
           <div className="animate-in fade-in slide-in-from-top-1 duration-150">
@@ -1197,6 +1429,9 @@ function AssistantSegmentedMessage({
   themeConfig,
   textSize,
   lineHeight,
+  searchQuery,
+  isActiveSearchResult,
+  activeSearchMessageId,
   isEdited,
   isCharacterLine,
   latestEditableMessageId,
@@ -1220,6 +1455,9 @@ function AssistantSegmentedMessage({
   themeConfig: ChatThemeConfig;
   textSize: number;
   lineHeight: number;
+  searchQuery: string;
+  isActiveSearchResult: boolean;
+  activeSearchMessageId?: string;
   isEdited?: boolean;
   isCharacterLine: boolean;
   latestEditableMessageId: string | null;
@@ -1255,7 +1493,12 @@ function AssistantSegmentedMessage({
               className="truncate text-sm font-semibold"
               style={{ color: themeTextPalette.text }}
             >
-              {speakerName ?? "AI"}
+              {renderSearchHighlightedText(
+                speakerName ?? "AI",
+                searchQuery,
+                isActiveSearchResult,
+                `${message.id}-speaker`,
+              )}
             </span>
             {isCharacterLine && (
               <span
@@ -1287,6 +1530,8 @@ function AssistantSegmentedMessage({
             themeConfig={themeConfig}
             textSize={textSize}
             lineHeight={lineHeight}
+            searchQuery={searchQuery}
+            isActiveSearchResult={isActiveSearchResult}
           />
         ))}
         {extraMessages.length > 0 && (
@@ -1297,6 +1542,8 @@ function AssistantSegmentedMessage({
             textSize={textSize}
             lineHeight={lineHeight}
             themeConfig={themeConfig}
+            searchQuery={searchQuery}
+            activeSearchMessageId={activeSearchMessageId}
             latestEditableMessageId={latestEditableMessageId}
             editingMessageId={editingMessageId}
             editedMessageIds={editedMessageIds}
@@ -1320,6 +1567,8 @@ function UserSegmentedMessage({
   textSize,
   lineHeight,
   bubbleStyle,
+  searchQuery,
+  isActiveSearchResult,
 }: {
   parts: ComposerPart[];
   mentionNames: string[];
@@ -1327,6 +1576,8 @@ function UserSegmentedMessage({
   textSize: number;
   lineHeight: number;
   bubbleStyle: CSSProperties;
+  searchQuery: string;
+  isActiveSearchResult: boolean;
 }) {
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
   const narrationMentionStyle = getMentionStyle(themeConfig.preview.bg);
@@ -1349,7 +1600,12 @@ function UserSegmentedMessage({
               className="max-w-[82%] whitespace-pre-wrap break-words px-1.5 py-0.5 text-right [word-break:keep-all] sm:max-w-[80%] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
               style={actionStyle}
             >
-              {renderHighlightedMentions(part.text, mentionNames)}
+              {renderHighlightedMentions(
+                part.text,
+                mentionNames,
+                searchQuery,
+                isActiveSearchResult,
+              )}
             </p>
           );
         }
@@ -1367,7 +1623,12 @@ function UserSegmentedMessage({
                 className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
                 style={{ fontSize: textSize, lineHeight }}
               >
-                {renderHighlightedMentions(part.text, mentionNames)}
+                {renderHighlightedMentions(
+                  part.text,
+                  mentionNames,
+                  searchQuery,
+                  isActiveSearchResult,
+                )}
               </p>
             </div>
           </div>
@@ -1384,6 +1645,8 @@ function AssistantExtraSection({
   textSize,
   lineHeight,
   themeConfig,
+  searchQuery,
+  activeSearchMessageId,
   latestEditableMessageId,
   editingMessageId,
   editedMessageIds,
@@ -1400,6 +1663,8 @@ function AssistantExtraSection({
   textSize: number;
   lineHeight: number;
   themeConfig: ChatThemeConfig;
+  searchQuery: string;
+  activeSearchMessageId?: string;
   latestEditableMessageId: string | null;
   editingMessageId: string | null;
   editedMessageIds: Set<string>;
@@ -1435,6 +1700,8 @@ function AssistantExtraSection({
               textSize={Math.max(12, textSize - 2)}
               lineHeight={Math.max(1.35, lineHeight)}
               themeConfig={themeConfig}
+              searchQuery={searchQuery}
+              isActiveSearchResult={message.id === activeSearchMessageId}
               isLatest={message.id === latestEditableMessageId}
               isEditing={message.id === editingMessageId}
               isEdited={editedMessageIds.has(message.id)}
@@ -1457,6 +1724,8 @@ function AssistantExtraCard({
   textSize,
   lineHeight,
   themeConfig,
+  searchQuery,
+  isActiveSearchResult,
   isLatest,
   isEditing,
   isEdited,
@@ -1471,6 +1740,8 @@ function AssistantExtraCard({
   textSize: number;
   lineHeight: number;
   themeConfig: ChatThemeConfig;
+  searchQuery: string;
+  isActiveSearchResult: boolean;
   isLatest: boolean;
   isEditing: boolean;
   isEdited: boolean;
@@ -1498,13 +1769,20 @@ function AssistantExtraCard({
   const isInstagramCommand = message.commandId === "sns";
   const isStatusCommand = message.commandId === "status";
   const isPhoneCommand = message.commandId === "phone";
+  const renderCommandSearchText = (text: string, key: string) =>
+    renderSearchHighlightedText(
+      text,
+      searchQuery,
+      isActiveSearchResult,
+      `${message.id}-${key}`,
+    );
 
   useEffect(() => {
     if (isEditing) setEditDraft(editableMessageContent);
   }, [editableMessageContent, isEditing]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 scroll-mt-14" data-chat-message-id={message.id}>
       <div
         className="relative w-full rounded-lg border px-3 py-2"
         style={{
@@ -1522,16 +1800,19 @@ function AssistantExtraCard({
                 content={message.content}
                 textColor={themeTextPalette.text}
                 mutedTextColor={themeTextPalette.mutedText}
+                renderSearchText={renderCommandSearchText}
               />
             ) : isStatusCommand ? (
               <StatusCommandContent
                 content={message.content}
                 textColor={themeTextPalette.text}
+                renderSearchText={renderCommandSearchText}
               />
             ) : (
               <PhoneCommandContent
                 content={message.content}
                 textColor={themeTextPalette.text}
+                renderSearchText={renderCommandSearchText}
               />
             )}
             {isEdited && (
@@ -1548,7 +1829,14 @@ function AssistantExtraCard({
               style={{ color: themeTextPalette.text }}
             >
               <span className="text-sm leading-none">{icon}</span>
-              <span>{title}</span>
+              <span>
+                {renderSearchHighlightedText(
+                  title,
+                  searchQuery,
+                  isActiveSearchResult,
+                  `${message.id}-extra-title`,
+                )}
+              </span>
               {isEdited && (
                 <span
                   className="h-2 w-2 rounded-full bg-purple-500"
@@ -1563,7 +1851,12 @@ function AssistantExtraCard({
                     key={`${message.id}-extra-line-${index}`}
                     className="break-words [word-break:keep-all]"
                   >
-                    {line}
+                    {renderSearchHighlightedText(
+                      line,
+                      searchQuery,
+                      isActiveSearchResult,
+                      `${message.id}-extra-line-${index}`,
+                    )}
                   </p>
                 ))}
               </div>
@@ -1604,12 +1897,16 @@ function MessageSegmentBlock({
   themeConfig,
   textSize,
   lineHeight,
+  searchQuery,
+  isActiveSearchResult,
 }: {
   segment: MessageSegment;
   mentionNames: string[];
   themeConfig: ChatThemeConfig;
   textSize: number;
   lineHeight: number;
+  searchQuery: string;
+  isActiveSearchResult: boolean;
 }) {
   if (segment.type === "narration") {
     const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
@@ -1628,7 +1925,12 @@ function MessageSegmentBlock({
         className="max-w-[92%] whitespace-pre-wrap break-words px-1.5 py-1.5 [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
         style={narrationStyle}
       >
-        {renderHighlightedMentions(segment.content, mentionNames)}
+        {renderHighlightedMentions(
+          segment.content,
+          mentionNames,
+          searchQuery,
+          isActiveSearchResult,
+        )}
       </p>
     );
   }
@@ -1656,7 +1958,12 @@ function MessageSegmentBlock({
           className="whitespace-pre-wrap break-words [word-break:break-all] [&_.mention-token]:border-[var(--mention-border)] [&_.mention-token]:bg-[var(--mention-bg)] [&_.mention-token]:text-[var(--mention-text)]"
           style={{ fontSize: textSize, lineHeight }}
         >
-          {renderHighlightedMentions(segment.content, mentionNames)}
+          {renderHighlightedMentions(
+            segment.content,
+            mentionNames,
+            searchQuery,
+            isActiveSearchResult,
+          )}
         </p>
       </div>
     </div>
@@ -1764,32 +2071,7 @@ function BranchButton({
   };
 
   return (
-    <div className="-mx-1 -mt-1 flex items-center gap-1">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled || isBranching}
-        className={cn(
-          "flex items-center gap-1.5 px-2 py-1 text-[10px] text-[var(--chat-theme-muted-text)] transition-colors hover:text-[var(--chat-theme-text)]",
-          isBranching && "text-[var(--chat-theme-text)]",
-          disabled && "cursor-not-allowed opacity-50",
-        )}
-      >
-        <svg
-          className={cn("w-3 h-3", isBranching && "animate-spin")}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        >
-          <path
-            d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span>{isBranching ? "분기 생성 중..." : "여기서부터 분기"}</span>
-      </button>
+    <div className="-mt-1 flex items-center gap-1">
       <button
         type="button"
         onClick={handleCopy}
@@ -1803,6 +2085,30 @@ function BranchButton({
         ) : (
           <Copy className="h-3 w-3" aria-hidden="true" />
         )}
+      </button>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled || isBranching}
+        className={cn(
+          "flex items-center gap-1.5 px-2 py-1 text-[10px] text-[var(--chat-theme-muted-text)] transition-colors hover:text-[var(--chat-theme-text)]",
+          isBranching && "text-[var(--chat-theme-text)]",
+          disabled && "cursor-not-allowed opacity-50",
+        )}
+      >
+        <svg
+          className={cn("w-3.5 h-3.5", isBranching && "animate-spin")}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        >
+          <path
+            d="M6 3v12M18 9a3 3 0 100-6 3 3 0 000 6zM6 21a3 3 0 100-6 3 3 0 000 6zM18 9a9 9 0 01-9 9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
     </div>
   );

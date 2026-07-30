@@ -9,10 +9,12 @@ import {
   buildSummaryCommandContent,
   getAssistantReplyLengthBudget,
   getDialogueAssistCharCount,
+  getMessageContentCharCount,
   runCommand,
   type ImageCommandContext,
 } from "../lib/chat-engine"
 import { parseAiCommandJson } from "../lib/chat-commands/shared"
+import type { ChatMessage } from "../lib/chat-types"
 
 test("command JSON parser repairs common model formatting mistakes", () => {
   const parsed = parseAiCommandJson(
@@ -250,14 +252,68 @@ test("remaining text commands use the current scene instead of fixed dummy copy"
   if (summaryResult.kind === "message") assert.equal(summaryResult.message.commandId, "summary")
 })
 
-test("auto command estimate and actual output stay inside the combined turn budget", () => {
+test("image command stores generated media as a status_img message", async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    if (url === "/api/chat") {
+      return new Response(JSON.stringify({
+        result: "two fictional adults standing together in a Seoul apartment at night",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    if (url === "/api/images/generate") {
+      return new Response(JSON.stringify({
+        imageUrl: "https://example.com/generated-scene.jpg",
+        model: "fal-ai/flux/dev",
+        provider: "fal",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    }
+    throw new Error(`Unexpected request: ${url}`)
+  }
+
+  try {
+    const result = await runCommand("이미지", "강태현", commandContext)
+    assert.equal(result.kind, "message")
+    if (result.kind === "message") {
+      assert.equal(result.message.type, "status_img")
+      assert.equal(result.message.commandId, "image")
+      assert.equal(result.message.imageUrl, "https://example.com/generated-scene.jpg")
+    }
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test("command output does not consume the narrative reply character budget", () => {
   const assistChars = getDialogueAssistCharCount(["phone", "sns"], "강태현", commandContext)
   const budget = getAssistantReplyLengthBudget(assistChars)
+  const messages: ChatMessage[] = [
+    {
+      id: "command-phone",
+      type: "status",
+      commandId: "phone",
+      content: "명령어로 생성된 긴 휴대폰 내용",
+      timestamp: new Date("2026-07-30T12:00:00.000Z"),
+    },
+    {
+      id: "narrative",
+      type: "ai",
+      content: "일반 답변",
+      timestamp: new Date("2026-07-30T12:00:01.000Z"),
+    },
+  ]
 
-  assert.ok(assistChars > 0)
-  assert.ok(budget.maxChars + assistChars <= budget.totalMaxChars)
-  assert.equal(budget.minChars, 630)
-  assert.equal(budget.maxChars, 700)
-  assert.ok(budget.minChars < budget.maxChars)
-  assert.equal(budget.totalMaxChars, 1500)
+  assert.equal(assistChars, 0)
+  assert.equal(getMessageContentCharCount(messages), Array.from("일반 답변").length)
+  assert.equal(getMessageContentCharCount(messages.slice(0, 1)), 0)
+  assert.equal(budget.dialogueAssistChars, 0)
+  assert.equal(budget.minChars, 700)
+  assert.equal(budget.maxChars, 1100)
+  assert.equal(budget.totalMaxChars, 1100)
 })

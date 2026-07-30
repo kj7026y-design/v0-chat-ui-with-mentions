@@ -49,7 +49,7 @@ export interface ChatMessageCandidate {
 
 export interface ChatMessage {
   id: string
-  type: "user" | "ai" | "event" | "inner-thought" | "status"
+  type: "user" | "ai" | "event" | "inner-thought" | "status" | "status_img"
   content: string
   timestamp: Date
   status?: ChatMessageStatus

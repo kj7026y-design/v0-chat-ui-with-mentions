@@ -8,6 +8,7 @@ interface InstagramCommandContentProps {
   content: string;
   textColor: string;
   mutedTextColor: string;
+  renderSearchText?: (text: string, key: string) => ReactNode;
 }
 
 const INSTAGRAM_COMMENT_TAG_PATTERN =
@@ -132,6 +133,7 @@ export function InstagramCommandContent({
   content,
   textColor,
   mutedTextColor,
+  renderSearchText,
 }: InstagramCommandContentProps) {
   const rawLines = content.split(/\r?\n/);
   const renderedLines: ReactNode[] = [];
@@ -163,7 +165,7 @@ export function InstagramCommandContent({
         </span>
       )}
       <strong className="mr-2 font-bold" style={{ color: textColor }}>
-        {nickname}
+        {renderSearchText?.(nickname, `${key}-nickname`) ?? nickname}
       </strong>
       {comment && (
         <>
@@ -171,13 +173,13 @@ export function InstagramCommandContent({
             className="mt-0.5 whitespace-pre-wrap break-words"
             style={{ color: textColor }}
           >
-            {comment}
+            {renderSearchText?.(comment, `${key}-comment`) ?? comment}
           </span>
           <span
             className="ml-2 text-[11px] font-medium"
             style={{ color: mutedTextColor }}
           >
-            {elapsedTime}
+            {renderSearchText?.(elapsedTime, `${key}-time`) ?? elapsedTime}
           </span>
         </>
       )}
@@ -222,7 +224,15 @@ export function InstagramCommandContent({
               className,
             )}
           >
-            {decodeCommandMarkup(contentTag[2])}
+            {(() => {
+              const text = decodeCommandMarkup(contentTag[2]);
+              return (
+                renderSearchText?.(
+                  text,
+                  `instagram-tagged-${contentTag[1]}-${index}`,
+                ) ?? text
+              );
+            })()}
           </div>,
         );
         continue;
@@ -271,7 +281,7 @@ export function InstagramCommandContent({
           key={`instagram-edited-title-${index}`}
           className="whitespace-pre-wrap break-words font-bold [word-break:keep-all]"
         >
-          {line}
+          {renderSearchText?.(line, `instagram-title-${index}`) ?? line}
         </div>,
         <div
           key={`instagram-edited-divider-${index}`}
@@ -288,7 +298,7 @@ export function InstagramCommandContent({
           className="mt-2 font-semibold"
           style={{ color: textColor }}
         >
-          댓글
+          {renderSearchText?.("댓글", `instagram-label-${index}`) ?? "댓글"}
         </div>,
       );
       continue;
@@ -299,7 +309,7 @@ export function InstagramCommandContent({
         key={`instagram-line-${index}`}
         className="whitespace-pre-wrap break-words [word-break:keep-all]"
       >
-        {line}
+        {renderSearchText?.(line, `instagram-line-${index}`) ?? line}
       </div>,
     );
   }

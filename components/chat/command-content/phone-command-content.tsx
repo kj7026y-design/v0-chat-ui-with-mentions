@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { decodeCommandMarkup } from "./command-markup";
 
 const PHONE_SECTION_TITLES = new Set([
@@ -23,22 +24,29 @@ const SPACED_PHONE_LIST_SECTIONS = new Set([
 interface PhoneCommandContentProps {
   content: string;
   textColor: string;
+  renderSearchText?: (text: string, key: string) => ReactNode;
 }
 
-function renderPhoneLine(line: string) {
+function renderPhoneLine(
+  line: string,
+  renderSearchText?: (text: string, key: string) => ReactNode,
+  keyPrefix = "phone-line",
+) {
   return line.split(/(<phone-time>.*?<\/phone-time>)/gu).map((part, index) => {
     const timeTag = part.match(/^<phone-time>(.*?)<\/phone-time>$/u);
     if (timeTag) {
+      const text = decodeCommandMarkup(timeTag[1]);
       return (
         <span
           key={`phone-time-${index}`}
           style={{ color: "var(--color-gray-400)" }}
         >
-          {decodeCommandMarkup(timeTag[1])}
+          {renderSearchText?.(text, `${keyPrefix}-time-${index}`) ?? text}
         </span>
       );
     }
-    return decodeCommandMarkup(part);
+    const text = decodeCommandMarkup(part);
+    return renderSearchText?.(text, `${keyPrefix}-text-${index}`) ?? text;
   });
 }
 
@@ -70,6 +78,7 @@ function getSpacedPhoneLineIndexes(lines: string[]) {
 export function PhoneCommandContent({
   content,
   textColor,
+  renderSearchText,
 }: PhoneCommandContentProps) {
   const lines = content.split(/\r?\n/);
   const spacedLineIndexes = getSpacedPhoneLineIndexes(lines);
@@ -93,10 +102,18 @@ export function PhoneCommandContent({
               className="flex w-full min-w-[260px] items-center justify-between gap-4"
             >
               <span style={{ color: "var(--color-gray-400)" }}>
-                {decodeCommandMarkup(statusTag?.[1] ?? legacyStatus?.[1] ?? "")}
+                {renderPhoneLine(
+                  statusTag?.[1] ?? legacyStatus?.[1] ?? "",
+                  renderSearchText,
+                  `phone-status-time-${index}`,
+                )}
               </span>
               <span className="whitespace-nowrap text-right">
-                {decodeCommandMarkup(statusTag?.[2] ?? legacyStatus?.[2] ?? "")}
+                {renderPhoneLine(
+                  statusTag?.[2] ?? legacyStatus?.[2] ?? "",
+                  renderSearchText,
+                  `phone-status-icons-${index}`,
+                )}
               </span>
             </div>
           );
@@ -123,7 +140,12 @@ export function PhoneCommandContent({
           return (
             <div key={`phone-section-${index}`}>
               {hasPreviousSection && <div className="my-3 border-b" />}
-              <div className="font-bold">{trimmedLine}</div>
+              <div className="font-bold">
+                {renderSearchText?.(
+                  trimmedLine,
+                  `phone-section-${index}`,
+                ) ?? trimmedLine}
+              </div>
             </div>
           );
         }
@@ -138,7 +160,11 @@ export function PhoneCommandContent({
             key={`phone-line-${index}`}
             className={`whitespace-pre-wrap break-words [word-break:keep-all]${spacedLineIndexes.has(index) ? " mt-1" : ""}`}
           >
-            {renderPhoneLine(line)}
+            {renderPhoneLine(
+              line,
+              renderSearchText,
+              `phone-line-${index}`,
+            )}
           </div>
         );
       })}

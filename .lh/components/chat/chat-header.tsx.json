@@ -3,7 +3,7 @@
     "activeCommit": 0,
     "commits": [
         {
-            "activePatchIndex": 5,
+            "activePatchIndex": 6,
             "patches": [
                 {
                     "date": 1784780291896,
@@ -28,6 +28,10 @@
                 {
                     "date": 1784788529536,
                     "content": "Index: \n===================================================================\n--- \n+++ \n@@ -35,9 +35,9 @@\n     level !== undefined ? `Lv.${level}` : undefined,\n   ].filter(Boolean).join(\" · \")\n \n   return (\n-    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-white\">\n+    <header className=\"fixed left-0 right-0 top-0 z-40 px-2.5 py-1.5 bg-background\">\n       <div className=\"flex h-8 items-center justify-between gap-2\">\n         <div className=\"flex min-w-0 items-center gap-2\">\n         <button\n           onClick={() => router.back()}\n"
+                },
+                {
+                    "date": 1785393959517,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -150,9 +150,9 @@\n             onClick={(event) => {\n               event.currentTarget.blur()\n               ;(onModelClick ?? onMenuClick)?.()\n             }}\n-              className=\"rounded-full border border-border/80 bg-muted/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground\"\n+              className=\"rounded-full border bg-muted/80 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground\"\n           >\n               {modelLabel}\n           </button>\n         )}\n"
                 }
             ],
             "date": 1784780291896,

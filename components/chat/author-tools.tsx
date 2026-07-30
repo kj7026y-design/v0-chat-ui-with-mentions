@@ -1,76 +1,78 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { RefreshCw, Pencil, Trash2 } from "lucide-react"
-import { ConfirmModal } from "@/components/ui/app-modal"
-import { cn } from "@/lib/utils"
+import { useState } from "react";
+import { RefreshCw, Pencil, Trash2 } from "lucide-react";
+import { ConfirmModal } from "@/components/ui/app-modal";
+import { cn } from "@/lib/utils";
 
 interface AuthorToolsProps {
-  messageId: string
-  onRewrite?: (messageId: string) => void
-  onEdit?: (messageId: string) => void
-  onDelete?: (messageId: string) => void
-  isEdited?: boolean
-  canRewrite?: boolean
-  disabled?: boolean
-  itemType?: "message" | "image"
+  messageId: string;
+  onRewrite?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
+  isEdited?: boolean;
+  canRewrite?: boolean;
+  disabled?: boolean;
+  itemType?: "message" | "image";
 }
 
-export function AuthorTools({ 
-  messageId, 
-  onRewrite, 
-  onEdit, 
+export function AuthorTools({
+  messageId,
+  onRewrite,
+  onEdit,
   onDelete,
   isEdited,
   canRewrite = true,
   disabled = false,
   itemType = "message",
 }: AuthorToolsProps) {
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
-  const isImage = itemType === "image"
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const isImage = itemType === "image";
   const tools = [
-    { 
-      icon: RefreshCw, 
+    {
+      icon: RefreshCw,
       label: isImage ? "새로 생성" : "다시 쓰기",
       action: () => onRewrite?.(messageId),
       className: "hover:text-foreground hover:bg-accent",
       visible: canRewrite,
     },
-    { 
-      icon: Pencil, 
+    {
+      icon: Pencil,
       label: isImage ? "프롬프트 수정" : "문장 수정",
       action: () => onEdit?.(messageId),
       className: "hover:text-purple-400 hover:bg-purple-900/30",
       visible: true,
     },
-  ]
+  ];
 
   return (
-    <div className="flex items-center gap-1 px-1 rounded-lg bg-popover border border-border mb-1.5">
-      {tools.filter((tool) => tool.visible).map((tool) => (
-        <button
-          key={tool.label}
-          onClick={tool.action}
-          disabled={disabled}
-          className={cn(
-            "flex items-center gap-1.5 px-1.5 py-1 rounded-md",
-            "text-muted-foreground text-[11px] font-medium",
-            "transition-all duration-150",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            tool.className
-          )}
-          title={tool.label}
-        >
-          <tool.icon className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{tool.label}</span>
-        </button>
-      ))}
+    <div className="flex items-center gap-1 px-1 rounded-lg bg-popover mb-1.5">
+      {tools
+        .filter((tool) => tool.visible)
+        .map((tool) => (
+          <button
+            key={tool.label}
+            onClick={tool.action}
+            disabled={disabled}
+            className={cn(
+              "flex items-center gap-1.5 px-1.5 py-1 rounded-md",
+              "text-muted-foreground text-[11px] font-medium",
+              "transition-all duration-150",
+              "disabled:cursor-not-allowed disabled:opacity-50",
+              tool.className,
+            )}
+            title={tool.label}
+          >
+            <tool.icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{tool.label}</span>
+          </button>
+        ))}
 
       <button
         disabled={disabled}
         onClick={() => {
-          if (disabled) return
-          setIsDeleteConfirmOpen(true)
+          if (disabled) return;
+          setIsDeleteConfirmOpen(true);
         }}
         className={cn(
           "flex items-center gap-1.5 px-2 py-1.5 rounded-md",
@@ -84,10 +86,13 @@ export function AuthorTools({
           {isImage ? "이미지 삭제" : "기억 삭제"}
         </span>
       </button>
-      
+
       {/* Edited indicator */}
       {isEdited && (
-        <div className="w-2 h-2 rounded-full bg-purple-500 ml-1" title="수정됨" />
+        <div
+          className="w-2 h-2 rounded-full bg-purple-500 ml-1"
+          title="수정됨"
+        />
       )}
 
       <ConfirmModal
@@ -104,5 +109,5 @@ export function AuthorTools({
         onConfirm={() => onDelete?.(messageId)}
       />
     </div>
-  )
+  );
 }

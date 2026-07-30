@@ -7,11 +7,13 @@ import { decodeCommandMarkup } from "./command-markup"
 interface StatusCommandContentProps {
   content: string
   textColor: string
+  renderSearchText?: (text: string, key: string) => ReactNode
 }
 
 export function StatusCommandContent({
   content,
   textColor,
+  renderSearchText,
 }: StatusCommandContentProps) {
   if (!content.trimStart().startsWith("<status>")) {
     const [firstLine = "", ...bodyLines] = content.split(/\r?\n/u)
@@ -19,16 +21,21 @@ export function StatusCommandContent({
       return (
         <div style={{ color: textColor }}>
           <div className="whitespace-pre-wrap break-words font-bold [word-break:keep-all]">
-            {firstLine}
+            {renderSearchText?.(firstLine, "status-title") ?? firstLine}
           </div>
           <div className="mt-2 mb-3 border-b border-black" />
           <div className="whitespace-pre-wrap break-words [word-break:keep-all]">
-            {bodyLines.join("\n")}
+            {renderSearchText?.(bodyLines.join("\n"), "status-body") ??
+              bodyLines.join("\n")}
           </div>
         </div>
       )
     }
-    return <div className="whitespace-pre-wrap break-words [word-break:keep-all]">{content}</div>
+    return (
+      <div className="whitespace-pre-wrap break-words [word-break:keep-all]">
+        {renderSearchText?.(content, "status-content") ?? content}
+      </div>
+    )
   }
 
   const renderedLines: ReactNode[] = []
@@ -60,7 +67,10 @@ export function StatusCommandContent({
           type === "thought" && "mt-3",
         )}
       >
-        {decodeCommandMarkup(contentTag[2])}
+        {(() => {
+          const text = decodeCommandMarkup(contentTag[2])
+          return renderSearchText?.(text, `status-${type}-${index}`) ?? text
+        })()}
       </div>,
     )
   })

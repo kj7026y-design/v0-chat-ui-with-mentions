@@ -11,7 +11,7 @@ import {
 
 export const runtime = "nodejs"
 
-const MESSAGE_TYPES = new Set(["user", "ai", "event", "inner-thought", "status"])
+const MESSAGE_TYPES = new Set(["user", "ai", "event", "inner-thought", "status", "status_img"])
 
 function getRoomId(value: unknown) {
   if (typeof value !== "string") return null
