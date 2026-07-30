@@ -13,6 +13,15 @@ import {
   recoverRoleplayOutputDeterministically,
   validateRoleplayOutput,
 } from "../lib/rp/pipeline"
+import { buildAdultFictionInstruction } from "../lib/rp/prompt/adult-fiction"
+
+test("adult fiction prompt uses a semantic style instruction instead of a vocabulary list", () => {
+  const prompt = buildAdultFictionInstruction("강태현")
+
+  assert.match(prompt, /해부학적으로 명확한 성인 신체 부위 명칭/)
+  assert.match(prompt, /거친 성인용 구어체 및 직접적인 성행위 묘사/)
+  assert.doesNotMatch(prompt, /같은 직설적인 성적 표현을 사용할 수 있다/)
+})
 
 test("Gemini provider prompt blocks are detected even without a finish reason", () => {
   assert.equal(
