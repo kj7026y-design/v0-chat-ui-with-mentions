@@ -50,6 +50,58 @@ export function addCreditHistory(item: Omit<CreditHistoryItem, "id" | "createdAt
   window.dispatchEvent(new Event(CREDIT_UPDATED_EVENT))
 }
 
+export function saveCreditHistoryList(history: CreditHistoryItem[]) {
+  if (typeof window === "undefined") return
+  window.localStorage.setItem(CREDIT_HISTORY_KEY, JSON.stringify(history.slice(0, 100)))
+  window.dispatchEvent(new Event(CREDIT_UPDATED_EVENT))
+}
+
+export async function fetchServerCredits(): Promise<{ credits: number; history: CreditHistoryItem[] } | null> {
+  if (typeof window === "undefined") return null
+  try {
+    const res = await fetch("/api/credits", { method: "GET" })
+    if (!res.ok) return null
+    const data = await res.json() as { isGuest?: boolean; credits?: number; history?: CreditHistoryItem[] }
+    if (typeof data.credits === "number") {
+      saveStoredCredits(data.credits)
+      if (Array.isArray(data.history)) {
+        saveCreditHistoryList(data.history)
+      }
+      return { credits: data.credits, history: data.history ?? [] }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+export async function syncCreditActionToServer(
+  action: "spend" | "charge",
+  amount: number,
+  title?: string,
+  description?: string,
+): Promise<{ credits?: number; history?: CreditHistoryItem[] } | null> {
+  if (typeof window === "undefined") return null
+  try {
+    const res = await fetch("/api/credits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, amount, title, description }),
+    })
+    if (!res.ok) return null
+    const data = await res.json() as { isGuest?: boolean; credits?: number; history?: CreditHistoryItem[] }
+    if (typeof data.credits === "number") {
+      saveStoredCredits(data.credits)
+      if (Array.isArray(data.history)) {
+        saveCreditHistoryList(data.history)
+      }
+    }
+    return data.credits !== undefined ? { credits: data.credits, history: data.history ?? [] } : null
+  } catch {
+    return null
+  }
+}
+
 export function subscribeCreditUpdates(listener: () => void) {
   if (typeof window === "undefined") return () => undefined
   const handleStorage = (event: StorageEvent) => {

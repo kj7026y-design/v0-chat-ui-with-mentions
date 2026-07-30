@@ -1,7 +1,13 @@
 "use client"
 
 import { create } from "zustand"
-import { addCreditHistory, getStoredCredits, saveStoredCredits } from "@/lib/credit-storage"
+import {
+  addCreditHistory,
+  fetchServerCredits,
+  getStoredCredits,
+  saveStoredCredits,
+  syncCreditActionToServer,
+} from "@/lib/credit-storage"
 
 export type Category = "회사" | "학교" | "판타지" | "고대 서양" | "고대 아시아"
 
@@ -499,6 +505,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Credits
   hydrateCredits: () => {
     set({ credits: getStoredCredits(DEFAULT_CREDITS) })
+    void fetchServerCredits().then((res) => {
+      if (res) {
+        set({ credits: res.credits })
+      }
+    })
   },
   chargeCredit: (amount, title = "크레딧 충전", description) => {
     if (amount <= 0) return
@@ -506,6 +517,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ credits: nextCredits })
     saveStoredCredits(nextCredits)
     addCreditHistory({ type: "earned", title, amount, description })
+    void syncCreditActionToServer("charge", amount, title, description).then((res) => {
+      if (res?.credits !== undefined) set({ credits: res.credits })
+    })
   },
   spendCredit: (amount, title = "크레딧 사용", description) => {
     if (amount <= 0) return true
@@ -515,6 +529,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ credits: nextCredits })
     saveStoredCredits(nextCredits)
     addCreditHistory({ type: "spent", title, amount: -amount, description })
+    void syncCreditActionToServer("spend", amount, title, description).then((res) => {
+      if (res?.credits !== undefined) set({ credits: res.credits })
+    })
     return true
   },
 }))

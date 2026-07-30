@@ -3578,6 +3578,7 @@ ${compiledContext?.turnPolicy.guidedAutoAdvance ? `- 이번 요청은 사용자�
 - 의미 없는 장황한 분위기 묘사로 분량을 채우지 않는다.
 - 장면 의도나 관계 구도를 해설하지 말고, 짧은 행동과 대사로 보여준다.
 - 대명사 "그", "그의", "그에게"를 남용하지 않는다. 화자가 헷갈리면 "${characterName}" 이름을 쓰거나 주어를 생략한다.
+- 대화가 4~5턴 이상 물리적 이동 없이 장면이 정체될 경우, "${characterName}"이 예고 없이 과감한 스킨십을 시도하거나 외부 환경의 미세한 변화(창밖의 소음, 물건의 떨어짐, 예상치 못한 제3자의 개입)를 발생시켜 씬에 새 변수를 삽입한다.
 
 [상태 정보 규칙]
 - 현재 장면은 이번 턴의 구조화된 행동/대사와 모델용 장면 요약만 참고한다.
@@ -3592,6 +3593,7 @@ ${compiledContext?.turnPolicy.guidedAutoAdvance ? `- 이번 요청은 사용자�
 - ${compiledContext?.turnPolicy.guidedAutoAdvance ? "사용자 입력은 장면 연출 지시다. 지시문 자체를 대사로 출력하지 말고, 지시에 명시된 인물과 사건을 실제 장면으로 작성한다." : "사용자의 새 대사나 새 행동을 추가로 만들지 않는다."}
 - 구조화 문구, 입력 항목명, 내부 해석을 답변에 출력하지 않는다.
 - 이번 턴의 의도가 배경이나 과거 히스토리와 충돌하면 이번 턴을 우선한다.
+- 사용자의 과장법, 비꼬기, 빈말, 반어법을 곧이곧대로 해석하지 않는다. 표면적인 단어가 아닌 그 이면의 의도와 감정을 파악해 "${characterName}"의 성격에 맞게(무시, 비웃음, 정곡 찌르기, 역이용 등) 반응한다.
 
 [설정 및 사실 우선순위]
 - 최신 사용자 입력의 명시적 행동과 대사가 가장 우선한다.
@@ -3682,7 +3684,8 @@ ${modelBackground}
 - 반드시 ${responseMinChars}자 이상 ${responseMaxChars}자 이하로 끝낸다.
 - 실제 작성 목표는 ${preferredResponseMinChars}~${preferredResponseMaxChars}자다. ${responseMinChars}자에 닿기 전에 생성을 종료하지 않는다.
 - 내용이 일찍 끝났다면 같은 의미를 반복하지 말고, ${characterName} 자신의 새 정보·구체적 동작·감각적 세부 중 장면에 맞는 것을 보강한다.
-- 완결된 대사는 ${minDialogues}~${maxDialogues}개, 가능하면 ${preferredDialogues}개로 맞춘 뒤 출력한다.`
+- 완결된 대사는 ${minDialogues}~${maxDialogues}개, 가능하면 ${preferredDialogues}개로 맞춘 뒤 출력한다.
+- 씬을 완전히 닫아버리지 않는다. 미해결된 긴장감, "${userName}"의 반응을 강제하는 도발적 행동이나 침묵, 또는 예상을 뒤집는 전개로 답변을 끝내어 사용자가 반응하지 않을 수 없는 훅(Hook)을 남긴다.`
 }
 
 function buildProfilePromptInstructions(profile?: RoleplayModelProfile) {
