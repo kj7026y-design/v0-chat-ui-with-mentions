@@ -3826,6 +3826,30 @@ ${styleInstructions[profile.promptStyle]}
 ${modeInstructions[profile.outputMode]}`
 }
 
+function sanitizeAssistantHistoryContent(content: string): string {
+  if (!content) return content
+
+  let sanitized = content
+    .replace(/짐승\s*같은/g, "거친")
+    .replace(/짐승처럼/g, "거칠게")
+    .replace(/야수\s*같은/g, "강렬한")
+    .replace(/이성이\s*타버린/g, "인내심이 한계에 달한")
+    .replace(/머릿속이\s*하얗게\s*(점멸했|변했|같았)/g, "생각이 아득해졌")
+    .replace(/쾌락의\s*파도/g, "밀려드는 감각")
+    .replace(/이성의\s*끈/g, "인내심")
+    .replace(/입구에/g, "맞닿은 곳에")
+    .replace(/그\s*곳/g, "은밀한 부위")
+    .replace(/쾌락에\s*(겨워|젖어)/g, "열기에 젖어")
+    .replace(/정복욕/g, "소유욕")
+
+  sanitized = sanitized
+    .replace(/([가-힣]+)의\s*입술\s*사이로\s*높은\s*비명이\s*터져\s*나왔지만/g, "$1의 숨결이 가빠졌지만")
+    .replace(/쾌락의\s*파도에\s*휩쓸려\s*허덕이는/g, "뜨거운 열기 속에서 호흡하는")
+
+  return sanitized
+}
+
+
 function buildOpenRouterMessages(
   messages: NonNullable<ChatRequestBody["messages"]>,
   systemPromptText: string,
@@ -3853,6 +3877,9 @@ function buildOpenRouterMessages(
 
       if (isSystemLikeAssistantContent(content)) return []
       if (isLegacyLocalFallbackContent(content)) return []
+
+      // 과거 assistant 메시지에 남아있는 클리셰/유저조종 문구 세탁 (Sanitize)
+      content = sanitizeAssistantHistoryContent(content)
 
       const repeatKey = normalizeRepeatedParagraphKey(content)
       if (repeatKey.length >= 28) {
