@@ -32,8 +32,12 @@ export const openaiRpProfile: RoleplayModelProfile = {
     lowContentDensity: "repairable",
     excessiveAbstractMood: "repairable",
     characterVoiceWeak: "repairable",
-    tooShort: "repairable",
+    tooShort: "soft",
     tooLong: "repairable",
+    // 재시도 시 유사 답변 생성 방지 - 너무 엄격하면 루프 발생하므로 soft 처리
+    previousResponseDuplicate: "soft",
+    regenerationDuplicate: "soft",
+    incompleteEnding: "repairable",
   },
   repair: {
     maxAttempts: 1,

@@ -401,6 +401,7 @@ const GEMINI_HTTP_STATUS_NAMES: Partial<Record<number, string>> = {
   404: "NOT_FOUND",
   408: "DEADLINE_EXCEEDED",
   409: "ABORTED",
+  422: "UNPROCESSABLE_CONTENT",
   429: "RESOURCE_EXHAUSTED",
   500: "INTERNAL",
   502: "BAD_GATEWAY",
@@ -461,6 +462,13 @@ export function extractGeminiErrorMetadata(error: unknown): GeminiErrorMetadata 
 
 export function extractGenerationErrorMetadata(error: unknown): GenerationErrorMetadata {
   const timeoutStage = getTimeoutStage(error)
+  if (error instanceof ChatApiError && error.validationStatus === "failed") {
+    return {
+      code: error.status,
+      status: "VALIDATION_FAILED",
+      message: error.message.trim().slice(0, 1_000) || undefined,
+    }
+  }
 
   const record = asErrorRecord(error)
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : ""
@@ -2732,6 +2740,11 @@ const TERMINAL_OUTPUT_CONTRACT_KEYS = [
   "incompleteEnding",
 ] as const satisfies readonly RoleplayValidationKey[]
 
+const DETERMINISTIC_RECOVERY_FAILURE_KEYS = new Set<RoleplayValidationKey>([
+  "controlsUser",
+  "tooShort",
+])
+
 function getFailuresForKeys(errors: RoleplayValidationErrors, keys: readonly RoleplayValidationKey[]) {
   return keys.filter((key) => errors[key]).map((key) => String(key))
 }
@@ -2860,7 +2873,7 @@ function buildValidationFailedError(
 ) {
   return new ChatApiError(
     `RP validation failed: ${failures.join(", ")}`,
-    502,
+    422,
     failures,
     "failed",
     metadata.repairAttempted,
@@ -2930,6 +2943,8 @@ ${errors.tooShort ? `방금 답변은 캐릭터 반응 자체가 지나치게 �
 원문에 이미 있는 행동의 세부 감각, 표정, 호흡, 주변 분위기와 캐릭터의 내적 반응만 보강하라.
 새 행동, 새 요구, 새 갈등, 새 증거, 새 조건, 인물 위치 변화, 문이나 소품의 상태 변화는 추가하지 마라.
 최소 ${ctx.turnPolicy.minChars}자를 반드시 채우고 ${repairTargetMinChars}~${repairTargetMaxChars}자를 목표로 하되, 같은 의미를 바꿔 말하며 분량을 늘리지 마라.` : ""}
+${errors.tooManyDialogues ? `큰따옴표는 실제 발화 대사에만 사용한다.
+인물 이름이나 지문을 강조하려고 큰따옴표를 쓰지 말고, 완결된 대사는 최대 4개만 남겨라.` : ""}
 ${errors.responseMissedUserIntent && ctx.turnPolicy.allowPhysicalContact ? `사용자가 이미 접촉을 시작했거나 ${ctx.characterName}이 먼저 행동하도록 허락했다. 장면을 거리 확인, 일반적인 조건 제시, 망설임으로 되돌리지 말고 현재 접촉과 수위에 직접 반응하라.` : ""}
 ${errors.characterVoiceWeak ? `${ctx.characterName}의 설정에 적극성, 먼저 유혹함, 주도성, 직설적인 농담이 있다면 이를 실제 행동과 짧은 대사로 드러내라. 상대가 먼저 말하게 하려고 가만히 있는다는 식의 근거 없는 수동적 동기를 만들지 마라.` : ""}
 ${errors.unpromptedHandFocus ? `방금 답변은 손 묘사가 접촉/관능/회피/긴장 표현의 중심이 되어서 실패했다.
@@ -3153,8 +3168,81 @@ function normalizeAutoAdvanceResponseOpening(content: string, ctx: CompiledRolep
     .replace(/^(\s*)(?:그|상대의)\s*(?:말|질문)에\s*답(?:하듯|하며|하는\s*대신)\s*/u, "$1")
 }
 
+function hasHangulFinalConsonant(value: string) {
+  const lastCharacter = Array.from(value.trim()).at(-1)
+  if (!lastCharacter) return false
+  const codePoint = lastCharacter.codePointAt(0) ?? 0
+  return codePoint >= 0xac00 && codePoint <= 0xd7a3
+    ? (codePoint - 0xac00) % 28 !== 0
+    : false
+}
+
+function normalizeQuotedRoleplaySubjects(
+  content: string,
+  ctx: CompiledRoleplayContext,
+) {
+  let normalized = content
+  const characterName = ctx.characterName.trim()
+
+  if (characterName) {
+    const malformedSpeakerLead = new RegExp(
+      `^(\\s*)["“]${escapeRegExp(characterName)}["”]\\s*(?:은\\s*\\(\\s*는\\s*\\)|는\\s*\\(\\s*은\\s*\\))\\s*(["“])`,
+      "u",
+    )
+    normalized = normalized.replace(malformedSpeakerLead, "$1$2")
+  }
+
+  const names = [...new Set([ctx.characterName.trim(), ctx.userName.trim()])]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+
+  for (const name of names) {
+    const escapedName = escapeRegExp(name)
+    const hasFinalConsonant = hasHangulFinalConsonant(name)
+    const placeholderParticles = [
+      {
+        pattern: "(?:은\\s*\\(\\s*는\\s*\\)|는\\s*\\(\\s*은\\s*\\))",
+        particle: hasFinalConsonant ? "은" : "는",
+      },
+      {
+        pattern: "(?:이\\s*\\(\\s*가\\s*\\)|가\\s*\\(\\s*이\\s*\\))",
+        particle: hasFinalConsonant ? "이" : "가",
+      },
+      {
+        pattern: "(?:을\\s*\\(\\s*를\\s*\\)|를\\s*\\(\\s*을\\s*\\))",
+        particle: hasFinalConsonant ? "을" : "를",
+      },
+      {
+        pattern: "(?:과\\s*\\(\\s*와\\s*\\)|와\\s*\\(\\s*과\\s*\\))",
+        particle: hasFinalConsonant ? "과" : "와",
+      },
+    ]
+
+    for (const { pattern, particle } of placeholderParticles) {
+      normalized = normalized.replace(
+        new RegExp(`["“]${escapedName}["”]\\s*${pattern}`, "gu"),
+        `${name}${particle}`,
+      )
+    }
+
+    normalized = normalized.replace(
+      new RegExp(
+        `["“]${escapedName}["”]\\s*(은|는|이|가|을|를|과|와|의|에게|한테|으로|로)(?=\\s|[,.:!?]|$)`,
+        "gu",
+      ),
+      `${name}$1`,
+    )
+  }
+
+  return normalized
+}
+
 export function normalizeGeneratedRoleplayOutput(content: string, ctx: CompiledRoleplayContext) {
-  const normalized = normalizeAutoAdvanceResponseOpening(normalizeOpenRouterOutput(content), ctx)
+  const subjectNormalized = normalizeQuotedRoleplaySubjects(content, ctx)
+  const normalized = normalizeAutoAdvanceResponseOpening(
+    normalizeOpenRouterOutput(subjectNormalized),
+    ctx,
+  )
   if (!normalized) return normalized
 
   let openingNormalized = normalized
@@ -3544,6 +3632,7 @@ ${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
 - 완결된 대사는 반드시 ${minDialogues}~${maxDialogues}개를 쓰고, 특별한 이유가 없으면 ${preferredDialogues}개로 맞춘다. 최소 개수보다 적거나 최대 개수보다 많게 출력하지 않는다.
 - 출력 직전에 분량과 큰따옴표로 닫힌 대사 개수를 내부적으로 확인하고, 조건에 맞는 완성된 본문만 출력한다.
 - 대사는 큰따옴표 안에 쓴다.
+- 큰따옴표는 실제 발화 대사에만 사용한다. 인물 이름, 지문, 강조 표현에는 큰따옴표를 쓰지 않는다.
 - 대사와 서술은 줄바꿈으로 분리한다.
 - 따옴표 밖 지문은 ${guidedAutoAdvance ? `장면 지시에 명시된 인물의 관찰 가능한 행동을 포함할 수 있으나, 내면과 감각은 "${characterName}" 중심의` : `항상 "${characterName}" 또는 그/그녀를 중심으로 한`} 3인칭 제한 시점 소설체로 쓰되, 모든 문장에 이름이나 대명사를 주어로 반복하지 않는다. 한국어에서 자연스러우면 주어를 생략한다.
 - 지문에서 "나는", "내가", "기다리고 있었어", "귀엽네" 같은 1인칭 주어와 대화체 어미를 쓰지 않는다.
@@ -3894,8 +3983,6 @@ async function callOpenAIRoleplay(finalMessages: ChatMessages, model: ChatModelC
   ]
 
   const requestBody = buildOpenAIRoleplayRequest(profile, messagesWithPrefill)
-  // 꼼수 3: Max Tokens 제한 (1000토큰 내외로 타이트하게 제한하여 검열 레이더망 피하기)
-  requestBody.max_tokens = Math.min(requestBody.max_tokens ?? 1000, 1000)
 
   const response = await withTimeout(fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -4596,10 +4683,93 @@ ${recoverySource}`
           const recoveryBlockingFailures = recoveryValidation && recoveryClassifiedValidation
             ? getTerminalBlockingFailureKeys(recoveryValidation, recoveryClassifiedValidation)
             : blockingFailures
-          throw buildValidationFailedError(recoveryBlockingFailures, {
-            repairAttempted,
-            fallback: fallbackUsed,
-            validationAttempts,
+          const canRecoverDeterministically = Boolean(recoveryResult) &&
+            recoveryBlockingFailures.length > 0 &&
+            recoveryBlockingFailures.every((failure) =>
+              DETERMINISTIC_RECOVERY_FAILURE_KEYS.has(
+                failure as RoleplayValidationKey,
+              ),
+            )
+
+          if (!canRecoverDeterministically) {
+            throw buildValidationFailedError(recoveryBlockingFailures, {
+              repairAttempted,
+              fallback: fallbackUsed,
+              validationAttempts,
+            })
+          }
+
+          const locallyRecoveredResult = recoverRoleplayOutputDeterministically(
+            recoveryResult,
+            compiledContext,
+          )
+          const locallyRecoveredValidationResult = locallyRecoveredResult
+            ? await validateRoleplayOutputWithJudge(
+                locallyRecoveredResult,
+                compiledContext,
+                profile,
+              )
+            : null
+          const locallyRecoveredValidation =
+            locallyRecoveredValidationResult?.errors ?? null
+          const locallyRecoveredSeverityOverrides =
+            locallyRecoveredValidationResult?.severityOverrides ?? {}
+          const locallyRecoveredClassifiedValidation =
+            locallyRecoveredValidation
+              ? classify(
+                  locallyRecoveredValidation,
+                  locallyRecoveredSeverityOverrides,
+                )
+              : null
+
+          if (
+            locallyRecoveredValidation &&
+            locallyRecoveredClassifiedValidation
+          ) {
+            validationAttempts.push(
+              buildValidationAttempt(
+                "repair",
+                locallyRecoveredValidation,
+                locallyRecoveredClassifiedValidation,
+              ),
+            )
+          }
+
+          if (
+            !locallyRecoveredResult ||
+            !locallyRecoveredValidation ||
+            !locallyRecoveredClassifiedValidation ||
+            !passesTerminalOutputContract(
+              locallyRecoveredValidation,
+              locallyRecoveredClassifiedValidation,
+            )
+          ) {
+            const localBlockingFailures =
+              locallyRecoveredValidation &&
+              locallyRecoveredClassifiedValidation
+                ? getTerminalBlockingFailureKeys(
+                    locallyRecoveredValidation,
+                    locallyRecoveredClassifiedValidation,
+                  )
+                : recoveryBlockingFailures
+            throw buildValidationFailedError(localBlockingFailures, {
+              repairAttempted,
+              fallback: fallbackUsed,
+              validationAttempts,
+            })
+          }
+
+          result = locallyRecoveredResult
+          outputModel = recoveryCompletion.model
+          fallbackUsed = fallbackUsed || outputModel !== attemptedModel
+          validation = locallyRecoveredValidation
+          validationSeverityOverrides = locallyRecoveredSeverityOverrides
+          classifiedValidation = locallyRecoveredClassifiedValidation
+          console.info("[RP deterministic final recovery accepted]", {
+            requestId,
+            beforeFailures: recoveryBlockingFailures,
+            contentChars: Array.from(locallyRecoveredResult).length,
+            dialogueCount: extractQuotedLines(locallyRecoveredResult).length,
           })
         }
       } else {
@@ -6186,15 +6356,11 @@ ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characte
   // candidate only violates deterministic, locally repairable constraints. Do
   // one content-preserving local recovery before exposing a validation error to
   // the user. This never suppresses unrelated semantic or continuity failures.
-  const deterministicRecoveryFailureKeys = new Set<RoleplayValidationKey>([
-    "controlsUser",
-    "tooShort",
-  ])
   if (
     savedContent &&
     repairedFinalBlockingFailures.length > 0 &&
     repairedFinalBlockingFailures.every((failure) =>
-      deterministicRecoveryFailureKeys.has(failure as RoleplayValidationKey),
+      DETERMINISTIC_RECOVERY_FAILURE_KEYS.has(failure as RoleplayValidationKey),
     )
   ) {
     const beforeFailures = [...repairedFinalBlockingFailures]
@@ -6552,6 +6718,10 @@ export function runChatEventStream({
           timeoutStage,
           geminiError,
           generationError,
+          validationFailures,
+          validationAttempts,
+          repairAttempted: validationRepairAttempted,
+          fallback: validationFallback,
         })
         send({
           event_type: "final",
