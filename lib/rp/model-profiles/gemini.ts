@@ -1,5 +1,6 @@
 import type { RoleplayModelProfile } from "./types"
 import { DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS } from "@/lib/chat-models"
+import { COMMON_ROLEPLAY_DIALOGUE_COUNTS } from "@/lib/rp/prompt/dialogue-cadence"
 
 const geminiSafetyThreshold = (process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE") as NonNullable<RoleplayModelProfile["safety"]>["geminiSafetyThreshold"]
 
@@ -13,9 +14,7 @@ export const geminiFlashRpProfile: RoleplayModelProfile = {
   promptStyle: "immersive-controlled",
   outputMode: "novel",
   targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
-  minDialogues: 2,
-  preferredDialogues: 3,
-  maxDialogues: 4,
+  ...COMMON_ROLEPLAY_DIALOGUE_COUNTS,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
     tooFewDialogues: "repairable",

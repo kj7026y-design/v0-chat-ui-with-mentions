@@ -1,5 +1,6 @@
 import type { RoleplayModelProfile } from "./types"
 import { DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS } from "@/lib/chat-models"
+import { COMMON_ROLEPLAY_DIALOGUE_COUNTS } from "@/lib/rp/prompt/dialogue-cadence"
 
 export const commandRRpProfile: RoleplayModelProfile = {
   id: "command-r-plus-rp",
@@ -11,9 +12,7 @@ export const commandRRpProfile: RoleplayModelProfile = {
   promptStyle: "korean-clean-direct",
   outputMode: "novel",
   targetChars: { min: DEFAULT_MIN_ANSWER_CHARS, max: DEFAULT_MAX_ANSWER_CHARS },
-  minDialogues: 2,
-  preferredDialogues: 3,
-  maxDialogues: 4,
+  ...COMMON_ROLEPLAY_DIALOGUE_COUNTS,
   validationSensitivity: {
     brokenDialogueQuotes: "repairable",
     tooFewDialogues: "repairable",

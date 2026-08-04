@@ -20,6 +20,11 @@ import { parseRoleplayInputParts } from "@/lib/rp-input-parser"
 import { getRoleplayModelProfile, type RoleplayModelProfile } from "@/lib/rp/model-profiles"
 import { buildAdultFictionInstruction } from "@/lib/rp/prompt/adult-fiction"
 import {
+  buildCommonDialogueCadenceInstructions,
+  COMMON_ROLEPLAY_DIALOGUE_COUNTS,
+  shouldPreferExtendedDialogue,
+} from "@/lib/rp/prompt/dialogue-cadence"
+import {
   buildGeminiRoleplayConfig,
   buildOpenAIChatCompletionRequest,
   buildOpenAIRoleplayRequest,
@@ -110,7 +115,7 @@ const DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash"
 const GEMINI_PREMIUM_MODELS = ["gemini-2.5-pro", "gemini-pro-latest"]
 const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
-const PROMPT_VERSION = "rp-pipeline-v19"
+const PROMPT_VERSION = "rp-pipeline-v20"
 const NORMALIZER_VERSION = "rp-normalizer-v7"
 const VALIDATOR_VERSION = "rp-validator-v16"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
@@ -1609,12 +1614,9 @@ export function compileRoleplayContext(
     startsWithCharacterNameSubject(content, characterName),
   )
   const recentSceneSources = assistantOpeningSources.slice(-2)
-  const recentDialogueLengths = recentSceneSources
-    .flatMap(extractQuotedLines)
-    .slice(-8)
-    .map((dialogue) => Array.from(dialogue).length)
-  const preferExtendedDialogue = recentDialogueLengths.length >= 3 &&
-    recentDialogueLengths.every((length) => length <= 45)
+  const preferExtendedDialogue = shouldPreferExtendedDialogue(
+    recentSceneSources.flatMap(extractQuotedLines),
+  )
   const recentSceneContinuity = buildRecentSceneContinuity(recentSceneSources)
   const establishedSceneState = inferEstablishedSceneState(recentSceneSources.join("\n\n"))
   const establishedPhysicalState = establishedSceneState.some((state) =>
@@ -2664,8 +2666,8 @@ function maintainsEstablishedBodyUnion(content: string, ctx: CompiledRoleplayCon
 export function validateRoleplayOutput(text: string, ctx: CompiledRoleplayContext, profile?: RoleplayModelProfile) {
   const knownScriptReplaced = replaceKnownForeignScripts(text)
   const dialogueCount = extractQuotedLines(text).length
-  const minDialogues = profile?.minDialogues ?? 2
-  const maxDialogues = profile?.maxDialogues ?? 4
+  const minDialogues = profile?.minDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues
+  const maxDialogues = profile?.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues
 
   return {
     brokenDialogueQuotes: hasBrokenDialogueQuotes(text),
@@ -2861,9 +2863,9 @@ async function validateRoleplayOutputWithJudge(
       acceptedMinChars: getMinimumAcceptedRoleplayChars(ctx, profile),
       maxChars: ctx.turnPolicy.maxChars,
       dialogueCount: extractQuotedLines(text).length,
-      minDialogues: profile.minDialogues ?? 2,
-      preferredDialogues: profile.preferredDialogues ?? 3,
-      maxDialogues: profile.maxDialogues ?? 4,
+      minDialogues: profile.minDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues,
+      preferredDialogues: profile.preferredDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues,
+      maxDialogues: profile.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues,
       ruleFailures,
       terminalRuleFailures,
       judgeSkipped: "deterministic-rule-validation-failed",
@@ -2889,9 +2891,9 @@ async function validateRoleplayOutputWithJudge(
       acceptedMinChars: getMinimumAcceptedRoleplayChars(ctx, profile),
       maxChars: ctx.turnPolicy.maxChars,
       dialogueCount: extractQuotedLines(text).length,
-      minDialogues: profile.minDialogues ?? 2,
-      preferredDialogues: profile.preferredDialogues ?? 3,
-      maxDialogues: profile.maxDialogues ?? 4,
+      minDialogues: profile.minDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues,
+      preferredDialogues: profile.preferredDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues,
+      maxDialogues: profile.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues,
       ruleFailures,
       judgeFailures,
       overPhysicalEvidence: ruleErrors.overPhysical
@@ -3253,8 +3255,8 @@ ${requiresFreshResponse ? `복사본을 문장만 고치는 방식으로 보존�
 지문은 항상 ${ctx.characterName} 또는 그/그녀 중심의 3인칭 소설체로 쓰고, 속마음도 3인칭 간접 서술로 표현한다.
 제공된 "${ctx.userName}"의 행동과 대사에만 반응하라.
 미래 전개, 결말, 작가식 마무리를 쓰지 마라.
-${buildDialogueCadenceInstructions(ctx.preferExtendedDialogue)}
-대사는 2~4개를 사용하고, 가능하면 3개로 맞춰라.
+${buildCommonDialogueCadenceInstructions(ctx.preferExtendedDialogue)}
+대사는 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개를 사용하고, 가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞춰라.
 이번 턴 신체 접촉 허용: ${ctx.turnPolicy.allowPhysicalContact ? "예" : "아니오"}.
 이번 플러팅 채널: ${ctx.turnPolicy.flirtChannel}.
 새 소품 발명 허용: ${ctx.turnPolicy.allowNewProps ? "예" : "아니오"}.
@@ -3838,17 +3840,6 @@ ${mentionSection}${sceneParts}
 ${buildTurnOpeningInstruction(compiledContext)}`
 }
 
-function buildDialogueCadenceInstructions(preferExtendedDialogue: boolean) {
-  return `- 대사 블록마다 길이와 문장 수에 차이를 둔다. 모든 대사를 비슷한 길이의 한 문장으로 통일하지 않는다.
-- 놀람, 즉각적인 반응, 끊어 말하는 도발은 한 문장의 짧은 대사로 쓸 수 있다.
-- 답변, 설명, 고백, 설득, 협상, 경고처럼 생각을 전달해야 하는 순간에는 한 대사 블록을 2~4개의 자연스럽게 이어지는 문장으로 충분히 말하게 한다.
-- 긴 대사에는 현재 장면에 대한 새 정보, 구체적인 이유, 캐릭터다운 판단 중 하나를 넣고 같은 말을 늘여 쓰지 않는다.
-- 하나의 이어진 발화를 대사 개수에 맞추려고 여러 개의 짧은 따옴표 블록으로 쪼개지 않는다.
-${preferExtendedDialogue
-    ? "- 최근 두 턴의 대사가 계속 짧았다. 이번 턴에는 캐릭터가 설명·고백·설득·경고·도발 중 장면에 맞는 기능을 수행하는 2~4문장, 약 60~140자의 긴 대사 블록을 하나 포함한다. 나머지 대사는 짧거나 중간 길이로 두어 리듬을 만든다."
-    : "- 장면의 속도와 대사의 기능에 따라 짧은 대사, 중간 길이 대사, 여러 문장으로 이어지는 대사를 자연스럽게 섞는다."}`
-}
-
 export function generateDynamicPrompt({
   characterName = "the assigned character",
   userName = "the user's persona",
@@ -3875,9 +3866,9 @@ export function generateDynamicPrompt({
   const preferredResponseMinChars = Math.min(responseMaxChars, responseMinChars + 100)
   const preferredResponseMaxChars = Math.max(preferredResponseMinChars, responseMaxChars - 100)
   const paragraphCount = compiledContext?.turnPolicy.paragraphCount ?? "3~5문단"
-  const minDialogues = profile?.minDialogues ?? 2
-  const preferredDialogues = profile?.preferredDialogues ?? 3
-  const maxDialogues = profile?.maxDialogues ?? 4
+  const minDialogues = profile?.minDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues
+  const preferredDialogues = profile?.preferredDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues
+  const maxDialogues = profile?.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues
   const compiledSection = buildCompiledRoleplaySection(compiledContext)
   const profileInstructions = buildProfilePromptInstructions(profile)
   const adultFictionInstruction = adultFictionMode
@@ -3885,7 +3876,7 @@ export function generateDynamicPrompt({
     : ""
   const guidedAutoAdvance =
     compiledContext?.turnPolicy.guidedAutoAdvance === true
-  const dialogueCadenceInstructions = buildDialogueCadenceInstructions(
+  const dialogueCadenceInstructions = buildCommonDialogueCadenceInstructions(
     compiledContext?.preferExtendedDialogue === true,
   )
 
@@ -4952,7 +4943,7 @@ ${validation.regenerationDuplicate || validation.previousResponseDuplicate
 아래 원문의 사건 순서, 완료된 행동, 위치, 접촉 상태와 대사의 핵심 의미를 유지하라.
 새 행동이나 새 요구를 추가하지 말고 기존 장면의 감각·표정·호흡과 ${characterName}의 내적 반응만 보강하라.
 최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며 ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
-완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.
+완결된 대사는 정확히 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞추고 마지막 문장을 온전히 끝내라.
 
 [보정할 원문]
 ${recoverySource}`
@@ -4960,7 +4951,7 @@ ${recoverySource}`
 앞선 초안들은 검수 실패로 폐기됐다. 그 문장, 완료 행동, 접촉과 요구를 이어 쓰거나 표현만 바꿔 반복하지 마라.
 시스템 프롬프트의 확정된 직전 장면과 최신 사용자 입력에서 바로 출발해 ${characterName}의 새로운 다음 반응을 작성하라.
 최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며 ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
-완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.`
+완결된 대사는 정확히 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞추고 마지막 문장을 온전히 끝내라.`
         const recoveryCompletion = await requestCompletion(
           buildIsolatedRecoveryMessages(finalMessages, recoveryInstruction),
         )
@@ -6111,7 +6102,7 @@ ${originalProviderContent}`,
           parts: [{
             text: `직전 요청에 표시 가능한 본문이 생성되지 않았다.
 현재 장면과 자동 진행 요청을 그대로 유지하고, 빈 응답이나 규칙 설명 없이 ${characterName}의 완성된 역할극 본문을 지금 출력하라.
-${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자, 대사 2~4개로 작성하고 ${userName}의 새 행동·대사·감정은 만들지 마라.`,
+${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자, 대사 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개로 작성하고 ${userName}의 새 행동·대사·감정은 만들지 마라.`,
           }],
         },
       ]
@@ -6218,7 +6209,7 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
           content: `방금 Gemini 응답이 MAX_TOKENS로 너무 짧게 끊겼다.
 같은 장면을 처음부터 완성된 한 턴으로 다시 작성하라.
 ${userName}의 새 행동/감정/대사를 만들지 말고 ${characterName}의 반응만 써라.
-${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 쓰고, 완결된 대사는 2~4개(가능하면 3개)로 맞추며 출력 한도 전에 마지막 문장을 완결하라.`,
+${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 쓰고, 완결된 대사는 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개(가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개)로 맞추며 출력 한도 전에 마지막 문장을 완결하라.`,
         },
       ]
       const retryCompletion = await callGeminiRoleplay(retryMessages, model)
@@ -6295,7 +6286,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
 허용 가능한 성인 창작 RP 범위 안에서만 작성하라.
 미성년자 성적 내용, 비동의/강압 미화, 착취/불법 성적 내용, 실존 인물 성적화, 자해/위험행위 조장은 쓰지 않는다.
 합의된 성인 장면은 캐릭터 설정과 현재 수위를 유지하고, 최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 다시 작성하라.
-완결된 대사는 2~4개를 사용하고, 가능하면 3개로 맞춰라.
+완결된 대사는 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개를 사용하고, 가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞춰라.
 출력 한도에 닿기 전에 마지막 행동과 대사를 완결하고 반드시 온전한 문장으로 끝내라.
 
 [끊긴 Gemini stream 초안]
@@ -6442,7 +6433,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
 아래 초안의 문장과 사건 순서를 기준으로 실패 항목만 최소한으로 교정하라.
 ${userName}의 새 행동/감정/대사를 만들지 말고 ${characterName}의 반응만 써라.
 허용되지 않은 손 묘사, 새 소품, 전지적 해설을 제거하라.
-${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 쓰고, 완결된 대사는 2~4개(가능하면 3개)로 맞추며 출력 한도 전에 마지막 문장을 완결하라.
+${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 쓰고, 완결된 대사는 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개(가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개)로 맞추며 출력 한도 전에 마지막 문장을 완결하라.
 
 [수정할 원문]
 ${savedContent}
@@ -6560,7 +6551,7 @@ ${savedContent}
 원문의 사건 순서, 완료된 행동, 위치, 접촉 상태, 대사의 핵심 의미를 바꾸지 마라.
 새 행동, 새 요구, 새 접촉, 새 소품을 만들지 말고 기존 행동의 감각·표정·호흡과 ${characterName}의 내적 반응만 보강하라.
 최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며, ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
-완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.
+완결된 대사는 정확히 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞추고 마지막 문장을 온전히 끝내라.
 
 [보정할 원문]
 ${savedContent}`
@@ -6569,7 +6560,7 @@ ${savedContent}`
 시스템 프롬프트에 정리된 직전 장면의 확정 상태와 최신 사용자 입력에서 바로 출발해 ${characterName}의 새로운 다음 반응을 작성하라.
 이미 완료된 밀착, 끌어당김, 같은 부위 잡기, 입맞춤을 다시 실행하지 말고 새로운 결과나 결정을 최소 하나 진행하라.
 최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자이며, ${recoveryTargetMinChars}~${recoveryTargetMaxChars}자를 목표로 한다.
-완결된 대사는 정확히 3개로 맞추고 마지막 문장을 온전히 끝내라.`
+완결된 대사는 정확히 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞추고 마지막 문장을 온전히 끝내라.`
 
     repairAttempted = true
     usedFallback = true
@@ -6675,7 +6666,7 @@ ${savedContent}`
 캐릭터 설정의 성격, 적극성, 주도성, 말투, 농담 방식을 반드시 반영하라.
 이미 합의된 성인 장면이 진행 중이면 현재 수위와 접촉을 유지하고 일반적인 플러팅이나 거리 확인으로 후퇴하지 마라.
 ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characterName}의 반응만 완성하라.
-최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자, 완결된 대사 2~4개(가능하면 3개)로 작성하라.`,
+최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자, 완결된 대사 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개(가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개)로 작성하라.`,
         },
       ]
       const providerFallbackCompletion = await callOpenRouterRoleplay(

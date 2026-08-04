@@ -17,8 +17,12 @@ import {
   recoverRoleplayOutputDeterministically,
   validateRoleplayOutput,
 } from "../lib/rp/pipeline"
-import { openaiRpProfile } from "../lib/rp/model-profiles/openai"
+import { commandRRpProfile } from "../lib/rp/model-profiles/command-r"
+import { freeRpProfile } from "../lib/rp/model-profiles/free"
+import { geminiFlashRpProfile, geminiProUnshapedProfile } from "../lib/rp/model-profiles/gemini"
+import { openaiRpProfile, openaiTerraRpProfile } from "../lib/rp/model-profiles/openai"
 import { buildAdultFictionInstruction } from "../lib/rp/prompt/adult-fiction"
+import { COMMON_ROLEPLAY_DIALOGUE_COUNTS } from "../lib/rp/prompt/dialogue-cadence"
 
 test("adult fiction prompt uses a semantic style instruction instead of a vocabulary list", () => {
   const prompt = buildAdultFictionInstruction("강태현")
@@ -28,7 +32,7 @@ test("adult fiction prompt uses a semantic style instruction instead of a vocabu
   assert.doesNotMatch(prompt, /같은 직설적인 성적 표현을 사용할 수 있다/)
 })
 
-test("repeated short dialogue turns request one longer speech without adding a validator failure", () => {
+test("every RP model uses the common dialogue cadence and requests a longer speech after short turns", () => {
   const context = compileRoleplayContext(
     {
       characterName: "강태현",
@@ -51,22 +55,36 @@ test("repeated short dialogue turns request one longer speech without adding a v
     undefined,
     { minChars: 700, maxChars: 1100 },
   )
-  const prompt = generateDynamicPrompt({
-    characterName: context.characterName,
-    userName: context.userName,
-    modelBackground: context.worldBrief,
-    characterSetting: context.characterBrief,
-    userSetting: context.userBrief,
-    compiledContext: context,
-    profile: openaiRpProfile,
-  })
+  const profiles = [
+    openaiRpProfile,
+    openaiTerraRpProfile,
+    geminiFlashRpProfile,
+    geminiProUnshapedProfile,
+    commandRRpProfile,
+    freeRpProfile,
+  ]
 
   assert.equal(context.preferExtendedDialogue, true)
-  assert.match(prompt, /모든 대사를 비슷한 길이의 한 문장으로 통일하지 않는다/u)
-  assert.match(prompt, /최근 두 턴의 대사가 계속 짧았다/u)
-  assert.match(prompt, /2~4문장, 약 60~140자의 긴 대사 블록을 하나 포함한다/u)
-  assert.match(prompt, /하나의 이어진 발화를 대사 개수에 맞추려고 여러 개의 짧은 따옴표 블록으로 쪼개지 않는다/u)
-  assert.doesNotMatch(prompt, /짧고 직접적인 대사와 행동으로 쓴다/u)
+  for (const profile of profiles) {
+    const prompt = generateDynamicPrompt({
+      characterName: context.characterName,
+      userName: context.userName,
+      modelBackground: context.worldBrief,
+      characterSetting: context.characterBrief,
+      userSetting: context.userBrief,
+      compiledContext: context,
+      profile,
+    })
+
+    assert.equal(profile.minDialogues, COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues)
+    assert.equal(profile.preferredDialogues, COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues)
+    assert.equal(profile.maxDialogues, COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues)
+    assert.match(prompt, /모든 대사를 비슷한 길이의 한 문장으로 통일하지 않는다/u)
+    assert.match(prompt, /최근 두 턴의 대사가 계속 짧았다/u)
+    assert.match(prompt, /2~4문장, 약 60~140자의 긴 대사 블록을 하나 포함한다/u)
+    assert.match(prompt, /하나의 이어진 발화를 대사 개수에 맞추려고 여러 개의 짧은 따옴표 블록으로 쪼개지 않는다/u)
+    assert.doesNotMatch(prompt, /짧고 직접적인 대사와 행동으로 쓴다/u)
+  }
 })
 
 test("Gemini provider prompt blocks are detected even without a finish reason", () => {
