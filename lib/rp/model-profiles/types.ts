@@ -2,30 +2,35 @@ import type { ChatModelProvider } from "@/lib/chat-models"
 
 export type RoleplayProvider = Extract<ChatModelProvider, "openai" | "gemini" | "openrouter"> | "free"
 
-export type ValidationFailureKey =
-  | "brokenDialogueQuotes"
-  | "tooFewDialogues"
-  | "tooManyDialogues"
-  | "objectiveUserStateAssertion"
-  | "responseMissedUserIntent"
-  | "lowContentDensity"
-  | "excessiveAbstractMood"
-  | "characterVoiceWeak"
-  | "userControlByNarration"
-  | "controlsUser"
-  | "contractClosureBias"
-  | "futureClosure"
-  | "internalTokenLeak"
-  | "overPhysical"
-  | "tooShort"
-  | "tooLong"
-  | "foreignScriptLeak"
-  | "metaLeak"
-  | "unpromptedHandFocus"
-  | "narrationStyleMismatch"
-  | "regenerationDuplicate"
-  | "previousResponseDuplicate"
-  | "incompleteEnding"
+export const ROLEPLAY_VALIDATION_FAILURE_KEYS = [
+  "brokenDialogueQuotes",
+  "tooFewDialogues",
+  "tooManyDialogues",
+  "objectiveUserStateAssertion",
+  "responseMissedUserIntent",
+  "lowContentDensity",
+  "excessiveAbstractMood",
+  "characterVoiceWeak",
+  "userControlByNarration",
+  "controlsUser",
+  "contractClosureBias",
+  "futureClosure",
+  "internalTokenLeak",
+  "overPhysical",
+  "tooShort",
+  "tooLong",
+  "foreignScriptLeak",
+  "metaLeak",
+  "providerRefusal",
+  "degenerateOutput",
+  "unpromptedHandFocus",
+  "narrationStyleMismatch",
+  "regenerationDuplicate",
+  "previousResponseDuplicate",
+  "incompleteEnding",
+] as const
+
+export type ValidationFailureKey = (typeof ROLEPLAY_VALIDATION_FAILURE_KEYS)[number]
 
 export type ValidationSeverity = "hard" | "repairable" | "soft" | "off"
 

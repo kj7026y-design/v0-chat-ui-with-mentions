@@ -2,9 +2,10 @@ import type { ChatModelConfig } from "@/lib/chat-models"
 import { commandRRpProfile } from "./command-r"
 import { freeRpProfile } from "./free"
 import { geminiFlashRpProfile, geminiProUnshapedProfile } from "./gemini"
-import { openaiRpProfile } from "./openai"
+import { openaiRpProfile, openaiTerraRpProfile } from "./openai"
 import type { RoleplayModelProfile } from "./types"
 
+export { ROLEPLAY_VALIDATION_FAILURE_KEYS } from "./types"
 export type { RoleplayModelProfile, ValidationFailureKey, ValidationSeverity } from "./types"
 
 function withModelOutputLimit(
@@ -20,7 +21,14 @@ function withModelOutputLimit(
 }
 
 export function getRoleplayModelProfile(model: ChatModelConfig): RoleplayModelProfile {
-  if (model.provider === "openai") return openaiRpProfile
+  if (model.provider === "openai") {
+    const isTerra = model.id === "openai-gpt-5.6-terra"
+    const profile = isTerra ? openaiTerraRpProfile : openaiRpProfile
+    const modelName = isTerra
+      ? process.env.OPENAI_TERRA_MODEL || model.providerModel || profile.modelName
+      : process.env.OPENAI_CHAT_MODEL || model.providerModel || profile.modelName
+    return withModelOutputLimit(profile, model, modelName)
+  }
   if (model.provider === "gemini") {
     const modelName = model.id === "gemini-3-flash-rp"
       ? process.env.GEMINI_RP_MODEL || model.providerModel || geminiFlashRpProfile.modelName

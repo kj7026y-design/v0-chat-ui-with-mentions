@@ -6,21 +6,67 @@ import {
   sanitizeAiQualityJudgeResult,
 } from "../lib/rp/validation/ai-quality-judge"
 import {
+  ChatApiError,
   compileRoleplayContext,
+  extractGenerationErrorMetadata,
+  generateDynamicPrompt,
   getGeminiPromptBlockReason,
   getGeminiPromptBlockOutcome,
+  isTerminalRoleplayValidationFailure,
   normalizeGeneratedRoleplayOutput,
   recoverRoleplayOutputDeterministically,
   validateRoleplayOutput,
 } from "../lib/rp/pipeline"
+import { openaiRpProfile } from "../lib/rp/model-profiles/openai"
 import { buildAdultFictionInstruction } from "../lib/rp/prompt/adult-fiction"
 
 test("adult fiction prompt uses a semantic style instruction instead of a vocabulary list", () => {
   const prompt = buildAdultFictionInstruction("강태현")
 
-  assert.match(prompt, /해부학적으로 명확한 성인 신체 부위 명칭/)
-  assert.match(prompt, /거친 성인용 구어체 및 직접적인 성행위 묘사/)
+  assert.match(prompt, /친밀한 스킨십, 밀착, 감정적·신체적 고조 상황/)
+  assert.match(prompt, /강렬한 구어체 대사/)
   assert.doesNotMatch(prompt, /같은 직설적인 성적 표현을 사용할 수 있다/)
+})
+
+test("repeated short dialogue turns request one longer speech without adding a validator failure", () => {
+  const context = compileRoleplayContext(
+    {
+      characterName: "강태현",
+      userName: "김여자",
+      background: "현대 로맨스",
+      characterSetting: "직설적이고 대담하지만 설명할 때는 자기 생각을 분명하게 말한다.",
+    },
+    [
+      {
+        role: "assistant",
+        content: '"그렇게 할게."\n\n강태현은 고개를 기울였다.\n\n"대신 피하지 마."',
+      },
+      { role: "user", content: "왜 그렇게 생각해?" },
+      {
+        role: "assistant",
+        content: '"보면 모르겠어?"\n\n입가에 웃음이 걸렸다.\n\n"계속 말해 봐."',
+      },
+      { role: "user", content: "그래도 네 생각을 제대로 말해줘." },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+  const prompt = generateDynamicPrompt({
+    characterName: context.characterName,
+    userName: context.userName,
+    modelBackground: context.worldBrief,
+    characterSetting: context.characterBrief,
+    userSetting: context.userBrief,
+    compiledContext: context,
+    profile: openaiRpProfile,
+  })
+
+  assert.equal(context.preferExtendedDialogue, true)
+  assert.match(prompt, /모든 대사를 비슷한 길이의 한 문장으로 통일하지 않는다/u)
+  assert.match(prompt, /최근 두 턴의 대사가 계속 짧았다/u)
+  assert.match(prompt, /2~4문장, 약 60~140자의 긴 대사 블록을 하나 포함한다/u)
+  assert.match(prompt, /하나의 이어진 발화를 대사 개수에 맞추려고 여러 개의 짧은 따옴표 블록으로 쪼개지 않는다/u)
+  assert.doesNotMatch(prompt, /짧고 직접적인 대사와 행동으로 쓴다/u)
 })
 
 test("Gemini provider prompt blocks are detected even without a finish reason", () => {
@@ -108,7 +154,7 @@ test("an overlong provider candidate is normalized to a complete in-range respon
   assert.match(normalized, /[.!?。！？”"]$/u)
 })
 
-test("a complete minor length undershoot is finished without another provider call", () => {
+test("a complete minor length undershoot is preserved without generic padding", () => {
   const responseStart = [
     '"당연히 준비됐지. 네가 물은 것부터 대답할게."',
     "강태현은 질문을 피하지 않고 낮은 목소리로 설명을 이어갔다. 그는 말의 순서를 천천히 골랐다.",
@@ -134,10 +180,9 @@ test("a complete minor length undershoot is finished without another provider ca
 
   assert.ok(Array.from(candidate).length >= 580)
   assert.ok(Array.from(candidate).length < 700)
-  assert.ok(Array.from(normalized).length >= 700)
+  assert.ok(Array.from(normalized).length < 700)
   assert.ok(Array.from(normalized).length <= 1100)
-  assert.ok(normalized.startsWith(candidate))
-  assert.match(normalized, /강태현/u)
+  assert.equal(normalized, candidate)
 })
 
 test("a truncated or substantially short response is still sent to model repair", () => {
@@ -155,7 +200,68 @@ test("a truncated or substantially short response is still sent to model repair"
   assert.equal(normalizeGeneratedRoleplayOutput(truncated, context), truncated)
 })
 
-test("the final deterministic recovery removes only invented user actions and fills the hard minimum", () => {
+test("a quoted character subject is not counted as an extra dialogue", () => {
+  const context = compileRoleplayContext(
+    { characterName: "강태현", userName: "김여자" },
+    [
+      { role: "assistant", content: "강태현은 김여자의 곁에 머물렀다." },
+      { role: "user", content: "태현아!" },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+  const malformedStart = [
+    '"강태현"은(는) "이렇게 애타게 부르는데, 내가 어떻게 무시하겠어?"',
+    "낮게 가라앉은 목소리가 방 안을 울렸다. " +
+      "창밖의 불빛이 바닥을 길게 가르고 서로의 거친 호흡이 가까운 거리에서 겹쳐졌다. ".repeat(
+        5,
+      ),
+    '"내가 원하는 답은 이미 정해졌어."',
+    "표정에 남은 장난기가 조금 누그러졌지만 태도는 선명했다. " +
+      "강태현은 이미 이어진 장면의 흐름을 되돌리지 않은 채 자신의 다음 선택에 집중했다. ".repeat(
+        4,
+      ),
+    '"그러니까 이번에는 내 말만 들어."',
+    "짧은 말 뒤에도 시선은 흔들리지 않았다. " +
+      "방금 내린 결정을 번복하지 않으려는 긴장과 확신이 낮은 숨결 사이로 또렷하게 남았다. ".repeat(
+        4,
+      ),
+    '"끝까지 책임질 테니까."',
+    "마지막 말은 온전히 끝났고 강태현은 자신의 선택을 흐리지 않았다.",
+  ].join("\n\n")
+
+  const normalized = normalizeGeneratedRoleplayOutput(malformedStart, context)
+  const validation = validateRoleplayOutput(normalized, context)
+
+  assert.doesNotMatch(normalized, /"강태현"은\(는\)/u)
+  assert.equal(normalized.match(/["“]([^"”]{1,500})["”]/gu)?.length, 4)
+  assert.equal(validation.tooManyDialogues, false)
+})
+
+test("validation rejection metadata is not reported as a bad gateway", () => {
+  const error = new ChatApiError(
+    "RP validation failed: tooManyDialogues",
+    422,
+    ["tooManyDialogues"],
+    "failed",
+    true,
+  )
+
+  assert.deepEqual(extractGenerationErrorMetadata(error), {
+    code: 422,
+    status: "VALIDATION_FAILED",
+    message: "RP validation failed: tooManyDialogues",
+  })
+})
+
+test("dialogue count quality issues never block the final response", () => {
+  assert.equal(isTerminalRoleplayValidationFailure("tooFewDialogues"), false)
+  assert.equal(isTerminalRoleplayValidationFailure("tooManyDialogues"), false)
+  assert.equal(isTerminalRoleplayValidationFailure("brokenDialogueQuotes"), true)
+  assert.equal(isTerminalRoleplayValidationFailure("incompleteEnding"), true)
+})
+
+test("the final deterministic recovery removes invented user actions without padding the prose", () => {
   const context = compileRoleplayContext(
     { characterName: "강태현", userName: "김여자" },
     [
@@ -177,12 +283,71 @@ test("the final deterministic recovery removes only invented user actions and fi
   const validation = validateRoleplayOutput(recovered, context)
 
   assert.ok(Array.from(shortCandidate).length < 700)
-  assert.ok(Array.from(recovered).length >= 700)
+  assert.ok(Array.from(recovered).length < 700)
   assert.ok(Array.from(recovered).length <= 1100)
   assert.doesNotMatch(recovered, /김여자는 고개를 끄덕였다/u)
   assert.equal(recovered.match(/^".+"$/gmu)?.length, 3)
   assert.deepEqual(
     Object.entries(validation).filter(([, failed]) => failed).map(([key]) => key),
-    [],
+    ["tooShort"],
   )
+})
+
+test("OpenAI accepts a complete near-boundary response without length padding", () => {
+  const context = compileRoleplayContext(
+    { characterName: "강태현", userName: "김여자" },
+    [
+      { role: "assistant", content: "강태현은 이미 다음 행동을 시작했다." },
+      { role: "user", content: "계속해." },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+  const completeResponse = [
+    '"이번에는 멈추지 않을게."',
+    "강태현은 직전 동작을 이어 구체적인 다음 행동을 실행했다. " + "가".repeat(550),
+    '"여기서부터는 내가 정해."',
+  ].join("\n\n")
+
+  assert.ok(Array.from(completeResponse).length >= 595)
+  assert.ok(Array.from(completeResponse).length < 700)
+  assert.equal(validateRoleplayOutput(completeResponse, context).tooShort, true)
+  assert.equal(validateRoleplayOutput(completeResponse, context, openaiRpProfile).tooShort, false)
+})
+
+test("recent concrete scene progression is preserved in the next response goal", () => {
+  const context = compileRoleplayContext(
+    {
+      characterName: "강태현",
+      userName: "김여자",
+      background: "합의된 성인 로맨스",
+      characterSetting: "적극적이고 주도적인 성인 캐릭터",
+    },
+    [
+      {
+        role: "assistant",
+        content: "강태현은 바지와 셔츠를 이미 풀어 둔 채 두 사람의 몸을 겹쳤다. 허리를 밀어 가장 깊숙한 곳까지 파고들었다.",
+      },
+      { role: "user", content: "조금만 천천히." },
+      {
+        role: "assistant",
+        content: "속도를 낮춘 강태현은 허리를 감싼 상태를 유지하며 짧게 숨을 골랐다. \"말한 대로 천천히 할게.\"",
+      },
+      { role: "user", content: "응, 이제 네가 원하는 대로 해줘." },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+
+  assert.ok(context.autoAdvanceContinuityState.includes("합의된 성인 접촉이 이미 가장 직접적인 단계로 진행 중임"))
+  assert.match(context.responseGoal, /가장 구체적인 신체 상태와 수위/u)
+  assert.doesNotMatch(context.responseGoal, /신체 접촉을 한 단계 먼저 시작/u)
+  assert.match(context.recentSceneContinuity, /한 턴 전 답변/u)
+  assert.match(context.recentSceneContinuity, /직전 답변/u)
+
+  const regressedResponse = '"원하는 대로 할게."\n\n강태현은 다시 입맞춤한 뒤 손으로 허벅지를 타고 올라갔다.\n\n"이제 시작할게."'
+  const continuedResponse = '"네가 허락했으니 그대로 갈게."\n\n강태현은 이미 겹쳐진 자세를 유지한 채 허리를 느린 속도로 움직였다.\n\n"이번에는 내 리듬만 따라와."'
+
+  assert.equal(validateRoleplayOutput(regressedResponse, context).responseMissedUserIntent, true)
+  assert.equal(validateRoleplayOutput(continuedResponse, context).responseMissedUserIntent, false)
 })

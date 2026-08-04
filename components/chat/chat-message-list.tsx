@@ -700,6 +700,15 @@ function BubbleMessageBubble({
     setImageLoadFailed(false);
   }, [message.imageUrl]);
 
+  const handleBranch = () => {
+    if (disabled) return;
+    setIsBranching(true);
+    setTimeout(() => {
+      onBranch?.(message.id);
+      setIsBranching(false);
+    }, 800);
+  };
+
   if (message.id === regeneratingMessageId) {
     return message.commandId === "image" || message.imageUrl ? (
       <BubbleImageGeneratingIndicator
@@ -898,33 +907,31 @@ function BubbleMessageBubble({
             onSaveEdit={onSaveEdit}
           />
         )}
-        {isLatest && isCommandMessage && !isEditing && !disabled && (
-          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-            <AuthorTools
-              messageId={message.id}
-              onRewrite={onRewrite}
-              onEdit={onStartEdit}
-              onDelete={onDelete}
-              isEdited={isEdited}
-              canRewrite
-              disabled={disabled}
-            />
+        {!isEditing &&
+          ((isLatest && isCommandMessage && !disabled) || canBranch) && (
+          <div className="-mt-1 flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+            {isLatest && isCommandMessage && !disabled && (
+              <AuthorTools
+                messageId={message.id}
+                onRewrite={onRewrite}
+                onEdit={onStartEdit}
+                onDelete={onDelete}
+                canRewrite
+                disabled={disabled}
+              />
+            )}
+            {canBranch && (
+              <BranchButton
+                disabled={disabled}
+                isBranching={isBranching}
+                copyText={copyText}
+                onClick={handleBranch}
+              />
+            )}
+            {isLatest && isCommandMessage && !disabled && isEdited && (
+              <EditedIndicator />
+            )}
           </div>
-        )}
-        {canBranch && (
-          <BranchButton
-            disabled={disabled}
-            isBranching={isBranching}
-            copyText={copyText}
-            onClick={() => {
-              if (disabled) return;
-              setIsBranching(true);
-              setTimeout(() => {
-                onBranch?.(message.id);
-                setIsBranching(false);
-              }, 800);
-            }}
-          />
         )}
       </div>
     );
@@ -1025,34 +1032,28 @@ function BubbleMessageBubble({
           />
         )}
 
-        {isLatest && !isEditing && !disabled && (
-          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-            <AuthorTools
-              messageId={message.id}
-              onRewrite={onRewrite}
-              onEdit={onStartEdit}
-              onDelete={onDelete}
-              isEdited={isEdited}
-              canRewrite={false}
-              disabled={disabled}
-            />
+        {!isEditing && ((isLatest && !disabled) || canBranch) && (
+          <div className="-mt-1 flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+            {isLatest && !disabled && (
+              <AuthorTools
+                messageId={message.id}
+                onRewrite={onRewrite}
+                onEdit={onStartEdit}
+                onDelete={onDelete}
+                canRewrite={false}
+                disabled={disabled}
+              />
+            )}
+            {canBranch && (
+              <BranchButton
+                disabled={disabled}
+                isBranching={isBranching}
+                copyText={copyText}
+                onClick={handleBranch}
+              />
+            )}
+            {isLatest && !disabled && isEdited && <EditedIndicator />}
           </div>
-        )}
-
-        {canBranch && !isEditing && (
-          <BranchButton
-            disabled={disabled}
-            isBranching={isBranching}
-            copyText={copyText}
-            onClick={() => {
-              if (disabled) return;
-              setIsBranching(true);
-              setTimeout(() => {
-                onBranch?.(message.id);
-                setIsBranching(false);
-              }, 800);
-            }}
-          />
         )}
       </div>
     );
@@ -1083,34 +1084,28 @@ function BubbleMessageBubble({
           />
         )}
 
-        {isLatest && !isEditing && !disabled && (
-          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-            <AuthorTools
-              messageId={message.id}
-              onRewrite={onRewrite}
-              onEdit={onStartEdit}
-              onDelete={onDelete}
-              isEdited={isEdited}
-              canRewrite={false}
-              disabled={disabled}
-            />
+        {!isEditing && ((isLatest && !disabled) || canBranch) && (
+          <div className="-mt-1 flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+            {isLatest && !disabled && (
+              <AuthorTools
+                messageId={message.id}
+                onRewrite={onRewrite}
+                onEdit={onStartEdit}
+                onDelete={onDelete}
+                canRewrite={false}
+                disabled={disabled}
+              />
+            )}
+            {canBranch && (
+              <BranchButton
+                disabled={disabled}
+                isBranching={isBranching}
+                copyText={copyText}
+                onClick={handleBranch}
+              />
+            )}
+            {isLatest && !disabled && isEdited && <EditedIndicator />}
           </div>
-        )}
-
-        {canBranch && !isEditing && (
-          <BranchButton
-            disabled={disabled}
-            isBranching={isBranching}
-            copyText={copyText}
-            onClick={() => {
-              if (disabled) return;
-              setIsBranching(true);
-              setTimeout(() => {
-                onBranch?.(message.id);
-                setIsBranching(false);
-              }, 800);
-            }}
-          />
         )}
       </div>
     );
@@ -1118,7 +1113,7 @@ function BubbleMessageBubble({
 
   if (shouldRenderSegments) {
     return (
-      <div className="flex flex-col items-start">
+      <div className="flex flex-col items-start gap-2">
         <AssistantSegmentedMessage
           message={message}
           segments={segments}
@@ -1168,34 +1163,32 @@ function BubbleMessageBubble({
           />
         )}
 
-        {isLatest && (isAI || isCharacterLine) && !isEditing && !disabled && (
-          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-            <AuthorTools
-              messageId={message.id}
-              onRewrite={onRewrite}
-              onEdit={onStartEdit}
-              onDelete={onDelete}
-              isEdited={isEdited}
-              canRewrite={isAI}
-              disabled={disabled}
-            />
+        {!isEditing &&
+          ((isLatest && (isAI || isCharacterLine) && !disabled) || canBranch) && (
+          <div className="flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+            {isLatest && (isAI || isCharacterLine) && !disabled && (
+              <AuthorTools
+                messageId={message.id}
+                onRewrite={onRewrite}
+                onEdit={onStartEdit}
+                onDelete={onDelete}
+                canRewrite={isAI}
+                disabled={disabled}
+              />
+            )}
+            {canBranch && (
+              <BranchButton
+                disabled={disabled}
+                isBranching={isBranching}
+                copyText={copyText}
+                onClick={handleBranch}
+              />
+            )}
+            {isLatest &&
+              (isAI || isCharacterLine) &&
+              !disabled &&
+              isEdited && <EditedIndicator />}
           </div>
-        )}
-
-        {canBranch && !isEditing && (
-          <BranchButton
-            disabled={disabled}
-            isBranching={isBranching}
-            copyText={copyText}
-            onClick={() => {
-              if (disabled) return;
-              setIsBranching(true);
-              setTimeout(() => {
-                onBranch?.(message.id);
-                setIsBranching(false);
-              }, 800);
-            }}
-          />
         )}
       </div>
     );
@@ -1378,40 +1371,34 @@ function BubbleMessageBubble({
         />
       )}
 
-      {/* Author Tools - only the latest message can be edited or deleted. */}
-      {isLatest &&
-        (isUser || isAI || isCharacterLine) &&
-        !isEditing &&
-        !disabled && (
-          <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+      {!isEditing &&
+        ((isLatest && (isUser || isAI || isCharacterLine) && !disabled) ||
+          canBranch) && (
+        <div className="flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+          {isLatest && (isUser || isAI || isCharacterLine) && !disabled && (
             <AuthorTools
               messageId={message.id}
               onRewrite={onRewrite}
               onEdit={onStartEdit}
               onDelete={onDelete}
-              isEdited={isEdited}
               canRewrite={isAI}
               disabled={disabled}
               itemType={message.imageUrl ? "image" : "message"}
             />
-          </div>
-        )}
-
-      {/* Branch Button - below AI messages */}
-      {canBranch && !isEditing && (
-        <BranchButton
-          disabled={disabled}
-          isBranching={isBranching}
-          copyText={copyText}
-          onClick={() => {
-            if (disabled) return;
-            setIsBranching(true);
-            setTimeout(() => {
-              onBranch?.(message.id);
-              setIsBranching(false);
-            }, 800);
-          }}
-        />
+          )}
+          {canBranch && (
+            <BranchButton
+              disabled={disabled}
+              isBranching={isBranching}
+              copyText={copyText}
+              onClick={handleBranch}
+            />
+          )}
+          {isLatest &&
+            (isUser || isAI || isCharacterLine) &&
+            !disabled &&
+            isEdited && <EditedIndicator />}
+        </div>
       )}
     </div>
   );
@@ -1875,16 +1862,16 @@ function AssistantExtraCard({
         />
       )}
       {isLatest && message.commandId && !isEditing && !disabled && (
-        <div className="animate-in fade-in slide-in-from-top-1 duration-150">
+        <div className="-mt-1 flex items-center gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
           <AuthorTools
             messageId={message.id}
             onRewrite={onRewrite}
             onEdit={onEdit}
             onDelete={onDelete}
-            isEdited={isEdited}
             canRewrite
             disabled={disabled}
           />
+          {isEdited && <EditedIndicator />}
         </div>
       )}
     </div>
@@ -2031,6 +2018,16 @@ function EditMessageForm({
   );
 }
 
+function EditedIndicator() {
+  return (
+    <span
+      className="ml-0.5 h-1.5 w-1.5 rounded-full bg-purple-500"
+      aria-label="수정됨"
+      title="수정됨"
+    />
+  );
+}
+
 function BranchButton({
   disabled,
   isBranching,
@@ -2071,7 +2068,7 @@ function BranchButton({
   };
 
   return (
-    <div className="-mt-1 flex items-center gap-1">
+    <div className="flex items-center gap-1">
       <button
         type="button"
         onClick={handleCopy}

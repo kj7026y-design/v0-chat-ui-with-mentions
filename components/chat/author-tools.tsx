@@ -3,14 +3,12 @@
 import { useState } from "react";
 import { RefreshCw, Pencil, Trash2 } from "lucide-react";
 import { ConfirmModal } from "@/components/ui/app-modal";
-import { cn } from "@/lib/utils";
 
 interface AuthorToolsProps {
   messageId: string;
   onRewrite?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
-  isEdited?: boolean;
   canRewrite?: boolean;
   disabled?: boolean;
   itemType?: "message" | "image";
@@ -21,7 +19,6 @@ export function AuthorTools({
   onRewrite,
   onEdit,
   onDelete,
-  isEdited,
   canRewrite = true,
   disabled = false,
   itemType = "message",
@@ -33,67 +30,47 @@ export function AuthorTools({
       icon: RefreshCw,
       label: isImage ? "새로 생성" : "다시 쓰기",
       action: () => onRewrite?.(messageId),
-      className: "hover:text-foreground hover:bg-accent",
       visible: canRewrite,
     },
     {
       icon: Pencil,
       label: isImage ? "프롬프트 수정" : "문장 수정",
       action: () => onEdit?.(messageId),
-      className: "hover:text-purple-400 hover:bg-purple-900/30",
       visible: true,
     },
   ];
 
   return (
-    <div className="flex items-center gap-1 px-1 rounded-lg bg-popover mb-1.5">
+    <div className="flex items-center gap-1">
       {tools
         .filter((tool) => tool.visible)
         .map((tool) => (
           <button
             key={tool.label}
+            type="button"
             onClick={tool.action}
             disabled={disabled}
-            className={cn(
-              "flex items-center gap-1.5 px-1.5 py-1 rounded-md",
-              "text-muted-foreground text-[11px] font-medium",
-              "transition-all duration-150",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              tool.className,
-            )}
+            aria-label={tool.label}
             title={tool.label}
+            className="flex h-6 w-6 shrink-0 items-center justify-center text-[var(--chat-theme-muted-text)] transition-colors hover:text-[var(--chat-theme-text)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <tool.icon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{tool.label}</span>
+            <tool.icon className="h-3 w-3" aria-hidden="true" />
           </button>
         ))}
 
       <button
+        type="button"
         disabled={disabled}
         onClick={() => {
           if (disabled) return;
           setIsDeleteConfirmOpen(true);
         }}
-        className={cn(
-          "flex items-center gap-1.5 px-2 py-1.5 rounded-md",
-          "text-muted-foreground text-[11px] font-medium",
-          "transition-all duration-150 hover:text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-50",
-        )}
-        title={isImage ? "이미지 삭제" : "기억 삭제"}
+        aria-label={isImage ? "이미지 삭제" : "메시지 삭제"}
+        title={isImage ? "이미지 삭제" : "메시지 삭제"}
+        className="flex h-6 w-6 shrink-0 items-center justify-center text-[var(--chat-theme-muted-text)] transition-colors hover:text-[var(--chat-theme-text)] disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <Trash2 className="w-3.5 h-3.5" />
-        <span className="hidden sm:inline">
-          {isImage ? "이미지 삭제" : "기억 삭제"}
-        </span>
+        <Trash2 className="h-3 w-3" aria-hidden="true" />
       </button>
-
-      {/* Edited indicator */}
-      {isEdited && (
-        <div
-          className="w-2 h-2 rounded-full bg-purple-500 ml-1"
-          title="수정됨"
-        />
-      )}
 
       <ConfirmModal
         open={isDeleteConfirmOpen}

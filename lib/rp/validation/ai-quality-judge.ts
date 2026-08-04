@@ -1,12 +1,15 @@
 import type { RoleplayModelProfile, ValidationFailureKey, ValidationSeverity } from "@/lib/rp/model-profiles"
 
-export type AiQualityJudgeKey =
-  | "objectiveUserStateAssertion"
-  | "responseMissedUserIntent"
-  | "lowContentDensity"
-  | "excessiveAbstractMood"
-  | "characterVoiceWeak"
-  | "userControlByNarration"
+export const AI_QUALITY_JUDGE_KEYS = [
+  "objectiveUserStateAssertion",
+  "responseMissedUserIntent",
+  "lowContentDensity",
+  "excessiveAbstractMood",
+  "characterVoiceWeak",
+  "userControlByNarration",
+] as const
+
+export type AiQualityJudgeKey = (typeof AI_QUALITY_JUDGE_KEYS)[number]
 
 export type AiQualityJudgeItem = {
   failed: boolean
@@ -20,15 +23,6 @@ type AiQualityJudgeSanitizeContext = {
   userName: string
   characterName: string
 }
-
-const AI_JUDGE_KEYS: AiQualityJudgeKey[] = [
-  "objectiveUserStateAssertion",
-  "responseMissedUserIntent",
-  "lowContentDensity",
-  "excessiveAbstractMood",
-  "characterVoiceWeak",
-  "userControlByNarration",
-]
 
 const PASS_ITEM: AiQualityJudgeItem = {
   failed: false,
@@ -304,7 +298,7 @@ export function sanitizeAiQualityJudgeResult(
 }
 
 export function emptyAiQualityJudgeResult(): AiQualityJudgeResult {
-  return Object.fromEntries(AI_JUDGE_KEYS.map((key) => [key, { ...PASS_ITEM }])) as AiQualityJudgeResult
+  return Object.fromEntries(AI_QUALITY_JUDGE_KEYS.map((key) => [key, { ...PASS_ITEM }])) as AiQualityJudgeResult
 }
 
 export function buildAiQualityJudgePrompt({
@@ -415,7 +409,7 @@ export function parseAiQualityJudgeResult(raw: string): AiQualityJudgeResult {
   const parsed = JSON.parse(jsonText) as Partial<Record<AiQualityJudgeKey, Partial<AiQualityJudgeItem>>>
   const result = emptyAiQualityJudgeResult()
 
-  for (const key of AI_JUDGE_KEYS) {
+  for (const key of AI_QUALITY_JUDGE_KEYS) {
     const item = parsed[key]
     if (!item || typeof item !== "object") continue
     const severity = item.severity === "hard" || item.severity === "repairable" || item.severity === "soft"
@@ -435,13 +429,13 @@ export function parseAiQualityJudgeResult(raw: string): AiQualityJudgeResult {
 
 export function aiQualityJudgeResultToValidation(result: AiQualityJudgeResult): Partial<Record<ValidationFailureKey, boolean>> {
   return Object.fromEntries(
-    AI_JUDGE_KEYS.map((key) => [key, result[key].failed]),
+    AI_QUALITY_JUDGE_KEYS.map((key) => [key, result[key].failed]),
   ) as Partial<Record<ValidationFailureKey, boolean>>
 }
 
 export function aiQualityJudgeSeverityOverrides(result: AiQualityJudgeResult): Partial<Record<ValidationFailureKey, Exclude<ValidationSeverity, "off">>> {
   return Object.fromEntries(
-    AI_JUDGE_KEYS
+    AI_QUALITY_JUDGE_KEYS
       .filter((key) => result[key].failed)
       .map((key) => [key, result[key].severity]),
   ) as Partial<Record<ValidationFailureKey, Exclude<ValidationSeverity, "off">>>

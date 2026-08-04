@@ -1,10 +1,8 @@
 import type { RoleplayModelProfile } from "./types"
 import { DEFAULT_MAX_ANSWER_CHARS, DEFAULT_MIN_ANSWER_CHARS } from "@/lib/chat-models"
 
-export const openaiRpProfile: RoleplayModelProfile = {
-  id: "openai-rp",
+const sharedOpenAIRpSettings = {
   provider: "openai",
-  modelName: process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini",
   temperature: 0.75,
   topP: 0.9,
   maxOutputTokens: 4000,
@@ -28,14 +26,19 @@ export const openaiRpProfile: RoleplayModelProfile = {
     controlsUser: "hard",
     contractClosureBias: "repairable",
     futureClosure: "repairable",
-    responseMissedUserIntent: "repairable",
+    // A deterministic scene-level regression is unsafe to return. Semantic
+    // judge findings can still override this to repairable per finding.
+    responseMissedUserIntent: "hard",
     lowContentDensity: "repairable",
     excessiveAbstractMood: "repairable",
     characterVoiceWeak: "repairable",
-    tooShort: "soft",
+    // A material undershoot gets one model repair. Near-boundary responses are
+    // accepted by the OpenAI-specific length tolerance in the validator.
+    tooShort: "repairable",
     tooLong: "repairable",
-    // 재시도 시 유사 답변 생성 방지 - 너무 엄격하면 루프 발생하므로 soft 처리
-    previousResponseDuplicate: "soft",
+    // Repeated scene beats get one repair pass; they remain non-terminal after
+    // that bounded attempt so they cannot create an endless repair loop.
+    previousResponseDuplicate: "repairable",
     regenerationDuplicate: "soft",
     incompleteEnding: "repairable",
   },
@@ -47,4 +50,16 @@ export const openaiRpProfile: RoleplayModelProfile = {
     providerOrder: ["same", "local"],
     allowLocalFallback: false,
   },
+} satisfies Omit<RoleplayModelProfile, "id" | "modelName">
+
+export const openaiRpProfile: RoleplayModelProfile = {
+  id: "openai-rp",
+  modelName: process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini",
+  ...sharedOpenAIRpSettings,
+}
+
+export const openaiTerraRpProfile: RoleplayModelProfile = {
+  id: "openai-gpt-5.6-terra-rp",
+  modelName: process.env.OPENAI_TERRA_MODEL || "gpt-5.6-terra",
+  ...sharedOpenAIRpSettings,
 }

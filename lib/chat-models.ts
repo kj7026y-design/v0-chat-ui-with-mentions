@@ -1,4 +1,4 @@
-export type ChatModelId = "free" | "gemini-pro" | "gemini-3-flash-rp" | "openai" | "cohere/command-r-plus-08-2024" | "google/gemini-2.5-flash"
+export type ChatModelId = "free" | "gemini-pro" | "gemini-3-flash-rp" | "openai" | "openai-gpt-5.6-terra" | "cohere/command-r-plus-08-2024" | "google/gemini-2.5-flash"
 
 export type ChatModelProvider = "gemini" | "openai" | "openrouter" | "pollinations"
 export type ChatModelMode = "normal" | "premium" | "nsfw"
@@ -64,6 +64,18 @@ export const CHAT_MODELS: ChatModelConfig[] = [
     badge: "OpenAI",
   },
   {
+    id: "openai-gpt-5.6-terra",
+    label: "OpenAI GPT-5.6 Terra",
+    description: "OpenAI GPT-5.6 · 성능과 비용의 균형을 맞춘 고급 답변",
+    provider: "openai",
+    creditCostPerReply: OPENAI_REPLY_CREDIT_COST,
+    minAnswerChars: DEFAULT_MIN_ANSWER_CHARS,
+    maxAnswerChars: DEFAULT_MAX_ANSWER_CHARS,
+    maxTokens: 4000,
+    badge: "OpenAI",
+    providerModel: "gpt-5.6-terra",
+  },
+  {
     id: "gemini-3-flash-rp",
     label: "Gemini 3 Flash RP",
     description: "Gemini RP · 안전 설정을 RP 전용으로 조정한 캐릭터 채팅",
@@ -108,6 +120,7 @@ export function normalizeChatModelId(value: unknown): ChatModelId | null {
     value === "gemini-pro" ||
     value === "gemini-3-flash-rp" ||
     value === "openai" ||
+    value === "openai-gpt-5.6-terra" ||
     value === "cohere/command-r-plus-08-2024"
   ) {
     return value
