@@ -7,6 +7,12 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import type { ChatMessage } from "@/lib/chat-types";
 import { cn } from "@/lib/utils";
 import { BookOpen, Check } from "lucide-react";
@@ -35,6 +41,7 @@ export function MessageCandidateControls({
   onSelectCandidate,
 }: MessageCandidateControlsProps) {
   const [open, setOpen] = useState(false);
+  const [expandedCandidateId, setExpandedCandidateId] = useState("");
   const candidates = message.messageCandidates ?? [];
   const alternativeCount = Math.max(0, candidates.length - 1);
 
@@ -53,7 +60,13 @@ export function MessageCandidateControls({
         <span>다른 전개 {alternativeCount}개</span>
       </button>
 
-      <Drawer open={open} onOpenChange={setOpen}>
+      <Drawer
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) setExpandedCandidateId("");
+        }}
+      >
         <DrawerContent className="mx-auto max-h-[82dvh] max-w-md border-border bg-card">
           <DrawerHeader className="px-5 pb-2 pt-5 text-left">
             <DrawerTitle className="text-base font-bold">다른 전개</DrawerTitle>
@@ -62,45 +75,63 @@ export function MessageCandidateControls({
             </DrawerDescription>
           </DrawerHeader>
 
-          <div className="space-y-2 overflow-y-auto px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-2">
-            {candidates.map((candidate, index) => {
-              const selected = candidate.id === message.selectedCandidateId;
-              return (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  onClick={() => {
-                    onSelectCandidate?.(message.id, candidate.id);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "w-full rounded-lg border px-3 py-3 text-left transition-colors",
-                    selected
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border bg-background/60 text-foreground hover:bg-accent",
-                  )}
-                  aria-pressed={selected}
-                >
-                  <span className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-xs font-semibold">
-                      전개 {index + 1}
-                    </span>
-                    {selected && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
-                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                        선택됨
-                      </span>
+          <div className="overflow-y-auto px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-2">
+            <Accordion
+              type="single"
+              collapsible
+              value={expandedCandidateId}
+              onValueChange={setExpandedCandidateId}
+              className="space-y-2"
+            >
+              {candidates.map((candidate, index) => {
+                const selected = candidate.id === message.selectedCandidateId;
+                return (
+                  <AccordionItem
+                    key={candidate.id}
+                    value={candidate.id}
+                    className={cn(
+                      "overflow-hidden rounded-lg border transition-colors last:border-b",
+                      selected
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-background/60 text-foreground",
                     )}
-                  </span>
-                  <span
-                    className="block whitespace-pre-wrap break-words [word-break:keep-all]"
-                    style={{ fontSize: textSize, lineHeight }}
                   >
-                    {normalizeCandidateContent(candidate.content)}
-                  </span>
-                </button>
-              );
-            })}
+                    <AccordionTrigger className="items-center px-3 py-3 text-xs hover:bg-accent hover:no-underline">
+                      <span className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-1">
+                        <span className="font-semibold">전개 {index + 1}</span>
+                        {selected && (
+                          <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-primary">
+                            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                            선택됨
+                          </span>
+                        )}
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-3 pb-3">
+                      <div
+                        className="whitespace-pre-wrap break-words [word-break:keep-all]"
+                        style={{ fontSize: textSize, lineHeight }}
+                      >
+                        {normalizeCandidateContent(candidate.content)}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={disabled || selected || !onSelectCandidate}
+                        onClick={() => {
+                          onSelectCandidate?.(message.id, candidate.id);
+                          setExpandedCandidateId("");
+                          setOpen(false);
+                        }}
+                        className="mt-3 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                      >
+                        {selected && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {selected ? "현재 전개" : "이 전개 선택"}
+                      </button>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
           </div>
         </DrawerContent>
       </Drawer>

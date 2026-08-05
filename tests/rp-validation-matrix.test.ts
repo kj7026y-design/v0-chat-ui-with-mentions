@@ -419,6 +419,15 @@ test("a six-character provider refusal can never replace a full RP candidate", (
     '"원하는 대로 할게."',
   ].join("\n\n")
   const refusal = "죄송합니다."
+  const refusalWithRoleplayTail = [
+    "미안하지만 그 요청처럼 노골적인 성행위를 이어서 묘사할 수는 없어.",
+    "강태현은 움직임을 멈추고 한 걸음 물러났다.",
+    '"계속해도 되는지 다시 말해."',
+  ].join("\n\n")
+  const inCharacterRefusal = [
+    '"미안하지만 네 부탁은 들어줄 수 없어."',
+    "강태현은 계약서를 접어 테이블 위에 내려놓았다.",
+  ].join("\n\n")
   const directContinuationCandidate = [
     '"천천히? 네가 원하는 속도로 해줄게."',
     "강태현은 더 깊게 파고드는 손가락의 움직임을 잠시 늦췄다가 압박을 조절했다. " +
@@ -452,6 +461,8 @@ test("a six-character provider refusal can never replace a full RP candidate", (
   assert.equal(vagueUnionWithFingerSwitchErrors.responseMissedUserIntent, true)
   assert.equal(bodyUnionContinuationErrors.responseMissedUserIntent, false)
   assert.equal(refusalErrors.providerRefusal, true)
+  assert.equal(validateRoleplayOutput(refusalWithRoleplayTail, context, openaiRpProfile).providerRefusal, true)
+  assert.equal(validateRoleplayOutput(inCharacterRefusal, context, openaiRpProfile).providerRefusal, false)
   assert.equal(refusalErrors.degenerateOutput, true)
   assert.equal(refusalErrors.tooFewDialogues, true)
   assert.equal(refusalErrors.tooShort, true)

@@ -88,6 +88,11 @@ test("every RP model uses the common dialogue cadence and requests a longer spee
   }
 })
 
+test("OpenAI RP profiles allow a cross-provider fallback after a provider refusal", () => {
+  assert.ok(openaiRpProfile.fallback.providerOrder.includes("openrouter"))
+  assert.ok(openaiTerraRpProfile.fallback.providerOrder.includes("openrouter"))
+})
+
 test("Gemini provider prompt blocks are detected even without a finish reason", () => {
   assert.equal(
     getGeminiPromptBlockReason({ blockReason: "PROHIBITED_CONTENT" }),
@@ -369,6 +374,31 @@ test("recent concrete scene progression is preserved in the next response goal",
 
   assert.equal(validateRoleplayOutput(regressedResponse, context).responseMissedUserIntent, true)
   assert.equal(validateRoleplayOutput(continuedResponse, context).responseMissedUserIntent, false)
+})
+
+test("ongoing contact does not turn an unrelated latest utterance into new permission", () => {
+  const context = compileRoleplayContext(
+    {
+      characterName: "강태현",
+      userName: "김여자",
+      background: "합의된 성인 로맨스",
+    },
+    [
+      {
+        role: "assistant",
+        content: "강태현은 바지와 셔츠를 이미 풀어 둔 채 두 사람의 몸을 겹쳤다. 허리를 밀어 가장 깊숙한 곳까지 파고들었다.",
+      },
+      { role: "user", content: "ㅇㄴ아ㅣ릐ㅏ ㅈㅇㄴㄹㄷ재걸" },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+
+  assert.equal(context.latestInput.physicalContactRequested, false)
+  assert.equal(context.latestInput.physicalContactPermitted, false)
+  assert.equal(context.turnPolicy.continuesExistingPhysicalContact, true)
+  assert.match(context.responseGoal, /최신 대사 자체를 새로운 접촉 허락이나 수위 상승 지시로 해석하지 않는다/u)
+  assert.doesNotMatch(context.responseGoal, /최신 말이 현재 접촉과 진행을 허락하거나 이어가라는 뜻/u)
 })
 
 test("continued contact with a new rhythm is not mislabeled as a previous-response copy", () => {

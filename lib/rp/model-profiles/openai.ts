@@ -46,7 +46,7 @@ const sharedOpenAIRpSettings = {
     acceptRepairableAfterAttempt: true,
   },
   fallback: {
-    providerOrder: ["same", "local"],
+    providerOrder: ["same", "openrouter", "local"],
     allowLocalFallback: false,
   },
 } satisfies Omit<RoleplayModelProfile, "id" | "modelName">

@@ -1323,7 +1323,10 @@ function buildResponseGoal(
 
   if (policy.flirtChannel === "touch") {
     if (policy.continuesExistingPhysicalContact) {
-      return withEstablishedState(`${userName}의 최신 말이 현재 접촉과 진행을 허락하거나 이어가라는 뜻이므로, 이미 시작된 접촉을 처음부터 다시 시작하지 않는다. 직전 장면에서 도달한 가장 구체적인 신체 상태와 수위를 그대로 이어받아 ${characterName} 자신의 행동을 정확히 한 단계 진행한다. 거리 좁히기, 입맞춤 시작, 허리 감싸기처럼 이미 지난 단계로 후퇴하지 않으며, ${userName}의 다음 반응은 대신 쓰지 않는다.`)
+      if (input.physicalContactRequested || input.physicalContactPermitted) {
+        return withEstablishedState(`${userName}이 이번 입력에서 현재 접촉을 직접 이어가거나 ${characterName}이 진행하도록 허락했다. 이미 시작된 접촉을 처음부터 다시 시작하지 않고, 직전 장면에서 도달한 가장 구체적인 신체 상태와 수위를 그대로 이어받아 ${characterName} 자신의 행동을 정확히 한 단계 진행한다. 거리 좁히기, 입맞춤 시작, 허리 감싸기처럼 이미 지난 단계로 후퇴하지 않으며, ${userName}의 다음 반응은 대신 쓰지 않는다.`)
+      }
+      return withEstablishedState(`${userName}의 최신 대사 자체를 새로운 접촉 허락이나 수위 상승 지시로 해석하지 않는다. 접촉 허용은 직전 장면에서 이미 확정된 상태에서만 이어받고, ${characterName}은 최신 대사의 실제 의미에 먼저 반응한다. 기존 접촉을 처음부터 다시 시작하거나 임의로 더 높은 단계로 확대하지 않으며, ${userName}의 다음 반응은 대신 쓰지 않는다.`)
     }
     if (input.physicalContactPermitted && !input.physicalContactRequested) {
       return withEstablishedState(`${userName}이 명시적으로 허락한 범위에서 ${characterName}다운 신체 접촉을 한 단계 먼저 시작할 수 있으며, ${userName}의 반응은 대신 쓰지 않는다.`)
@@ -2649,6 +2652,20 @@ function hasProviderRefusal(content: string) {
     /^(?:죄송합니다|죄송하지만|도와드릴\s*수\s*없습니다|응답할\s*수\s*없습니다|요청을\s*처리할\s*수\s*없습니다)[.!…\s]*$/u.test(normalized)
   ) return true
 
+  const refusalOpening = /^(?:미안하지만|미안해(?:요)?|죄송하지만|죄송합니다)[,\s]*/u
+  const refusalPreview = normalized.slice(0, 260)
+  if (
+    refusalOpening.test(refusalPreview) &&
+    /(?:노골적인?\s*성(?:행위|적)|성행위|성적\s*내용|요청|콘텐츠|정책|묘사|작성|생성|제공|응답|처리)/u.test(refusalPreview) &&
+    /(?:할|이어갈|계속할|도와드릴|제공할|작성할|생성할|응답할|처리할)\s*수(?:는|가)?\s*없|(?:이어가|계속하|묘사하|작성하|생성하|제공하)지\s*못/u.test(refusalPreview)
+  ) return true
+
+  if (
+    /^(?:i(?:'m| am) sorry|sorry)[,\s]/iu.test(refusalPreview) &&
+    /(?:explicit|sexual|request|content|policy|describe|generate|provide)/iu.test(refusalPreview) &&
+    /(?:can't|cannot|unable to)\s+(?:continue|describe|generate|provide|help|comply)/iu.test(refusalPreview)
+  ) return true
+
   return /(?:해당|이|그)\s*(?:요청|내용)[^.?!\n]{0,35}(?:도와드릴|제공할|작성할|생성할|응답할|처리할)\s*수\s*없/u.test(normalized)
 }
 
@@ -3302,7 +3319,8 @@ ${errors.tooShort ? `방금 답변은 캐릭터 반응 자체가 지나치게 �
 최소 ${ctx.turnPolicy.minChars}자를 반드시 채우고 ${repairTargetMinChars}~${repairTargetMaxChars}자를 목표로 하되, 같은 의미를 바꿔 말하거나 관계·욕망·분위기를 추상적으로 해설하며 분량을 늘리지 마라.` : ""}
 ${errors.tooManyDialogues ? `큰따옴표는 실제 발화 대사에만 사용한다.
 인물 이름이나 지문을 강조하려고 큰따옴표를 쓰지 말고, 완결된 대사는 최대 4개만 남겨라.` : ""}
-${errors.responseMissedUserIntent && ctx.turnPolicy.allowPhysicalContact ? `사용자가 이미 접촉을 시작했거나 ${ctx.characterName}이 먼저 행동하도록 허락했다. 장면을 거리 확인, 일반적인 조건 제시, 망설임으로 되돌리지 말고 현재 접촉과 수위에 직접 반응하라.` : ""}
+${errors.responseMissedUserIntent && (ctx.latestInput.physicalContactRequested || ctx.latestInput.physicalContactPermitted) ? `사용자가 이번 입력에서 직접 접촉을 시작했거나 ${ctx.characterName}이 먼저 행동하도록 허락했다. 장면을 거리 확인, 일반적인 조건 제시, 망설임으로 되돌리지 말고 현재 접촉과 수위에 직접 반응하라.` : ""}
+${errors.responseMissedUserIntent && ctx.turnPolicy.continuesExistingPhysicalContact && !ctx.latestInput.physicalContactRequested && !ctx.latestInput.physicalContactPermitted ? `신체 접촉 허용은 직전 장면에서 이미 확정된 상태에서 온 것이다. 최신 대사 자체를 새로운 접촉 허락이나 수위 상승 지시로 해석하지 말고, 그 대사의 실제 의미에 반응하면서 확정된 접촉 상태만 임의로 되돌리지 마라.` : ""}
 ${errors.responseMissedUserIntent && ctx.autoAdvanceContinuityState.includes("두 인물의 성인 신체 결합이 이미 시작되어 유지 중임") ? `직전 장면에서 두 인물의 신체 결합은 이미 시작되어 유지 중이다.
 현재 결합과 ${ctx.characterName}의 몸 움직임을 명시적으로 이어가라. 손가락을 넣는 행동, 키스, 목덜미·허벅지·허리를 만지는 행동만으로 기존 결합을 대체하지 마라.
 최신 입력이 손가락 동작으로 전환하라고 직접 요구하지 않았다면 손가락 삽입을 새 주동작으로 만들지 마라. 정적인 결합 언급이나 "상대의 몸을 깊숙이 밀었다"처럼 주체가 모호한 문장으로 대신하지 말고, ${ctx.characterName} 자신의 허리·골반 움직임과 현재 결합의 속도·리듬을 분명히 써라.
@@ -4451,6 +4469,12 @@ function allowsOpenRouterFallbackForGemini(model: ChatModelConfig) {
   return model.id === "gemini-3-flash-rp" || process.env.ENABLE_GEMINI_CROSS_PROVIDER_FALLBACK === "1"
 }
 
+function allowsOpenRouterValidationFallback(model: ChatModelConfig, profile: RoleplayModelProfile) {
+  return Boolean(process.env.OPENROUTER_API_KEY) &&
+    model.provider !== "openrouter" &&
+    profile.fallback.providerOrder.includes("openrouter")
+}
+
 function buildOpenRouterFallbackModel(): ChatModelConfig {
   const openRouterModel = getSupportedOpenRouterModel(
     process.env.OPENROUTER_RP_FALLBACK_MODEL,
@@ -4843,7 +4867,7 @@ async function handleRoleplayChatFromNormalized(
     userName,
     compiledContext,
   )
-  const requestCompletion = (requestMessages: typeof finalMessages) => callModelProviderRoleplay(
+  let requestCompletion = (requestMessages: typeof finalMessages) => callModelProviderRoleplay(
     requestMessages,
     model,
     mode,
@@ -4908,6 +4932,110 @@ async function handleRoleplayChatFromNormalized(
     validationSeverityOverrides = validationResult.severityOverrides
     let classifiedValidation = classify(validation)
     validationAttempts.push(buildValidationAttempt("initial", validation, classifiedValidation))
+
+    if (validation.providerRefusal && allowsOpenRouterValidationFallback(model, profile)) {
+      const providerFallbackConfig = buildOpenRouterFallbackModel()
+      const providerFallbackModelName = getOpenRouterModelName(providerFallbackConfig)
+      fallbackUsed = true
+      console.warn("[RP provider refusal detected; trying OpenRouter fallback]", {
+        requestId,
+        from: outputModel,
+        to: providerFallbackModelName,
+        failures: getValidationFailureKeys(validation),
+        contentPreview: result.slice(0, 300),
+      })
+
+      try {
+        const providerFallbackMessages = [
+          ...finalMessages,
+          {
+            role: "user" as const,
+            content: `이전 제공자는 역할극 본문 대신 메타 거부문을 반환했다. 그 초안은 폐기하고 동일한 최신 입력에 새로 답하라.
+최신 입력에 판별 가능한 의미나 새로운 접촉 허락이 없다면 임의로 만들어 내지 않는다. 직전 장면의 확정 상태만 유지하고 최신 입력을 근거로 수위를 확대하지 마라.
+${userName}의 새 행동·대사·감정·반응을 만들지 말고 ${characterName}의 반응만 작성하라.
+최종 본문은 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자, 완결된 대사 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개로 작성하라.`,
+          },
+        ]
+        const providerFallbackCompletion = await callOpenRouterRoleplay(
+          providerFallbackMessages,
+          providerFallbackConfig,
+          userName,
+        )
+        const providerFallbackResult = normalizeGeneratedRoleplayOutput(
+          providerFallbackCompletion.content,
+          compiledContext,
+        )
+        debugRoleplayContent({
+          stage: "fallback",
+          requestId,
+          model: providerFallbackCompletion.model,
+          content: providerFallbackCompletion.content,
+        })
+        const providerFallbackValidationResult = providerFallbackResult
+          ? await validateRoleplayOutputWithJudge(providerFallbackResult, compiledContext, profile)
+          : null
+        const providerFallbackValidation = providerFallbackValidationResult?.errors ?? null
+        const providerFallbackSeverityOverrides = providerFallbackValidationResult?.severityOverrides ?? {}
+        const providerFallbackClassifiedValidation = providerFallbackValidation
+          ? classify(providerFallbackValidation, providerFallbackSeverityOverrides)
+          : null
+
+        if (providerFallbackValidation && providerFallbackClassifiedValidation) {
+          validationAttempts.push(buildValidationAttempt(
+            "fallback",
+            providerFallbackValidation,
+            providerFallbackClassifiedValidation,
+          ))
+        } else {
+          validationAttempts.push(buildSyntheticValidationAttempt("fallback", ["empty-provider-fallback"]))
+        }
+
+        if (
+          providerFallbackResult &&
+          providerFallbackValidation &&
+          providerFallbackClassifiedValidation &&
+          shouldPreferRepairedCandidate(
+            validation,
+            classifiedValidation,
+            providerFallbackValidation,
+            providerFallbackClassifiedValidation,
+          )
+        ) {
+          result = providerFallbackResult
+          outputModel = providerFallbackCompletion.model
+          validation = providerFallbackValidation
+          validationSeverityOverrides = providerFallbackSeverityOverrides
+          classifiedValidation = providerFallbackClassifiedValidation
+          requestCompletion = (requestMessages) => callOpenRouterRoleplay(
+            requestMessages,
+            providerFallbackConfig,
+            userName,
+          )
+        }
+      } catch (error) {
+        console.warn("[RP OpenRouter fallback after provider refusal failed]", {
+          requestId,
+          from: outputModel,
+          to: providerFallbackModelName,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    if (validation.providerRefusal) {
+      const refusalFailures = getTerminalBlockingFailureKeys(validation, classifiedValidation)
+      console.warn("[RP provider refusal remained after fallback; skipping same-model repair]", {
+        requestId,
+        model: outputModel,
+        fallbackAttempted: fallbackUsed,
+        failures: refusalFailures,
+      })
+      throw buildValidationFailedError(refusalFailures, {
+        repairAttempted,
+        fallback: fallbackUsed,
+        validationAttempts,
+      })
+    }
 
     if (hasClassifiedFailures(classifiedValidation)) {
       const originalResult = result
