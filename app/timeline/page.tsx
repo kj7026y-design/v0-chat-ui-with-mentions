@@ -10,6 +10,7 @@ import {
   getTimelineEvents,
   type TimelineEvent,
 } from "@/lib/timeline-storage"
+import { getCurrentAppPath, withReturnTo } from "@/lib/safe-navigation"
 
 export default function TimelinePage() {
   const router = useRouter()
@@ -44,7 +45,12 @@ export default function TimelinePage() {
   }
 
   const handleAddEvent = () => {
-    router.push("/timeline/new")
+    router.push(withReturnTo("/timeline/new", getCurrentAppPath()))
+  }
+
+  const handleEditEvent = (event: TimelineEvent) => {
+    setIsSheetOpen(false)
+    router.push(withReturnTo(`/timeline/${event.id}/edit`, getCurrentAppPath()))
   }
 
   return (
@@ -59,6 +65,7 @@ export default function TimelinePage() {
         open={isSheetOpen}
         onOpenChange={setIsSheetOpen}
         onClose={handleCloseSheet}
+        onEdit={handleEditEvent}
       />
     </main>
   )

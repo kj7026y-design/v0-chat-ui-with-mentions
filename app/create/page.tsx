@@ -74,6 +74,7 @@ import {
   type StoryWorld,
 } from "@/lib/storychat-storage"
 import { cn } from "@/lib/utils"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 type EntryMode = "menu" | "work" | "character" | "world" | "persona"
 type WorkStep = "character" | "world" | "review"
@@ -243,7 +244,9 @@ const emptyWorkDraft = (): WorkDraft => ({
 
 export default function CreatePage() {
   const router = useRouter()
+  const goToPreviousPage = useSafeBack("/")
   const [mode, setMode] = useState<EntryMode>("menu")
+  const [enteredModeDirectly, setEnteredModeDirectly] = useState(false)
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [workDraft, setWorkDraft] = useState<WorkDraft>(() => emptyWorkDraft())
   const [workFormMode, setWorkFormMode] = useState<WorkFormMode>("simple")
@@ -268,6 +271,7 @@ export default function CreatePage() {
       requestedMode === "persona"
     ) {
       setMode(requestedMode)
+      setEnteredModeDirectly(true)
     }
   }, [])
 
@@ -450,7 +454,7 @@ export default function CreatePage() {
           : Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
 
   const goBack = () => {
-    if (mode === "menu") router.push("/")
+    if (mode === "menu" || enteredModeDirectly) goToPreviousPage()
     else setMode("menu")
   }
 
@@ -550,9 +554,11 @@ export default function CreatePage() {
               showWorkContinue={showWorkContinue}
               onContinueWork={() => {
                 setShowWorkContinue(false)
+                setEnteredModeDirectly(false)
                 setMode("work")
               }}
               onStart={(nextMode) => {
+                setEnteredModeDirectly(false)
                 setMode(nextMode)
                 if (nextMode === "work" && !showWorkContinue) {
                   setWorkDraft(emptyWorkDraft())

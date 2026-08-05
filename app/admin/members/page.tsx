@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { getAdminSessionState } from "@/lib/chat-history-client"
+import { useSafeBack } from "@/hooks/use-safe-back"
 import {
   type ManagedMember,
   type ManagedMemberKind,
@@ -72,6 +73,7 @@ async function readJson<T>(response: Response): Promise<T> {
 
 export default function MemberAdminPage() {
   const router = useRouter()
+  const goBack = useSafeBack("/chats")
   const [staffRole, setStaffRole] = useState<keyof typeof ROLE_LABELS | null>(null)
   const [members, setMembers] = useState<ManagedMember[]>([])
   const [total, setTotal] = useState(0)
@@ -209,7 +211,7 @@ export default function MemberAdminPage() {
         <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-3 px-4 sm:px-6">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={goBack}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="뒤로 가기"
           >

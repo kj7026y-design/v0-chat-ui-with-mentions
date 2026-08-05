@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { BottomNavBar } from '@/components/chat/bottom-nav-bar'
 import { CreditHydrator } from '@/components/credit-hydrator'
+import { NavigationHistoryTracker } from '@/components/navigation-history-tracker'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
@@ -47,6 +48,7 @@ export default function RootLayout({
           enableSystem={true}
           disableTransitionOnChange
         >
+          <NavigationHistoryTracker />
           <CreditHydrator />
           {/* App Shell - flex column, nav stacks as a normal block below the single scroll area */}
           <div className="flex h-[100dvh] w-full min-w-0 max-w-full flex-col overflow-hidden">

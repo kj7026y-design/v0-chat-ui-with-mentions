@@ -1,13 +1,13 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { ChevronLeft, Gem, Sparkles, Info, X } from "lucide-react"
 import { toast } from "sonner"
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
 import { CreditProductCard } from "@/components/chat/credit-product-card"
 import { cn } from "@/lib/utils"
 import { getCreditHistory, subscribeCreditUpdates, type CreditHistoryItem } from "@/lib/credit-storage"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 const products = [
   { amount: 100, price: "₩1,200" },
@@ -39,6 +39,7 @@ const demoCreditHistory: CreditHistoryItem[] = [
 ]
 
 export default function CreditsPage() {
+  const goBack = useSafeBack("/mypage")
   const credits = useAppStore((s) => s.credits)
   const chargeCredit = useAppStore((s) => s.chargeCredit)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
@@ -131,13 +132,14 @@ export default function CreditsPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2">
-          <Link
-            href="/mypage"
+          <button
+            type="button"
+            onClick={goBack}
             className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
             aria-label="뒤로가기"
           >
             <ChevronLeft className="h-5 w-5 text-foreground" />
-          </Link>
+          </button>
           <h1 className="text-lg font-bold text-foreground">나의 크레딧</h1>
         </div>
       </header>

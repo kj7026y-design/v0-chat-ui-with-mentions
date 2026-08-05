@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type MouseEvent, type ReactNode } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   BookOpen,
   ChevronDown,
@@ -29,12 +30,46 @@ import { getIntroPreviewText, normalizeIntroScenarios } from "@/lib/storychat-st
 import { WorkComments } from "@/components/work/work-comments"
 import { WorkLikeButton } from "@/components/work/work-like-button"
 import { cn } from "@/lib/utils"
+import { getCurrentAppPath, withReturnTo } from "@/lib/safe-navigation"
 
 type DetailTarget =
   | { type: "scenarios"; id: string }
   | { type: "characters"; id: string }
   | { type: "personas"; id: string }
   | { type: "completed"; id: string }
+
+function ReturnPathLink({
+  href,
+  className,
+  children,
+}: {
+  href: string
+  className?: string
+  children: ReactNode
+}) {
+  const router = useRouter()
+
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    router.push(withReturnTo(href, getCurrentAppPath()))
+  }
+
+  return (
+    <Link href={href} className={className} onClick={handleClick}>
+      {children}
+    </Link>
+  )
+}
 
 type MaybeList = string | string[] | null | undefined
 
@@ -80,13 +115,13 @@ export function PublicDetailView({
     return (
       <div className="max-w-full space-y-3 overflow-x-hidden">
         <div className="flex justify-end">
-          <Link
+          <ReturnPathLink
             href={`/my-works/${work.id}/edit`}
             className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent"
           >
             <Edit3 className="h-3.5 w-3.5" />
             수정하기
-          </Link>
+          </ReturnPathLink>
         </div>
         <WorkLandingPage
           work={work}
@@ -245,13 +280,13 @@ function WorkLandingHero({ work, world }: { work: StoryWork; world: StoryWorld }
             <Play className="h-4 w-4" />
             채팅 시작하기
           </Link>
-          <Link
+          <ReturnPathLink
             href={`/my-works/${work.id}/world`}
             className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/15"
           >
             <Compass className="h-4 w-4" />
             세계관 보기
-          </Link>
+          </ReturnPathLink>
         </div>
       </div>
     </section>
@@ -492,7 +527,7 @@ function CharacterPreviewSection({
       <SectionTitle icon={Users} title="등장 존재" />
       <div className="flex max-w-full gap-3 overflow-x-auto pb-1 scrollbar-hide">
         {characters.map((character) => (
-          <Link
+          <ReturnPathLink
             key={character.id}
             href={`/my-works?tab=characters&detailType=characters&detailId=${character.id}`}
             className="w-[210px] shrink-0 overflow-hidden rounded-[20px] border border-border bg-card text-left transition-transform active:scale-[0.99]"
@@ -508,10 +543,10 @@ function CharacterPreviewSection({
               <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{character.summary}</p>
               <p className="line-clamp-1 text-[11px] text-amber-700 dark:text-amber-100/70">{character.personality || character.relationship}</p>
             </div>
-          </Link>
+          </ReturnPathLink>
         ))}
         {personas.map((persona) => (
-          <Link
+          <ReturnPathLink
             key={persona.id}
             href={`/my-works?tab=personas&detailType=personas&detailId=${persona.id}`}
             className="w-[210px] shrink-0 overflow-hidden rounded-[20px] border border-border bg-card text-left transition-transform active:scale-[0.99]"
@@ -522,7 +557,7 @@ function CharacterPreviewSection({
               <p className="text-xs text-muted-foreground">{persona.age}세 · {persona.role}</p>
               <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{persona.summary}</p>
             </div>
-          </Link>
+          </ReturnPathLink>
         ))}
       </div>
     </section>

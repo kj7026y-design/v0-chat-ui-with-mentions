@@ -96,6 +96,7 @@ import {
   findChatSearchResultIds,
   normalizeChatSearchQuery,
 } from "@/lib/chat-search";
+import { withReturnTo } from "@/lib/safe-navigation";
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger";
 
@@ -1218,7 +1219,9 @@ export default function ChatPage() {
         action: {
           label: "충전하기",
           onClick: () => {
-            window.location.href = "/credits";
+            router.push(
+              withReturnTo("/credits", `/chat/${encodeURIComponent(chatId)}`),
+            );
           },
         },
       });

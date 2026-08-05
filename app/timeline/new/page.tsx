@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import { ArrowLeft, Save } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -13,9 +12,10 @@ import {
   saveTimelineEvents,
   type TimelineEvent,
 } from "@/lib/timeline-storage"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function TimelineNewPage() {
-  const router = useRouter()
+  const goBack = useSafeBack("/timeline")
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [form, setForm] = useState<TimelineEvent>({
     id: "",
@@ -53,13 +53,13 @@ export default function TimelineNewPage() {
 
     saveTimelineEvents([...events, nextEvent])
     toast("타임라인에 추가했어요.")
-    router.push("/timeline")
+    goBack()
   }
 
   return (
     <main className="flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="mx-auto max-w-2xl px-5 py-6">
-        <Header title="이벤트 작성" onBack={() => router.back()} />
+        <Header title="이벤트 작성" onBack={goBack} />
 
         <div className="space-y-5 rounded-xl border border-border bg-card p-5">
           <div className="space-y-2">
@@ -118,7 +118,7 @@ export default function TimelineNewPage() {
 
       <div className="sticky bottom-0 z-40 border-t border-border bg-background px-5 py-4">
         <div className="mx-auto flex max-w-2xl gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => router.back()}>
+          <Button variant="outline" className="flex-1" onClick={goBack}>
             취소
           </Button>
           <Button className="flex-1" onClick={handleSave}>

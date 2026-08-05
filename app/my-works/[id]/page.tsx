@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { WorkLandingPage } from "@/components/my-works/public-detail-view"
+import { useSafeBack } from "@/hooks/use-safe-back"
 import {
   defaultLibrary,
   getStoryChatLibrary,
@@ -14,8 +15,8 @@ import {
 
 export default function WorkPublicPage() {
   const params = useParams()
-  const router = useRouter()
   const workId = params.id as string
+  const goBack = useSafeBack("/my-works?tab=completed")
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export default function WorkPublicPage() {
     <div className="min-h-full bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <Button variant="ghost" size="icon" onClick={goBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>

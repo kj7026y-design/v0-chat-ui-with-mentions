@@ -117,7 +117,7 @@ const GEMINI_NORMAL_MODELS = ["gemini-2.5-flash", "gemini-flash-latest"]
 const DEFAULT_GEMINI_RP_MODEL = "gemini-3-flash-preview"
 const PROMPT_VERSION = "rp-pipeline-v20"
 const NORMALIZER_VERSION = "rp-normalizer-v7"
-const VALIDATOR_VERSION = "rp-validator-v16"
+const VALIDATOR_VERSION = "rp-validator-v17"
 const GEMINI_SAFETY_THRESHOLD = process.env.GEMINI_SAFETY_THRESHOLD || "BLOCK_NONE"
 
 const SERVICE_INFO_PROTECTION_PROMPT = `[서비스 내부 정보 보호 - 모든 모델 공통]
@@ -2489,81 +2489,155 @@ function hasNovelMaterialSceneProgression(currentNarration: string, previousNarr
     .some((signature) => !previousSignatures.has(signature))
 }
 
-function repeatsCompletedSceneBeat(content: string, previousContent: string) {
+const CONTINUATION_PROGRESSION_PATTERNS = [
+  ["rhythm-change", /(?:속도|리듬|박자|간격|움직임)[^.?!\n]{0,40}(?:올리|높이|낮추|늦추|바꾸|빨라|느려|가속|감속)/u],
+  ["support-position-change", /(?:손|손바닥|팔|무게중심|자세)[^.?!\n]{0,55}(?:옮기|이동|바꾸|돌리|내려가|올려)/u],
+  ["explicit-new-result", /(?:처음으로|마침내|결국|그제야)[^.?!\n]{0,55}(?:말하|인정|결정|놓|풀|옮기|바꾸|멈추|시작)/u],
+] as const
+
+function getContinuationProgressionSignatures(content: string) {
+  return CONTINUATION_PROGRESSION_PATTERNS
+    .filter(([, pattern]) => pattern.test(content))
+    .map(([signature]) => signature)
+}
+
+function analyzeRepeatedCompletedSceneBeat(
+  content: string,
+  previousContent: string,
+  minimumRepeatedBeats: number,
+) {
   const previousNarration = stripQuotedDialogue(previousContent)
   const currentNarration = stripQuotedDialogue(content)
-  if (!previousNarration.trim() || !currentNarration.trim()) return false
+  if (!previousNarration.trim() || !currentNarration.trim()) {
+    return {
+      duplicate: false,
+      repeatedSceneBeats: [] as string[],
+      novelMaterialProgression: false,
+      continuationProgression: [] as string[],
+    }
+  }
   const waistContactMovedAway = /허리[^.?!\n]{0,45}(?:감싸|잡|움켜쥐)[^.?!\n]{0,55}손[^.?!\n]{0,35}(?:아래로|내려|옮겨)[^.?!\n]{0,55}(?:엉덩이|둔부|골반)/u.test(previousNarration)
   const faceContactMovedAway = /(?:뺨|턱|얼굴)[^.?!\n]{0,40}(?:감싸|잡|움켜쥐)[^.?!\n]{0,50}손[^.?!\n]{0,30}(?:아래로|내려|옮겨|떼|거두)[^.?!\n]{0,45}(?:목덜미|목|쇄골|허리)/u.test(previousNarration)
 
-  const completedAndRepeatedPatterns: Array<[RegExp, RegExp, boolean?]> = [
+  const completedAndRepeatedPatterns: Array<[string, RegExp, RegExp, boolean?]> = [
     [
+      "body-proximity",
       /(?:몸|가슴|하체)[^.?!\n]{0,45}(?:밀착|맞닿)|(?:품|가슴팍)[^.?!\n]{0,35}(?:끌어당|가두|파묻|구속)/u,
       /(?:몸|상체|하체)[^.?!\n]{0,40}(?:밀착시|바짝\s*붙)|거리를[^.?!\n]{0,35}(?:좁혔|좁히)|(?:품|가슴팍)[^.?!\n]{0,35}(?:다시|더(?:욱|\s*깊이)?)[^.?!\n]{0,24}(?:끌어당|가두|밀어\s*넣)/u,
     ],
     [
-      /허리[^.?!\n]{0,35}(?:감싸|잡|움켜쥐)/u,
-      /허리[^.?!\n]{0,60}(?:(?:다시|더욱)[^.?!\n]{0,18}(?:감싸|잡|움켜쥐)|(?:감싸|잡|움켜쥐)[^.?!\n]{0,35}(?:힘을\s*주|끌어당|밀어\s*넣|밀착시|거리를\s*좁))/u,
+      "waist-contact",
+      /허리[^.?!\n]{0,35}(?:감싸|감싼|감쌌|감았|감은|잡|잡은|움켜쥐|움켜쥔)/u,
+      /허리[^.?!\n]{0,60}(?:(?:다시|더욱)[^.?!\n]{0,18}(?:감싸|감쌌|감았|잡|움켜쥐)|(?:감싸|감싼|감쌌|감았|감은|잡|잡은|움켜쥐|움켜쥔)[^.?!\n]{0,35}(?:힘을\s*주|끌어당|밀어\s*넣|밀착시|거리를\s*좁))/u,
       waistContactMovedAway,
     ],
     [
+      "leg-between",
       /(?:무릎|다리)[^.?!\n]{0,45}(?:다리|허벅지)\s*사이[^.?!\n]{0,30}(?:밀어\s*넣|끼워|받치)/u,
       /(?:무릎|다리)[^.?!\n]{0,45}(?:다리|허벅지)\s*사이[^.?!\n]{0,30}(?:밀어\s*넣|끼워|받치)/u,
     ],
     [
+      "neck-contact",
       /목덜미[^.?!\n]{0,30}(?:움켜쥐|잡|감싸|누르|문지르)/u,
       /목덜미[^.?!\n]{0,35}(?:다시[^.?!\n]{0,12})?(?:움켜쥐|잡아|감싸|누르|문지르)/u,
     ],
     [
+      "face-contact",
       /(?:뺨|턱|얼굴)[^.?!\n]{0,30}(?:움켜쥐|잡|감싸|누르)/u,
       /(?:뺨|턱|얼굴)[^.?!\n]{0,35}(?:다시[^.?!\n]{0,12})?(?:움켜쥐|잡아|감싸|누르)/u,
       faceContactMovedAway,
     ],
     [
+      "ear-contact",
       /(?:귓가|귓불|귀)[^.?!\n]{0,35}(?:입술|숨결|깨물|스치|닿)/u,
       /(?:귓가|귓불|귀)[^.?!\n]{0,35}(?:다시[^.?!\n]{0,12})?(?:입술|숨결|깨물|스치|닿)/u,
     ],
     [
+      "door-open",
       /문[^.?!\n]{0,25}(?:열려\s*있|열어\s*두|열었다|열어젖)/u,
       /문[^.?!\n]{0,25}(?:다시\s*)?(?:열었|열어젖|더\s*열|활짝\s*열)/u,
     ],
     [
+      "entered-room",
       /(?:안으로|방\s*안|집\s*안|거실)[^.?!\n]{0,30}(?:들어왔|들어섰|들어간|들어와)/u,
       /(?:안으로|방\s*안|집\s*안|거실)[^.?!\n]{0,30}(?:다시\s*)?(?:들어왔|들어섰|들어간|들어와)/u,
     ],
   ]
 
-  const repeatsCompletedBeat = completedAndRepeatedPatterns.some(([completed, repeated, ignoreCompletedState]) =>
-    !ignoreCompletedState && completed.test(previousNarration) && repeated.test(currentNarration),
+  const repeatedSceneBeats = completedAndRepeatedPatterns
+    .filter(([, completed, repeated, ignoreCompletedState]) =>
+      !ignoreCompletedState && completed.test(previousNarration) && repeated.test(currentNarration),
+    )
+    .map(([signature]) => signature)
+  const novelMaterialProgression = hasNovelMaterialSceneProgression(
+    currentNarration,
+    previousNarration,
   )
+  const continuationProgression = getContinuationProgressionSignatures(currentNarration)
 
-  if (!repeatsCompletedBeat) return false
-
-  // Continuing an established touch is not a duplicate when the same response
-  // produces a genuinely new position, prop state, or scene result.
-  return !hasNovelMaterialSceneProgression(currentNarration, previousNarration)
+  return {
+    duplicate: repeatedSceneBeats.length >= minimumRepeatedBeats &&
+      !novelMaterialProgression &&
+      continuationProgression.length === 0,
+    repeatedSceneBeats,
+    novelMaterialProgression,
+    continuationProgression,
+  }
 }
 
 function isRegenerationDuplicate(content: string, ctx: CompiledRoleplayContext) {
   if (!ctx.regenerationAvoidContent) return false
+  const repeatedBeatAnalysis = analyzeRepeatedCompletedSceneBeat(
+    content,
+    ctx.regenerationAvoidContent,
+    1,
+  )
   return (
     areAssistantResponsesSubstantiallyDuplicate(content, ctx.regenerationAvoidContent) ||
     (
       !latestInputExplicitlyRequestsRepeatedAction(ctx) &&
-      repeatsCompletedSceneBeat(content, ctx.regenerationAvoidContent)
+      repeatedBeatAnalysis.duplicate
     )
   )
 }
 
 function isPreviousResponseDuplicate(content: string, ctx: CompiledRoleplayContext) {
   if (!ctx.previousAssistantContent) return false
+  const repeatedBeatAnalysis = analyzeRepeatedCompletedSceneBeat(
+    content,
+    ctx.previousAssistantContent,
+    2,
+  )
   return (
     areAssistantResponsesSubstantiallyDuplicate(content, ctx.previousAssistantContent) ||
     (
       !latestInputExplicitlyRequestsRepeatedAction(ctx) &&
-      repeatsCompletedSceneBeat(content, ctx.previousAssistantContent)
+      repeatedBeatAnalysis.duplicate
     )
   )
+}
+
+export function getDuplicateValidationEvidence(content: string, ctx: CompiledRoleplayContext) {
+  const previousResponse = ctx.previousAssistantContent
+    ? {
+        substantialTextDuplicate: areAssistantResponsesSubstantiallyDuplicate(
+          content,
+          ctx.previousAssistantContent,
+        ),
+        ...analyzeRepeatedCompletedSceneBeat(content, ctx.previousAssistantContent, 2),
+      }
+    : null
+  const regeneration = ctx.regenerationAvoidContent
+    ? {
+        substantialTextDuplicate: areAssistantResponsesSubstantiallyDuplicate(
+          content,
+          ctx.regenerationAvoidContent,
+        ),
+        ...analyzeRepeatedCompletedSceneBeat(content, ctx.regenerationAvoidContent, 1),
+      }
+    : null
+
+  return { previousResponse, regeneration }
 }
 
 function hasProviderRefusal(content: string) {
@@ -2868,6 +2942,9 @@ async function validateRoleplayOutputWithJudge(
       maxDialogues: profile.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues,
       ruleFailures,
       terminalRuleFailures,
+      duplicateEvidence: ruleErrors.previousResponseDuplicate || ruleErrors.regenerationDuplicate
+        ? getDuplicateValidationEvidence(text, ctx)
+        : undefined,
       judgeSkipped: "deterministic-rule-validation-failed",
     })
     return {
@@ -2896,6 +2973,9 @@ async function validateRoleplayOutputWithJudge(
       maxDialogues: profile.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues,
       ruleFailures,
       judgeFailures,
+      duplicateEvidence: ruleErrors.previousResponseDuplicate || ruleErrors.regenerationDuplicate
+        ? getDuplicateValidationEvidence(text, ctx)
+        : undefined,
       overPhysicalEvidence: ruleErrors.overPhysical
         ? splitIntoSentences(stripQuotedDialogue(text)).filter((sentence) => detectsPhysicalEscalation(sentence, ctx.userName))
         : [],
@@ -5679,6 +5759,9 @@ async function streamGeminiRoleplay({
           maxChars: compiledContext.turnPolicy.maxChars,
           dialogueCount: extractQuotedLines(content).length,
           failures,
+          duplicateEvidence: errors.previousResponseDuplicate || errors.regenerationDuplicate
+            ? getDuplicateValidationEvidence(content, compiledContext)
+            : undefined,
           controlsUserEvidence: errors.controlsUser
             ? getControlsUserActionSentences(content, compiledContext)
             : [],

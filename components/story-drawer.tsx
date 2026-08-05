@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Play, X, ChevronLeft } from "lucide-react"
 import { PersonaSelectStep } from "@/components/chat/persona-select-step"
 import { StartScenarioSelect } from "@/components/chat/start-scenario-select"
+import { getCurrentAppPath, withReturnTo } from "@/lib/safe-navigation"
 
 type Step = "intro" | "persona" | "scenario"
 
@@ -172,7 +173,10 @@ export function StoryDrawer() {
                   personas={personas}
                   selectedId={localPersona?.id ?? null}
                   onSelect={setLocalPersona}
-                  onCreateNew={() => router.push("/my-works")}
+                  onCreateNew={() => {
+                    handleClose()
+                    router.push(withReturnTo("/my-works?tab=personas", getCurrentAppPath()))
+                  }}
                 />
               </div>
             )}

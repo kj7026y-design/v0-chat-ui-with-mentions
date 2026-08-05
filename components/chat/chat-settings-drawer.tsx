@@ -32,6 +32,7 @@ import {
   SLASH_COMMANDS,
 } from "@/lib/chat-types";
 import type { StoryPersona } from "@/lib/storychat-storage";
+import { withReturnTo } from "@/lib/safe-navigation";
 import { cn } from "@/lib/utils";
 import {
   ChartNoAxesColumnIncreasing,
@@ -319,6 +320,8 @@ export function ChatSettingsDrawer({
     setIsMemoryMemoOpen(false);
   };
 
+  const chatReturnPath = `/chat/${encodeURIComponent(chatId)}`;
+
   return (
     <>
       {/* Overlay */}
@@ -345,7 +348,7 @@ export function ChatSettingsDrawer({
           <h2 className="text-[15px] font-bold text-foreground">채팅방 설정</h2>
           <div className="flex items-center gap-2">
             <Link
-              href="/credits"
+              href={withReturnTo("/credits", chatReturnPath)}
               onClick={onClose}
               className="inline-flex h-9 items-center gap-1.5 rounded-full bg-setting-el px-3 text-[11px] font-semibold text-foreground transition-colors hover:bg-accent"
             >
@@ -371,7 +374,7 @@ export function ChatSettingsDrawer({
             aria-label="채팅방 바로가기"
           >
             <SettingsShortcut
-              href={`/chat/${chatId}/media`}
+              href={withReturnTo(`/chat/${chatId}/media`, chatReturnPath)}
               label="갤러리"
               onClick={onClose}
               icon={<ImageIcon className="h-5 w-5" />}
@@ -382,14 +385,17 @@ export function ChatSettingsDrawer({
             <PersonaShortcut
               persona={currentPersona}
               href={
-                currentPersona
-                  ? `/my-works?tab=personas&detailType=personas&detailId=${currentPersona.id}`
-                  : "/my-works?tab=personas"
+                withReturnTo(
+                  currentPersona
+                    ? `/my-works?tab=personas&detailType=personas&detailId=${currentPersona.id}`
+                    : "/my-works?tab=personas",
+                  chatReturnPath,
+                )
               }
               onClick={onClose}
             />
             <SettingsShortcut
-              href="/timeline"
+              href={withReturnTo("/timeline", chatReturnPath)}
               label="타임라인"
               onClick={onClose}
               icon={<ChartNoAxesCombined className="h-5 w-5" />}

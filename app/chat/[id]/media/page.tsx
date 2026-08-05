@@ -1,19 +1,19 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import Link from "next/link"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { ArrowLeft, X } from "lucide-react"
 import {
   getChatMedia,
   type ChatMediaItem,
 } from "@/lib/chat-media-storage"
 import { defaultChats, getChatList } from "@/lib/chat-list-storage"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function ChatMediaPage() {
   const params = useParams()
-  const router = useRouter()
   const chatId = params.id as string
+  const goBack = useSafeBack(`/chat/${chatId}`)
   const [items, setItems] = useState<ChatMediaItem[]>([])
   const [selectedItem, setSelectedItem] = useState<ChatMediaItem | null>(null)
   const chat = useMemo(
@@ -38,7 +38,7 @@ export default function ChatMediaPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={goBack}
             className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent"
             aria-label="뒤로가기"
           >
@@ -73,9 +73,9 @@ export default function ChatMediaPage() {
           </div>
         )}
 
-        <Link href={`/chat/${chatId}`} className="block text-center text-sm text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={goBack} className="block text-center text-sm text-muted-foreground hover:text-foreground">
           채팅방으로 돌아가기
-        </Link>
+        </button>
       </div>
 
       {selectedItem && (

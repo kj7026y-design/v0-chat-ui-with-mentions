@@ -1,7 +1,6 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { Pencil, ImageIcon } from "lucide-react"
-import Link from "next/link"
 import type { TimelineEvent } from "@/lib/timeline-storage"
 
 interface EventDetailSheetProps {
@@ -9,6 +8,7 @@ interface EventDetailSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onClose: () => void
+  onEdit: (event: TimelineEvent) => void
 }
 
 function formatDate(dateString: string) {
@@ -25,6 +25,7 @@ export function EventDetailSheet({
   open,
   onOpenChange,
   onClose,
+  onEdit,
 }: EventDetailSheetProps) {
   if (!event) return null
 
@@ -77,14 +78,12 @@ export function EventDetailSheet({
           {/* Footer Buttons */}
           <div className="flex gap-3 mt-6 pt-4 border-t border-border">
           <Button
-            asChild
             variant="secondary"
             className="flex-1 bg-secondary hover:bg-accent text-secondary-foreground"
+            onClick={() => onEdit(event)}
           >
-            <Link href={`/timeline/${event.id}/edit`} onClick={onClose}>
-              <Pencil className="w-4 h-4 mr-2" />
-              내용 수정하기
-            </Link>
+            <Pencil className="w-4 h-4 mr-2" />
+            내용 수정하기
           </Button>
           <Button
             variant="outline"

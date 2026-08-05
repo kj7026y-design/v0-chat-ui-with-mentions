@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { useTheme } from "@/components/theme-provider"
 import { ArrowLeft, Check, Sun, Moon, Monitor } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 type ThemeId = "light" | "dark" | "system"
 
@@ -37,7 +37,7 @@ const themes: ThemeConfig[] = [
 ]
 
 export default function ThemesPage() {
-  const router = useRouter()
+  const goBack = useSafeBack("/mypage")
   const { setTheme, theme: currentTheme } = useTheme()
   const [selectedTheme, setSelectedTheme] = useState<ThemeId>("dark")
   const [mounted, setMounted] = useState(false)
@@ -51,7 +51,7 @@ export default function ThemesPage() {
 
   const handleApplyTheme = () => {
     setTheme(selectedTheme)
-    router.back()
+    goBack()
   }
 
   if (!mounted) {
@@ -63,7 +63,7 @@ export default function ThemesPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 flex items-center gap-3 px-4 py-4 bg-background backdrop-blur-sm border-b border-border">
         <button
-          onClick={() => router.back()}
+          onClick={goBack}
           className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-accent transition-colors"
           aria-label="뒤로 가기"
         >

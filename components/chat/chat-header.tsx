@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, MoreVertical, Search } from "lucide-react";
+import { useSafeBack } from "@/hooks/use-safe-back";
 import { cn } from "@/lib/utils";
 
 interface ChatHeaderProps {
@@ -46,7 +46,7 @@ export function ChatHeader({
   onSearchValueChange,
   onSearchSubmit,
 }: ChatHeaderProps) {
-  const router = useRouter();
+  const goBack = useSafeBack("/chats");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const titleText = [
     characterName,
@@ -102,7 +102,7 @@ export function ChatHeader({
         <div className="flex h-8 items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <button
-              onClick={() => router.back()}
+              onClick={goBack}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full hover:bg-accent transition-colors"
               aria-label="뒤로 가기"
             >

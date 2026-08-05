@@ -1,12 +1,12 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
 import { useAppStore } from "@/lib/store"
 import { ScenarioSetupScreen } from "@/components/scenario-setup-screen"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function ScenarioPage() {
-  const router = useRouter()
+  const goBack = useSafeBack("/")
   const { selectedCharacter, characters, setSelectedCharacter } = useAppStore()
 
   // Set a default character if none is selected
@@ -17,7 +17,7 @@ export default function ScenarioPage() {
   }, [selectedCharacter, characters, setSelectedCharacter])
 
   const handleClose = () => {
-    router.back()
+    goBack()
   }
 
   return (

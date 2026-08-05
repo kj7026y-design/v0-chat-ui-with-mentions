@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { ArrowLeft, Save } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -13,11 +13,12 @@ import {
   saveTimelineEvents,
   type TimelineEvent,
 } from "@/lib/timeline-storage"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function TimelineEditPage() {
-  const router = useRouter()
   const params = useParams()
   const eventId = params.id as string
+  const goBack = useSafeBack("/timeline")
   const [events, setEvents] = useState<TimelineEvent[]>(defaultTimelineEvents)
   const [form, setForm] = useState<TimelineEvent | null>(null)
 
@@ -52,17 +53,17 @@ export default function TimelineEditPage() {
     const nextEvents = events.map((event) => event.id === eventId ? nextEvent : event)
     saveTimelineEvents(nextEvents)
     toast("타임라인을 저장했어요.")
-    router.push("/timeline")
+    goBack()
   }
 
   if (!form) {
     return (
       <main className="flex-1 min-h-0 overflow-y-auto bg-background">
         <div className="mx-auto max-w-2xl px-5 py-6">
-          <Header title="이벤트를 찾을 수 없어요" onBack={() => router.push("/timeline")} />
+          <Header title="이벤트를 찾을 수 없어요" onBack={goBack} />
           <div className="rounded-xl border border-border bg-card px-4 py-8 text-center">
             <p className="text-sm text-muted-foreground">삭제되었거나 존재하지 않는 이벤트입니다.</p>
-            <Button className="mt-4" onClick={() => router.push("/timeline")}>
+            <Button className="mt-4" onClick={goBack}>
               타임라인으로 돌아가기
             </Button>
           </div>
@@ -74,7 +75,7 @@ export default function TimelineEditPage() {
   return (
     <main className="flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="mx-auto max-w-2xl px-5 py-6">
-        <Header title="이벤트 수정" onBack={() => router.back()} />
+        <Header title="이벤트 수정" onBack={goBack} />
 
         <div className="space-y-5 rounded-xl border border-border bg-card p-5">
           <div className="space-y-2">
@@ -131,7 +132,7 @@ export default function TimelineEditPage() {
 
       <div className="sticky bottom-0 z-40 border-t border-border bg-background px-5 py-4">
         <div className="mx-auto flex max-w-2xl gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => router.back()}>
+          <Button variant="outline" className="flex-1" onClick={goBack}>
             취소
           </Button>
           <Button className="flex-1" onClick={handleSave}>

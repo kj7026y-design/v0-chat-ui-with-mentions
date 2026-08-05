@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -14,11 +14,12 @@ import {
   type StoryWork,
   type StoryWorld,
 } from "@/lib/storychat-storage"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function EditWorkPage() {
   const params = useParams()
-  const router = useRouter()
   const workId = params.id as string
+  const goBack = useSafeBack(`/my-works?tab=completed&detailType=completed&detailId=${workId}`)
   const [library, setLibrary] = useState<StoryChatLibrary | null>(null)
 
   useEffect(() => {
@@ -39,7 +40,7 @@ export default function EditWorkPage() {
   if (!work || !world) {
     return (
       <div className="min-h-full bg-background p-5 text-foreground">
-        <Button variant="ghost" onClick={() => router.push("/my-works?tab=completed")}>
+        <Button variant="ghost" onClick={goBack}>
           <ArrowLeft className="h-4 w-4" />
           돌아가기
         </Button>
@@ -95,14 +96,14 @@ export default function EditWorkPage() {
       worlds: library.worlds.map((item) => item.id === world.id ? nextWorld : item),
     })
     toast("작품을 수정했어요.")
-    router.push(`/my-works?tab=completed&detailType=completed&detailId=${work.id}`)
+    goBack()
   }
 
   return (
     <div className="min-h-full bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <Button variant="ghost" size="icon" onClick={goBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -116,7 +117,7 @@ export default function EditWorkPage() {
           mode="edit"
           initialValues={initialValues}
           onSubmit={handleSubmit}
-          onCancel={() => router.back()}
+          onCancel={goBack}
         />
       </main>
     </div>

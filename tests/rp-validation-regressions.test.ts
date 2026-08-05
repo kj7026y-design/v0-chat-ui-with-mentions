@@ -10,6 +10,7 @@ import {
   compileRoleplayContext,
   extractGenerationErrorMetadata,
   generateDynamicPrompt,
+  getDuplicateValidationEvidence,
   getGeminiPromptBlockReason,
   getGeminiPromptBlockOutcome,
   isTerminalRoleplayValidationFailure,
@@ -368,4 +369,54 @@ test("recent concrete scene progression is preserved in the next response goal",
 
   assert.equal(validateRoleplayOutput(regressedResponse, context).responseMissedUserIntent, true)
   assert.equal(validateRoleplayOutput(continuedResponse, context).responseMissedUserIntent, false)
+})
+
+test("continued contact with a new rhythm is not mislabeled as a previous-response copy", () => {
+  const previousResponse = [
+    "강태현은 김여자의 허리를 감싼 채 귓가에 입술을 스쳤다.",
+    '"네 마음이 같다는 말, 이제는 못 무르게 해."',
+  ].join("\n\n")
+  const context = compileRoleplayContext(
+    { characterName: "강태현", userName: "김여자", background: "성인 로맨스" },
+    [
+      { role: "assistant", content: previousResponse },
+      { role: "user", content: "계속해." },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+  const continuedResponse = [
+    "강태현은 허리를 다시 감쌌지만, 속도를 한 단계 높이며 리듬을 바꿨다. 귀 가까이에 머물던 입술은 그대로 둔 채 흐트러진 자세를 바로잡았다.",
+    '"좋아한다는 말을 들었는데 내가 아무 일도 없던 것처럼 물러날 것 같았어? 내일 네가 친구라고 우겨도 이제는 안 속아."',
+    "손을 등 뒤로 옮겨 균형을 받친 뒤 빨라진 움직임을 끊지 않았다.",
+  ].join("\n\n")
+
+  assert.equal(
+    validateRoleplayOutput(continuedResponse, context).previousResponseDuplicate,
+    false,
+  )
+})
+
+test("restarting multiple completed scene beats without progression remains a duplicate", () => {
+  const previousResponse = "강태현은 김여자의 허리를 감싼 채 귓가에 입술을 스쳤다."
+  const context = compileRoleplayContext(
+    { characterName: "강태현", userName: "김여자" },
+    [
+      { role: "assistant", content: previousResponse },
+      { role: "user", content: "계속해." },
+    ],
+    undefined,
+    { minChars: 700, maxChars: 1100 },
+  )
+  const staleResponse = "강태현은 김여자의 허리를 다시 감싸 힘을 주었다. 귓가에 다시 입술을 스쳤다."
+  const evidence = getDuplicateValidationEvidence(staleResponse, context)
+
+  assert.deepEqual(evidence.previousResponse?.repeatedSceneBeats, [
+    "waist-contact",
+    "ear-contact",
+  ])
+  assert.equal(
+    validateRoleplayOutput(staleResponse, context).previousResponseDuplicate,
+    true,
+  )
 })

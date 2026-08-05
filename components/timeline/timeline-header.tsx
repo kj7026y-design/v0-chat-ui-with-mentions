@@ -1,21 +1,21 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Plus, ArrowLeft } from "lucide-react"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 interface TimelineHeaderProps {
   onAddEvent: () => void
 }
 
 export function TimelineHeader({ onAddEvent }: TimelineHeaderProps) {
-  const router = useRouter()
+  const goBack = useSafeBack("/mypage")
 
   return (
     <header className="sticky top-0 z-40 -mx-5 mb-8 flex items-center justify-between border-b border-border bg-background px-5 py-4 backdrop-blur-sm sm:mb-12">
       <div className="flex items-center gap-3">
         <button
-          onClick={() => router.back()}
+          onClick={goBack}
           className="flex items-center justify-center w-9 h-9 rounded-full bg-secondary hover:bg-secondary transition-colors"
           aria-label="뒤로 가기"
         >

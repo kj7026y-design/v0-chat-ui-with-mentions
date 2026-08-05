@@ -1,13 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { ChevronLeft, Image as ImageIcon } from "lucide-react"
 import { useAppStore, type SavedEvent } from "@/lib/store"
 import { EventCard } from "@/components/chat/event-card"
 import { EventDetailModal } from "@/components/chat/event-detail-modal"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function GalleryPage() {
+  const goBack = useSafeBack("/mypage")
   const events = useAppStore((s) => s.events)
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
   const groupedEvents = events.reduce<Record<string, SavedEvent[]>>((groups, event) => {
@@ -22,13 +23,14 @@ export default function GalleryPage() {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-background backdrop-blur-sm px-4 py-4 border-b border-border">
         <div className="flex items-center gap-2">
-          <Link
-            href="/mypage"
+          <button
+            type="button"
+            onClick={goBack}
             className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
             aria-label="뒤로가기"
           >
             <ChevronLeft className="h-5 w-5 text-foreground" />
-          </Link>
+          </button>
           <h1 className="text-lg font-bold text-foreground">이벤트 갤러리</h1>
         </div>
       </header>

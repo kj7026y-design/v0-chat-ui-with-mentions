@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
   BookOpen,
@@ -31,6 +32,12 @@ import {
   type StoryWorld,
 } from "@/lib/storychat-storage"
 import { PublicDetailView } from "@/components/my-works/public-detail-view"
+import { useSafeBack } from "@/hooks/use-safe-back"
+import {
+  getCurrentAppPath,
+  normalizeInternalNavigationTarget,
+  withReturnTo,
+} from "@/lib/safe-navigation"
 
 type TabId = "scenarios" | "characters" | "personas" | "completed"
 type DetailTarget =
@@ -52,6 +59,16 @@ const tabs: Tab[] = [
 ]
 
 export default function MyWorksPage() {
+  return (
+    <Suspense fallback={<div className="h-full bg-background" />}>
+      <MyWorksContent />
+    </Suspense>
+  )
+}
+
+function MyWorksContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>("scenarios")
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
@@ -60,21 +77,27 @@ export default function MyWorksPage() {
   const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null)
   const [renameTarget, setRenameTarget] = useState<DetailTarget | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DetailTarget | null>(null)
+  const [hasReturnDestination, setHasReturnDestination] = useState(false)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const goBack = useSafeBack(detail ? `/my-works?tab=${detail.type}` : "/")
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const tabParam = params.get("tab")
+    const tabParam = searchParams.get("tab")
     if (isTabId(tabParam)) {
       setActiveTab(tabParam)
     }
-    const detailType = params.get("detailType")
-    const detailId = params.get("detailId")
+    const detailType = searchParams.get("detailType")
+    const detailId = searchParams.get("detailId")
     if (isTabId(detailType) && detailId) {
       setActiveTab(detailType)
       setDetail({ type: detailType, id: detailId } as DetailTarget)
+    } else {
+      setDetail(null)
     }
-  }, [])
+    setHasReturnDestination(Boolean(
+      normalizeInternalNavigationTarget(searchParams.get("returnTo")),
+    ))
+  }, [searchParams])
 
   useEffect(() => {
     const activeIndex = tabs.findIndex((tab) => tab.id === activeTab)
@@ -107,26 +130,30 @@ export default function MyWorksPage() {
     setEditingWorldId(null)
     setEditingCharacterId(null)
     setDetail(nextDetail)
+    const detailPath = `/my-works?tab=${nextDetail.type}&detailType=${nextDetail.type}&detailId=${encodeURIComponent(nextDetail.id)}`
+    router.push(withReturnTo(detailPath, getCurrentAppPath()))
   }
 
   const handleTabClick = (tab: TabId) => {
     setActiveTab(tab)
     setEditingWorldId(null)
     setEditingCharacterId(null)
-    window.history.replaceState(null, "", `/my-works?tab=${tab}`)
+    const returnTo = normalizeInternalNavigationTarget(searchParams.get("returnTo"))
+    const tabPath = `/my-works?tab=${tab}`
+    router.replace(returnTo ? withReturnTo(tabPath, returnTo) : tabPath)
   }
 
   const handleEdit = (target: DetailTarget) => {
     if (target.type === "scenarios") {
-      window.location.href = `/my-works/worlds/${target.id}/edit`
+      router.push(withReturnTo(`/my-works/worlds/${target.id}/edit`, getCurrentAppPath()))
       return
     }
     if (target.type === "characters") {
-      window.location.href = `/my-works/characters/${target.id}/edit`
+      router.push(withReturnTo(`/my-works/characters/${target.id}/edit`, getCurrentAppPath()))
       return
     }
     if (target.type === "completed") {
-      window.location.href = `/my-works/${target.id}/edit`
+      router.push(withReturnTo(`/my-works/${target.id}/edit`, getCurrentAppPath()))
       return
     }
     handleRename(target)
@@ -171,7 +198,7 @@ export default function MyWorksPage() {
       completed: "work",
     }
 
-    window.location.href = `/create?mode=${createModeByTab[activeTab]}`
+    router.push(withReturnTo(`/create?mode=${createModeByTab[activeTab]}`, getCurrentAppPath()))
   }
 
   const detailItem = detail ? getDetailItem(library, detail) : null
@@ -182,11 +209,11 @@ export default function MyWorksPage() {
       <header className="shrink-0 z-40 bg-background border-b border-border">
         <div className="px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {detail ? (
+            {detail || hasReturnDestination ? (
               <button
-                onClick={() => setDetail(null)}
+                onClick={goBack}
                 className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
-                aria-label="목록으로 돌아가기"
+                aria-label="뒤로 가기"
               >
                 <ArrowLeft className="w-5 h-5 text-foreground" />
               </button>

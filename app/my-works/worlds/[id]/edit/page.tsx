@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -17,11 +17,12 @@ import {
   type StoryChatLibrary,
   type StoryWorld,
 } from "@/lib/storychat-storage"
+import { useSafeBack } from "@/hooks/use-safe-back"
 
 export default function EditWorldPage() {
   const params = useParams()
-  const router = useRouter()
   const worldId = params.id as string
+  const goBack = useSafeBack(`/my-works?tab=scenarios&detailType=scenarios&detailId=${worldId}`)
   const [library, setLibrary] = useState<StoryChatLibrary | null>(null)
   const [draft, setDraft] = useState<StoryWorld | null>(null)
 
@@ -43,7 +44,7 @@ export default function EditWorldPage() {
       worlds: library.worlds.map((item) => item.id === draft.id ? draft : item),
     })
     toast("세계관을 수정했어요.")
-    router.push(`/my-works?tab=scenarios&detailType=scenarios&detailId=${draft.id}`)
+    goBack()
   }
 
   if (!library) return null
@@ -51,7 +52,7 @@ export default function EditWorldPage() {
   if (!draft) {
     return (
       <div className="min-h-full bg-background p-5 text-foreground">
-        <Button variant="ghost" onClick={() => router.push("/my-works?tab=scenarios")}>
+        <Button variant="ghost" onClick={goBack}>
           <ArrowLeft className="h-4 w-4" />
           돌아가기
         </Button>
@@ -66,7 +67,7 @@ export default function EditWorldPage() {
     <div className="min-h-full bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <Button variant="ghost" size="icon" onClick={goBack}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
@@ -126,7 +127,7 @@ export default function EditWorldPage() {
           </FieldGroup>
         </section>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" className="flex-1" onClick={() => router.back()}>
+          <Button type="button" variant="outline" className="flex-1" onClick={goBack}>
             취소
           </Button>
           <Button type="button" className="flex-1" onClick={handleSave}>
