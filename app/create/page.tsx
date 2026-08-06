@@ -7,13 +7,12 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Layers,
+  Feather,
   ListOrdered,
   Map,
   PenTool,
@@ -21,10 +20,9 @@ import {
   Rocket,
   Save,
   Settings,
-  Smile,
   Sparkles,
   Trash2,
-  User,
+  Zap,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -59,6 +57,10 @@ import { CharacterForm as CharacterCreateForm } from "@/components/create/charac
 import { GenreSelectWithCustomInput } from "@/components/create/genre-select-with-custom-input"
 import { ImageUploadField as CreateImageUploadField } from "@/components/create/image-upload-field"
 import { WorkModeSwitch as CreateModeSwitch } from "@/components/create/work-mode-switch"
+import {
+  QuickCreateWizard,
+  type QuickCreateData,
+} from "@/components/create/quick-create-wizard"
 import { IntroScenariosFormSection } from "@/components/my-works/intro-scenarios-form-section"
 import {
   cleanIntroScenarios,
@@ -77,6 +79,7 @@ import {
 } from "@/lib/storychat-storage"
 import { cn } from "@/lib/utils"
 import { useSafeBack } from "@/hooks/use-safe-back"
+import { getChatList, saveChatList } from "@/lib/chat-list-storage"
 
 type EntryMode = "menu" | "work" | "character" | "world" | "persona"
 
@@ -453,6 +456,98 @@ export default function CreatePage() {
     else setMode("menu")
   }
 
+  const completeQuickWork = (data: QuickCreateData) => {
+    const gender = (value: string): StoryCharacterGender =>
+      value === "여성" ? "female" : value === "남성" ? "male" : value === "논바이너리" ? "nonbinary" : "unknown"
+    const character = data.character === "default" && library.characters[0]
+      ? library.characters[0]
+      : normalizeCharacter({
+          ...emptyCharacter(),
+          name: data.character === "custom" ? data.customCharacter.name.trim() : "유진",
+          age: data.character === "custom" ? data.customCharacter.age.trim() || "27" : "27",
+          gender: gender(data.customCharacter.gender),
+          role: data.character === "custom" ? data.customCharacter.job.trim() || "이야기의 주인공" : "서점 주인",
+          summary: data.character === "custom"
+            ? data.customCharacter.personality.trim() || "차분하지만 쉽게 속마음을 드러내지 않는 인물"
+            : "차분하고 다정하지만 비밀을 품고 있는 서점 주인",
+          personality: data.character === "custom"
+            ? data.customCharacter.personality.trim() || "차분하고 다정함"
+            : "차분하고 다정하지만 속마음을 잘 드러내지 않음",
+          speechStyle: data.character === "custom" ? data.customCharacter.speechStyle.trim() || "부드러운 존댓말" : "부드러운 존댓말",
+        })
+    const world = data.world === "default" && library.worlds[0]
+      ? library.worlds[0]
+      : normalizeWorld({
+          ...emptyWorld(),
+          name: data.world === "custom" ? data.customWorld.name.trim() : "달빛이 머무는 도시",
+          era: data.world === "custom" ? data.customWorld.era.trim() || "2020년대 현대" : "2020년대 현대",
+          genre: data.world === "custom" && data.customWorld.genre !== "장르 선택" ? data.customWorld.genre : "현대 판타지",
+          coreSetting: data.world === "custom"
+            ? data.customWorld.description.trim() || "평범한 일상 속에 마법과 비밀이 숨어 있는 세계"
+            : "도심 곳곳에 마법사와 요괴가 숨어 살아가는 세계",
+          mood: "신비롭고 따뜻한 분위기",
+        })
+    const persona = data.persona === "default" && library.personas[0]
+      ? library.personas[0]
+      : normalizePersona({
+          ...emptyPersona(),
+          name: data.persona === "custom" ? data.customPersona.name.trim() : "서연",
+          age: data.persona === "custom" ? data.customPersona.age.trim() || "25" : "25",
+          gender: gender(data.customPersona.gender),
+          role: data.persona === "custom" ? data.customPersona.job.trim() || "이야기의 방문자" : "대학생",
+          summary: "이야기의 중심에서 캐릭터와 관계를 만들어가는 나의 역할",
+          relationship: `${character.name}과 처음 인연을 맺는다.`,
+        })
+    const now = new Date().toISOString()
+    const work: StoryWork = {
+      id: createId("work"),
+      title: data.title.trim(),
+      characterId: character.id,
+      worldId: world.id,
+      personaId: persona.id,
+      startScenario: `${world.name}에서 ${character.name}과 처음 마주친다.`,
+      introScenarios: [],
+      storyProgressSettings: world.storyProgressSettings,
+      genre: String(world.genre),
+      tagline: world.coreSetting,
+      coreSetting: world.coreSetting,
+      majorLocations: world.places,
+      majorEvents: world.events,
+      mood: world.mood,
+      currentChapter: world.currentChapter,
+      currentGoal: world.currentGoal,
+      worldDate: world.worldDate,
+      coverImageUrl: world.coverImageUrl,
+      statusBarEnabled: false,
+      statusBarText: "",
+      createdAt: now,
+      updatedAt: "오늘",
+    }
+
+    setLibraryAndPersist({
+      characters: upsertById(library.characters, character),
+      worlds: upsertById(library.worlds, world),
+      personas: upsertById(library.personas, persona),
+      works: [work, ...library.works],
+    })
+    saveChatList([
+      {
+        id: work.id,
+        roomName: character.name,
+        characterName: character.name,
+        characterEmoji: character.emoji || "✨",
+        lastMessage: "새로운 이야기를 시작해 보세요.",
+        timestamp: new Date(),
+        unreadCount: 0,
+      },
+      ...getChatList().filter((chat) => chat.id !== work.id),
+    ])
+    window.localStorage.removeItem(WORK_DRAFT_KEY)
+    setWorkDraft(emptyWorkDraft())
+    toast("작품을 만들고 채팅을 시작해요.")
+    router.push(`/chat/${work.id}`)
+  }
+
   const resolveWorkCharacter = () => {
     if (workDraft.characterSource === "select") return selectedCharacter
     return isCharacterReady(workDraft.character) ? normalizeCharacter(workDraft.character) : null
@@ -518,7 +613,7 @@ export default function CreatePage() {
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
-      <header className="shrink-0 z-50 border-b border-border bg-background backdrop-blur supports-[backdrop-filter]:bg-background">
+      {!(mode === "work" && workFormMode === "simple") && <header className="shrink-0 z-50 border-b border-border bg-background backdrop-blur supports-[backdrop-filter]:bg-background">
         <div className="flex h-14 items-center gap-4 px-4 md:px-6">
           <Button variant="ghost" size="icon" onClick={goBack} className="shrink-0">
             <ArrowLeft className="h-5 w-5" />
@@ -541,7 +636,7 @@ export default function CreatePage() {
           )}
         </div>
         {mode === "work" && workFormMode === "advanced" && <WorkStepper step={workDraft.step} />}
-      </header>
+      </header>}
 
       <AlertDialog open={isExitPromptOpen} onOpenChange={setIsExitPromptOpen}>
         <AlertDialogContent className="w-[min(calc(100vw-2rem),340px)] gap-0 rounded-[20px] border-0 bg-[#FFFFFF] px-5 pb-5 pt-6 text-[#1A1A1A] shadow-2xl shadow-black/25 dark:bg-[#2E2E2C] dark:text-[#F5F5F3] sm:max-w-none">
@@ -588,18 +683,16 @@ export default function CreatePage() {
         <main className="mx-auto w-full max-w-5xl p-4 md:p-8 pb-28 space-y-6">
           {mode === "menu" && (
             <CreateMenu
-              characterCount={library.characters.length}
-              worldCount={library.worlds.length}
-              showWorkContinue={showWorkContinue}
-              onContinueWork={() => {
+              onSelectQuick={() => {
+                changeWorkFormMode("simple")
                 setShowWorkContinue(false)
+                setWorkDraft(emptyWorkDraft())
                 enterCreateMode("work")
               }}
-              onStart={(nextMode) => {
-                enterCreateMode(nextMode)
-                if (nextMode === "work" && !showWorkContinue) {
-                  setWorkDraft(emptyWorkDraft())
-                }
+              onSelectAdvanced={() => {
+                changeWorkFormMode("advanced")
+                enterCreateMode("work")
+                if (!showWorkContinue) setWorkDraft(emptyWorkDraft())
               }}
             />
           )}
@@ -617,14 +710,10 @@ export default function CreatePage() {
                   }}
                 />
               )}
-              {workDraft.step !== "review" && (
-                <CreateModeSwitch value={workFormMode} onChange={changeWorkFormMode} />
-              )}
               {workFormMode === "simple" ? (
-                <SimpleWorkCreateStep
-                  library={library}
-                  draft={workDraft}
-                  setDraft={setWorkDraft}
+                <QuickCreateWizard
+                  onExit={goBack}
+                  onComplete={completeQuickWork}
                 />
               ) : (
                 <>
@@ -702,24 +791,13 @@ export default function CreatePage() {
         </main>
       </ScrollArea>
 
-      {mode === "work" && (
+      {mode === "work" && workFormMode === "advanced" && (
         <BottomActions>
           <Button variant="outline" className="flex-1" onClick={saveWorkDraft}>
             <Save className="h-4 w-4" />
             임시저장
           </Button>
-          {workFormMode === "simple" ? (
-            <>
-              <Button variant="outline" className="flex-1" disabled={!canGoNext} onClick={() => completeWork(false)}>
-                내 작품에 저장
-              </Button>
-              <Button className="flex-1" disabled={!canGoNext} onClick={() => completeWork(true)}>
-                <Rocket className="h-4 w-4" />
-                바로 채팅 시작
-              </Button>
-            </>
-          ) : (
-            <>
+          <>
               <Button
                 variant="outline"
                 className="flex-1"
@@ -749,8 +827,7 @@ export default function CreatePage() {
                   </Button>
                 </>
               )}
-            </>
-          )}
+          </>
         </BottomActions>
       )}
 
@@ -795,107 +872,62 @@ export default function CreatePage() {
 }
 
 function CreateMenu({
-  characterCount,
-  worldCount,
-  showWorkContinue,
-  onContinueWork,
-  onStart,
+  onSelectQuick,
+  onSelectAdvanced,
 }: {
-  characterCount: number
-  worldCount: number
-  showWorkContinue: boolean
-  onContinueWork: () => void
-  onStart: (mode: EntryMode) => void
+  onSelectQuick: () => void
+  onSelectAdvanced: () => void
 }) {
   return (
-    <div className="mx-auto w-full max-w-xl">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">무엇을 만들까요?</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          필요한 항목만 따로 만들거나, 완성본으로 묶어 바로 채팅을 시작할 수 있어요.
-        </p>
-      </div>
-
-      {showWorkContinue && (
-        <div className="mt-5">
-          <ContinueCard
-            title="작성 중인 작품이 있어요. 이어서 작성할까요?"
-            onContinue={onContinueWork}
-          />
-        </div>
-      )}
+    <div className="mx-auto w-full max-w-md pt-1">
+      <h2 className="text-lg font-medium text-foreground">어떻게 만들까요?</h2>
+      <p className="mb-6 mt-1.5 text-sm leading-relaxed text-muted-foreground">
+        두 가지 방법 중 편한 쪽을 골라주세요.
+      </p>
 
       <button
         type="button"
-        onClick={() => onStart("work")}
-        className="mt-5 w-full rounded-xl border-2 border-blue-500 bg-card p-4 text-left transition hover:bg-accent/40 active:scale-[0.99]"
+        onClick={onSelectQuick}
+        className="mb-4 w-full rounded-2xl border-2 border-blue-500 bg-card p-5 text-left transition-colors active:bg-blue-50 dark:border-blue-400 dark:active:bg-blue-950/40"
       >
-        <span className="inline-block rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-          추천 · 빠른 시작
+        <span className="inline-block rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+          처음이라면 · 5분 완성
         </span>
 
-        <div className="mt-2.5 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-            <Layers className="h-5 w-5" />
+        <div className="mt-3 flex items-center gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <Zap className="h-[22px] w-[22px]" />
           </div>
-
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-medium text-foreground">작품 만들기</p>
+            <p className="mb-1 text-base font-medium text-foreground">빠르게 시작하기</p>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              캐릭터와 세계관을 연결해서 바로 채팅할 수 있는 완성본을 만들어요.
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground/70">
-              보유 캐릭터 {characterCount}개 · 세계관 {worldCount}개 — 만드는 중에 새로 추가할 수 있어요
+              질문에 답하기만 하면 캐릭터, 세계관, 자아까지 알아서 준비돼요.
             </p>
           </div>
-
-          <ChevronRight className="mt-0.5 h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </div>
       </button>
 
-      <p className="mb-2 mt-6 text-xs text-muted-foreground">구성 요소만 따로 만들기</p>
-
-      <div className="grid grid-cols-2 gap-2.5">
-        <button
-          type="button"
-          onClick={() => onStart("character")}
-          className="rounded-xl border border-border bg-card p-3.5 text-left transition hover:bg-accent/40 active:scale-[0.98]"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-            <User className="h-[17px] w-[17px]" />
-          </div>
-          <p className="mt-2 text-sm font-medium text-foreground">캐릭터 만들기</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">캐릭터만 따로 만들어요.</p>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onStart("world")}
-          className="rounded-xl border border-border bg-card p-3.5 text-left transition hover:bg-accent/40 active:scale-[0.98]"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
-            <BookOpen className="h-[17px] w-[17px]" />
-          </div>
-          <p className="mt-2 text-sm font-medium text-foreground">세계관 만들기</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">배경과 규칙만 만들어요.</p>
-        </button>
-      </div>
-
       <button
         type="button"
-        onClick={() => onStart("persona")}
-        className="mt-2.5 w-full rounded-xl border border-border bg-card p-3.5 text-left transition hover:bg-accent/40 active:scale-[0.98]"
+        onClick={onSelectAdvanced}
+        className="w-full rounded-2xl border border-border bg-card p-5 text-left transition-colors active:bg-accent"
       >
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
-            <Smile className="h-[17px] w-[17px]" />
+        <span className="inline-block rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+          작가라면 · 섬세하게
+        </span>
+
+        <div className="mt-3 flex items-center gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <Feather className="h-[22px] w-[22px]" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">자아 만들기</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              채팅에서 쓸 나의 역할을 만들어요 (캐릭터와 달리 &apos;나&apos; 자신이에요).
+          <div className="min-w-0 flex-1">
+            <p className="mb-1 text-base font-medium text-foreground">직접 하나하나 만들기</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              캐릭터, 세계관, 챕터까지 세밀하게 다듬고 싶은 분께 맞아요.
             </p>
           </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         </div>
       </button>
     </div>

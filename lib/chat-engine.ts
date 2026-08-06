@@ -107,6 +107,8 @@ export type ChatStreamEvent = {
 export type GenerateAssistantReplyOptions = {
   roomId?: string
   userMessageId?: string
+  userMessageContent?: string
+  userMessageTimestamp?: string
   characterMessageId?: string
   regenerationAvoidContent?: string
   retryAttempt?: boolean
@@ -1066,6 +1068,8 @@ async function generatePollinationsReply(
     stream: Boolean(options.onStreamEvent),
     roomId: options.roomId,
     userMessageId: options.userMessageId,
+    userMessageContent: options.userMessageContent,
+    userMessageTimestamp: options.userMessageTimestamp,
     characterMessageId: options.characterMessageId,
     regenerationAvoidContent: options.regenerationAvoidContent,
     retryAttempt: options.retryAttempt,

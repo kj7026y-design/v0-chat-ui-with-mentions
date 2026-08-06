@@ -7,6 +7,7 @@ export interface ChatRoomMetadata {
   updatedAt: string
   lastMessage?: string
   lastMessageAt?: string
+  isGenerating?: boolean
 }
 
 async function readResponse(response: Response) {

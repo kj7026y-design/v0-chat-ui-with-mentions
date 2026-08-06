@@ -30,6 +30,7 @@ interface ChatRoomRow {
   updated_at?: string | Date
   last_message?: string | null
   last_message_at?: string | Date | null
+  last_message_status?: string | null
 }
 
 export interface StoredChatRoom {
@@ -39,6 +40,7 @@ export interface StoredChatRoom {
   updatedAt: string
   lastMessage?: string
   lastMessageAt?: string
+  isGenerating?: boolean
 }
 
 export interface ChatMessagePage {
@@ -185,8 +187,13 @@ function parseChatRoom(row: ChatRoomRow): StoredChatRoom {
     roomName: row.room_name || row.character_name || UNKNOWN_CHARACTER_NAME,
     characterName: row.character_name || UNKNOWN_CHARACTER_NAME,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
-    lastMessage: row.last_message || undefined,
+    lastMessage: row.last_message_status === "streaming"
+      ? "답변 생성 중..."
+      : row.last_message_status === "failed"
+        ? "답변 생성에 실패했어요."
+        : row.last_message || undefined,
     lastMessageAt: row.last_message_at ? new Date(row.last_message_at).toISOString() : undefined,
+    isGenerating: row.last_message_status === "streaming",
   }
 }
 
@@ -196,10 +203,11 @@ export async function getChatRooms(accountId: string, roomId?: string) {
   const rows = roomId
     ? await sql.query(
         `SELECT room.room_key, room.room_name, room.character_name, room.updated_at,
-                latest.content AS last_message, latest.client_timestamp AS last_message_at
+                latest.content AS last_message, latest.client_timestamp AS last_message_at,
+                latest.message_data ->> 'status' AS last_message_status
          FROM storychat_chat_rooms room
          LEFT JOIN LATERAL (
-           SELECT message.content, message.client_timestamp
+           SELECT message.content, message.client_timestamp, message.message_data
            FROM storychat_messages message
            WHERE message.chat_room_id = room.chat_room_id
              AND message.message_type IN ('user', 'ai')
@@ -212,10 +220,11 @@ export async function getChatRooms(accountId: string, roomId?: string) {
       ) as unknown as ChatRoomRow[]
     : await sql.query(
         `SELECT room.room_key, room.room_name, room.character_name, room.updated_at,
-                latest.content AS last_message, latest.client_timestamp AS last_message_at
+                latest.content AS last_message, latest.client_timestamp AS last_message_at,
+                latest.message_data ->> 'status' AS last_message_status
          FROM storychat_chat_rooms room
          LEFT JOIN LATERAL (
-           SELECT message.content, message.client_timestamp
+           SELECT message.content, message.client_timestamp, message.message_data
            FROM storychat_messages message
            WHERE message.chat_room_id = room.chat_room_id
              AND message.message_type IN ('user', 'ai')

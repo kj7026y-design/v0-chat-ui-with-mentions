@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Copy, Edit3, MoreHorizontal, Search, Trash2 } from "lucide-react"
+import { Copy, Edit3, LoaderCircle, MoreHorizontal, Search, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { ConfirmModal, PromptModal } from "@/components/ui/app-modal"
@@ -25,10 +25,13 @@ export default function ChatsPage() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    let pollTimer: ReturnType<typeof setTimeout> | null = null
     const syncChats = () => setChats(getChatList())
-    syncChats()
-    void getChatRooms()
-      .then((rooms) => {
+    const syncRemoteChats = async () => {
+      try {
+        const rooms = await getChatRooms()
+        if (cancelled) return
         if (rooms.length === 0) return
         const roomMetadata = new Map(rooms.map((room) => [room.roomId, room]))
         const nextChats = getChatList()
@@ -39,16 +42,26 @@ export default function ChatsPage() {
               roomName: room?.roomName || getChatDisplayName(chat),
               lastMessage: room?.lastMessage || chat.lastMessage,
               timestamp: room?.lastMessageAt ? new Date(room.lastMessageAt) : chat.timestamp,
+              isGenerating: room?.isGenerating === true,
             }
           })
           .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
         setChats(nextChats)
         saveChatList(nextChats)
-      })
-      .catch(() => undefined)
+        if (rooms.some((room) => room.isGenerating)) {
+          pollTimer = setTimeout(() => void syncRemoteChats(), 2000)
+        }
+      } catch {
+        // Keep the locally cached list when the DB is temporarily unavailable.
+      }
+    }
+    syncChats()
+    void syncRemoteChats()
     window.addEventListener("storage", syncChats)
     window.addEventListener("storychat-chats-updated", syncChats)
     return () => {
+      cancelled = true
+      if (pollTimer) clearTimeout(pollTimer)
       window.removeEventListener("storage", syncChats)
       window.removeEventListener("storychat-chats-updated", syncChats)
     }
@@ -245,10 +258,13 @@ function ChatListItem({
             </span>
           </div>
           <p className={cn(
-            "text-sm truncate mt-0.5",
-            chat.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
+            "mt-0.5 flex items-center gap-1.5 truncate text-sm",
+            chat.isGenerating
+              ? "font-medium text-primary"
+              : chat.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
           )}>
-            {chat.lastMessage}
+            {chat.isGenerating && <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />}
+            <span className="truncate">{chat.lastMessage}</span>
           </p>
         </div>
       </Link>

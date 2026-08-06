@@ -49,6 +49,8 @@ export interface ChatRequestBody {
   stream?: boolean
   roomId?: string
   userMessageId?: string
+  userMessageContent?: string
+  userMessageTimestamp?: string
   characterMessageId?: string
   regenerationAvoidContent?: string
   retryAttempt?: boolean
@@ -7136,11 +7138,13 @@ export function runChatEventStream({
   normalizedBody,
   model,
   roleplayEnabled,
+  onFinalEvent,
 }: {
   body: ChatRequestBody | null
   normalizedBody: ReturnType<typeof normalizeBody>
   model: ChatModelConfig
   roleplayEnabled: boolean
+  onFinalEvent?: (event: Record<string, unknown>) => Promise<void>
 }) {
   const encoder = new TextEncoder()
   const runId = makeServerId("run")
@@ -7160,8 +7164,11 @@ export function runChatEventStream({
       let finalStatus: "completed" | "failed" | "unknown" = "unknown"
       let finalErrorCode: number | undefined
       let finalErrorStatus: string | undefined
+      let clientConnected = true
+      let finalPersistencePromise: Promise<void> | null = null
 
       const send = (payload: Record<string, unknown>) => {
+        const eventPayload = { event_id: eventId++, ...payload }
         if (payload.is_final_event === true) {
           finalStatus = payload.status === "completed"
             ? "completed"
@@ -7174,8 +7181,18 @@ export function runChatEventStream({
           finalErrorStatus = typeof payload.generation_error_status === "string"
             ? payload.generation_error_status
             : finalErrorStatus
+          if (onFinalEvent) {
+            finalPersistencePromise = onFinalEvent(eventPayload).catch((error) => {
+              console.error("[chat stream final persistence failed]", error)
+            })
+          }
         }
-        controller.enqueue(encoder.encode(encodeStreamEvent({ event_id: eventId++, ...payload })))
+        if (!clientConnected) return
+        try {
+          controller.enqueue(encoder.encode(encodeStreamEvent(eventPayload)))
+        } catch {
+          clientConnected = false
+        }
       }
 
       const sendPhase = (phase: string, phaseLabel: string) => {
@@ -7337,6 +7354,7 @@ export function runChatEventStream({
           user_message_id: userMessageId,
         })
       } finally {
+        if (finalPersistencePromise) await finalPersistencePromise
         debugGenerationBoundary("END", {
           requestId: runId,
           model: providerModel,
@@ -7348,7 +7366,13 @@ export function runChatEventStream({
           errorCode: finalErrorCode,
           errorStatus: finalErrorStatus,
         })
-        controller.close()
+        if (clientConnected) {
+          try {
+            controller.close()
+          } catch {
+            // The client may have left the chat while generation continued.
+          }
+        }
       }
     },
   })

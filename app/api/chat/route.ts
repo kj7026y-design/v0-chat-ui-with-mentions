@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { getChatModelConfig } from "@/lib/chat-models"
+import { getAdminSession } from "@/lib/server/admin-auth"
+import { upsertChatMessages, type StoredChatMessage } from "@/lib/server/chat-message-store"
 import {
   HybridChatError,
   hasHybridChatRequestShape,
@@ -43,7 +45,89 @@ export async function POST(request: Request) {
 
   try {
     if (body?.stream) {
-      return runChatEventStream({ body, normalizedBody, model, roleplayEnabled })
+      const session = await getAdminSession().catch(() => null)
+      const roomId = body.roomId?.trim()
+      const characterName = body.characterName?.trim()
+      const userMessageId = body.userMessageId?.trim()
+      const userMessageContent = body.userMessageContent?.trim()
+      const characterMessageId = body.characterMessageId?.trim()
+      const requestedUserTimestamp = new Date(body.userMessageTimestamp || "")
+      const userTimestamp = Number.isNaN(requestedUserTimestamp.getTime())
+        ? new Date()
+        : requestedUserTimestamp
+
+      if (session && roomId) {
+        const pendingMessages: StoredChatMessage[] = []
+        if (userMessageId && userMessageContent) {
+          pendingMessages.push({
+            id: userMessageId,
+            type: "user",
+            content: userMessageContent,
+            timestamp: userTimestamp.toISOString(),
+            status: "completed",
+          })
+        }
+        if (characterMessageId) {
+          pendingMessages.push({
+            id: characterMessageId,
+            type: "ai",
+            content: "",
+            timestamp: new Date().toISOString(),
+            status: "streaming",
+          })
+        }
+        if (pendingMessages.length > 0) {
+        await upsertChatMessages({
+          accountId: session.accountId,
+          roomId,
+          characterName,
+            messages: pendingMessages,
+        })
+        }
+      }
+
+      return runChatEventStream({
+        body,
+        normalizedBody,
+        model,
+        roleplayEnabled,
+        onFinalEvent: session && roomId
+          ? async (event) => {
+              const messageId = typeof event.message_id === "string" ? event.message_id : ""
+              const content = typeof event.saved_content === "string" ? event.saved_content.trim() : ""
+              const completed = event.status === "completed" && Boolean(content)
+              if (!messageId) return
+
+              const message: StoredChatMessage = {
+                id: messageId,
+                type: "ai",
+                content: completed ? content : "답변 생성에 실패했어요. 다시 시도해 주세요.",
+                timestamp: new Date().toISOString(),
+                status: completed ? "completed" : "failed",
+                generationRunId: event.run_id,
+                provider: event.provider,
+                model: event.model,
+                attemptedModel: event.attempted_model,
+                outputModel: event.output_model,
+                validationStatus: event.validation_status,
+                validationFailures: event.validation_failures,
+                validationAttempts: event.validation_attempts,
+                repairAttempted: event.repair_attempted,
+                fallback: event.fallback,
+                fallbackProvider: event.fallback_provider,
+                fallbackModel: event.fallback_model,
+                providerOutcome: event.provider_outcome,
+                timeoutStage: event.timeout_stage,
+              }
+              await upsertChatMessages({
+                accountId: session.accountId,
+                roomId,
+                characterName,
+                messages: [message],
+              })
+            }
+          : undefined,
+      })
     }
 
     if (roleplayEnabled) {

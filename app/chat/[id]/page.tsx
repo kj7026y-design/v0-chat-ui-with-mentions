@@ -509,6 +509,9 @@ export default function ChatPage() {
     activeSearchResultIndex >= 0
       ? searchResultIds[activeSearchResultIndex]
       : undefined;
+  const hasPendingGeneration = messages.some(
+    (message) => message.type === "ai" && message.status === "streaming",
+  );
   const characterName = chatMeta?.characterName ?? CHARACTER_NAME;
   const roomName = chatMeta ? getChatDisplayName(chatMeta) : characterName;
   const characterEmoji = chatMeta?.characterEmoji ?? CHARACTER_EMOJI;
@@ -894,6 +897,14 @@ export default function ChatPage() {
           );
         }
         setMessages(page.messages);
+        const restoredPendingGeneration = page.messages.some(
+          (message) => message.type === "ai" && message.status === "streaming",
+        );
+        setIsTyping(restoredPendingGeneration);
+        if (restoredPendingGeneration) {
+          setTypingLabel("답변을 생성하는 중...");
+          setTypingVariant("text");
+        }
         setHistoryCursor(page.nextCursor);
         setHasOlderHistory(page.hasMore);
         setIsHistoryPersistenceEnabled(true);
@@ -909,6 +920,51 @@ export default function ChatPage() {
       cancelled = true;
     };
   }, [characterName, chatId]);
+
+  useEffect(() => {
+    if (isHistoryLoading || !hasPendingGeneration) return;
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const pollGeneration = async () => {
+      try {
+        const page = await loadChatHistoryPage(chatId, undefined, characterName);
+        if (cancelled) return;
+        const stillPending = page.messages.some(
+          (message) => message.type === "ai" && message.status === "streaming",
+        );
+        if (stillPending) {
+          pollTimer = setTimeout(() => void pollGeneration(), 2000);
+          return;
+        }
+
+        for (const message of page.messages) {
+          persistedMessageFingerprintsRef.current.set(
+            message.id,
+            getChatMessageFingerprint(message),
+          );
+        }
+        setMessages(page.messages);
+        setHistoryCursor(page.nextCursor);
+        setHasOlderHistory(page.hasMore);
+        setIsTyping(false);
+        setTypingLabel(undefined);
+        setTypingVariant("text");
+      } catch {
+        if (!cancelled) {
+          pollTimer = setTimeout(() => void pollGeneration(), 3000);
+        }
+      }
+    };
+
+    setIsTyping(true);
+    setTypingLabel((current) => current || "답변을 생성하는 중...");
+    pollTimer = setTimeout(() => void pollGeneration(), 1000);
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [characterName, chatId, hasPendingGeneration, isHistoryLoading]);
 
   useEffect(() => {
     if (!isHistoryPersistenceEnabled || isHistoryLoading) return;
@@ -1472,6 +1528,8 @@ export default function ChatPage() {
           {
             roomId: chatId,
             userMessageId: latestUserMessage?.id,
+            userMessageContent: latestUserMessage?.content,
+            userMessageTimestamp: latestUserMessage?.timestamp.toISOString(),
             characterMessageId,
             bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
             debugRawRoleplayStream: readingSettings.testRawRoleplayStream,

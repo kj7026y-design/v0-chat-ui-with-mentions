@@ -10,6 +10,7 @@ export interface ChatListItemData {
   lastMessage: string
   timestamp: Date
   unreadCount: number
+  isGenerating?: boolean
 }
 
 export function getChatDisplayName(chat: Pick<ChatListItemData, "roomName" | "characterName">) {
