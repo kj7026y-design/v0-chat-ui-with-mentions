@@ -18,6 +18,26 @@ export interface AuthenticatedAccount {
   writerTier?: WriterTier
 }
 
+export interface MemberAccountProfile {
+  memberId: string
+  email: string
+  nickname: string
+  birthDate: string
+  memberKind: MemberKind
+  writerTier: WriterTier | null
+  credit: number
+}
+
+interface MemberAccountProfileRow {
+  member_id: string
+  email: string
+  nickname: string
+  birth_date: string | Date
+  member_kind: MemberKind
+  writer_tier: WriterTier | null
+  credit: string | number
+}
+
 interface AccountRow {
   account_id: string
   account_type: AccountType
@@ -103,6 +123,15 @@ const SAMPLE_ACCOUNTS: SampleAccount[] = [
     memberKind: "general",
     birthDate: "2000-06-18",
   },
+  {
+    accountId: "member-tester",
+    accountType: "member",
+    role: "member",
+    identifier: "tester@storychat.test",
+    displayName: "테스터",
+    memberKind: "general",
+    birthDate: "2000-01-01",
+  },
 ]
 
 let schemaReady: Promise<void> | null = null
@@ -132,10 +161,6 @@ function verifyPassword(password: string, encodedHash: string) {
 
 async function seedSampleAccounts() {
   const sql = getNeonSql()
-  const countRows = await sql.query(
-    "SELECT COUNT(*)::int AS count FROM storychat_accounts",
-  ) as unknown as Array<{ count: number }>
-  if ((countRows[0]?.count ?? 0) > 0) return
 
   const accountQueries = SAMPLE_ACCOUNTS.map((account) => {
     const normalizedIdentifier = normalizeIdentifier(account.identifier)
@@ -143,7 +168,8 @@ async function seedSampleAccounts() {
       `INSERT INTO storychat_accounts (
          account_id, account_type, role, login_id, email, normalized_identifier,
          password_hash, display_name
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (account_id) DO NOTHING`,
       [
         account.accountId,
         account.accountType,
@@ -161,9 +187,10 @@ async function seedSampleAccounts() {
   const profileQueries = SAMPLE_ACCOUNTS
     .filter((account) => account.accountType === "member" && account.memberKind)
     .map((account) => sql.query(
-      `INSERT INTO storychat_member_profiles (account_id, member_kind, writer_tier, birth_date)
-       VALUES ($1, $2, $3, $4::date)`,
-      [account.accountId, account.memberKind, account.writerTier ?? null, account.birthDate ?? null],
+      `INSERT INTO storychat_member_profiles (account_id, nickname, member_kind, writer_tier, birth_date)
+       VALUES ($1, $2, $3, $4, $5::date)
+       ON CONFLICT (account_id) DO NOTHING`,
+      [account.accountId, account.displayName, account.memberKind, account.writerTier ?? null, account.birthDate ?? null],
     ))
   await sql.transaction(profileQueries)
 }
@@ -208,6 +235,7 @@ export async function ensureUserAccountSchema() {
       CREATE TABLE IF NOT EXISTS storychat_member_profiles (
         account_id TEXT PRIMARY KEY REFERENCES storychat_accounts(account_id) ON DELETE CASCADE,
         member_id TEXT NOT NULL DEFAULT ('MBR-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 12))),
+        nickname TEXT NOT NULL,
         member_kind TEXT NOT NULL CHECK (member_kind IN ('writer', 'general')),
         writer_tier TEXT CHECK (writer_tier IN ('prime', 'gold', 'silver')),
         birth_date DATE NOT NULL,
@@ -225,6 +253,18 @@ export async function ensureUserAccountSchema() {
       ALTER TABLE storychat_member_profiles
       ADD COLUMN IF NOT EXISTS member_id TEXT
     `
+    await sql`
+      ALTER TABLE storychat_member_profiles
+      ADD COLUMN IF NOT EXISTS nickname TEXT
+    `
+    await sql`
+      UPDATE storychat_member_profiles profile
+      SET nickname = account.display_name
+      FROM storychat_accounts account
+      WHERE account.account_id = profile.account_id
+        AND (profile.nickname IS NULL OR BTRIM(profile.nickname) = '')
+    `
+    await sql`ALTER TABLE storychat_member_profiles ALTER COLUMN nickname SET NOT NULL`
     await sql`
       ALTER TABLE storychat_member_profiles
       ALTER COLUMN member_id SET DEFAULT ('MBR-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 12)))
@@ -382,4 +422,82 @@ export async function getActiveAccountById(accountId: string): Promise<Authentic
     memberKind: account.member_kind ?? undefined,
     writerTier: account.writer_tier ?? undefined,
   }
+}
+
+function mapMemberAccountProfile(row: MemberAccountProfileRow): MemberAccountProfile {
+  return {
+    memberId: row.member_id,
+    email: row.email,
+    nickname: row.nickname,
+    birthDate: typeof row.birth_date === "string"
+      ? row.birth_date.slice(0, 10)
+      : row.birth_date.toISOString().slice(0, 10),
+    memberKind: row.member_kind,
+    writerTier: row.writer_tier,
+    credit: Number(row.credit),
+  }
+}
+
+export async function getMemberAccountProfile(accountId: string): Promise<MemberAccountProfile | null> {
+  await ensureUserAccountSchema()
+  const sql = getNeonSql()
+  const rows = await sql.query(
+    `SELECT
+       profile.member_id,
+       account.email,
+       profile.nickname,
+       TO_CHAR(profile.birth_date, 'YYYY-MM-DD') AS birth_date,
+       profile.member_kind,
+       profile.writer_tier,
+       account.credit
+     FROM storychat_accounts account
+     JOIN storychat_member_profiles profile ON profile.account_id = account.account_id
+     WHERE account.account_id = $1
+       AND account.account_type = 'member'
+       AND account.status = 'active'
+     LIMIT 1`,
+    [accountId],
+  ) as unknown as MemberAccountProfileRow[]
+  return rows[0] ? mapMemberAccountProfile(rows[0]) : null
+}
+
+export async function updateMemberAccountProfile({
+  accountId,
+  email,
+  nickname,
+}: {
+  accountId: string
+  email: string
+  nickname: string
+}): Promise<MemberAccountProfile | null> {
+  await ensureUserAccountSchema()
+  const sql = getNeonSql()
+  const rows = await sql.query(
+    `WITH updated_account AS (
+       UPDATE storychat_accounts
+       SET email = LOWER($2),
+           normalized_identifier = LOWER($2),
+           display_name = $3,
+           updated_at = NOW()
+       WHERE account_id = $1
+         AND account_type = 'member'
+         AND status = 'active'
+       RETURNING account_id, email, credit
+     ), updated_profile AS (
+       UPDATE storychat_member_profiles profile
+       SET nickname = $3,
+           updated_at = NOW()
+       FROM updated_account account
+       WHERE profile.account_id = account.account_id
+       RETURNING profile.account_id, profile.member_id, profile.nickname,
+                 profile.birth_date, profile.member_kind, profile.writer_tier
+     )
+     SELECT profile.member_id, account.email, profile.nickname,
+            profile.birth_date, profile.member_kind, profile.writer_tier,
+            account.credit
+     FROM updated_profile profile
+     JOIN updated_account account ON account.account_id = profile.account_id`,
+    [accountId, email, nickname],
+  ) as unknown as MemberAccountProfileRow[]
+  return rows[0] ? mapMemberAccountProfile(rows[0]) : null
 }

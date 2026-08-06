@@ -407,7 +407,7 @@ export default function MemberAdminPage() {
                     />
                   </th>
                   <th className="px-3 py-3 font-medium">회원 ID</th>
-                  <th className="px-3 py-3 font-medium">회원 정보</th>
+                  <th className="px-3 py-3 font-medium">회원 이름(닉네임)</th>
                   <th className="px-3 py-3 font-medium">나이</th>
                   <th className="px-3 py-3 font-medium">회원 등급</th>
                   <th className="px-3 py-3 text-right font-medium">크레딧</th>
@@ -428,12 +428,12 @@ export default function MemberAdminPage() {
                           checked={selected}
                           onChange={() => toggleMember(member.memberId)}
                           className="h-4 w-4 accent-primary"
-                          aria-label={`${member.displayName} 선택`}
+                          aria-label={`${member.nickname} 선택`}
                         />
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-foreground">{member.memberId}</td>
                       <td className="px-3 py-3">
-                        <p className="font-medium text-foreground">{member.displayName}</p>
+                        <p className="font-medium text-foreground">{member.nickname}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">{member.email}</p>
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-foreground">
@@ -470,7 +470,7 @@ export default function MemberAdminPage() {
                           type="button"
                           onClick={() => setEditingMember(member)}
                           className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                          aria-label={`${member.displayName} 정보 수정`}
+                          aria-label={`${member.nickname} 정보 수정`}
                         >
                           <Edit3 className="h-4 w-4" />
                         </button>
@@ -496,7 +496,7 @@ export default function MemberAdminPage() {
 
         {selectedMembers.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            선택: {selectedMembers.map((member) => member.displayName).join(", ")}
+            선택: {selectedMembers.map((member) => member.nickname).join(", ")}
           </p>
         )}
       </div>
@@ -549,14 +549,14 @@ function MemberEditDialog({
   onOpenChange: (open: boolean) => void
   onSave: (values: {
     email: string
-    displayName: string
+    nickname: string
     birthDate: string
     memberKind: ManagedMemberKind
     writerTier: ManagedWriterTier | null
   }) => void
 }) {
   const [email, setEmail] = useState("")
-  const [displayName, setDisplayName] = useState("")
+  const [nickname, setNickname] = useState("")
   const [birthDate, setBirthDate] = useState("")
   const [memberKind, setMemberKind] = useState<ManagedMemberKind>("general")
   const [writerTier, setWriterTier] = useState<ManagedWriterTier>("silver")
@@ -564,7 +564,7 @@ function MemberEditDialog({
   useEffect(() => {
     if (!member) return
     setEmail(member.email)
-    setDisplayName(member.displayName)
+    setNickname(member.nickname)
     setBirthDate(member.birthDate || "")
     setMemberKind(member.memberKind)
     setWriterTier(member.writerTier || "silver")
@@ -574,7 +574,7 @@ function MemberEditDialog({
     event.preventDefault()
     onSave({
       email: email.trim(),
-      displayName: displayName.trim(),
+      nickname: nickname.trim(),
       birthDate,
       memberKind,
       writerTier: memberKind === "writer" ? writerTier : null,
@@ -596,12 +596,12 @@ function MemberEditDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label htmlFor="member-display-name" className="text-sm font-medium text-foreground">표시명</label>
+              <label htmlFor="member-nickname" className="text-sm font-medium text-foreground">회원 이름(닉네임)</label>
               <Input
-                id="member-display-name"
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                maxLength={100}
+                id="member-nickname"
+                value={nickname}
+                onChange={(event) => setNickname(event.target.value)}
+                maxLength={50}
                 required
               />
             </div>

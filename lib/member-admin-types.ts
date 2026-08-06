@@ -11,7 +11,7 @@ export type ManagedWriterTier = "prime" | "gold" | "silver"
 export interface ManagedMember {
   memberId: string
   email: string
-  displayName: string
+  nickname: string
   birthDate: string
   age: number
   memberKind: ManagedMemberKind
@@ -34,7 +34,7 @@ export type MemberAdminAction =
       memberIds: string[]
       values: {
         email: string
-        displayName: string
+        nickname: string
         birthDate: string
         memberKind: ManagedMemberKind
         writerTier: ManagedWriterTier | null

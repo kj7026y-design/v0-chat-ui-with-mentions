@@ -13,7 +13,7 @@ import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
 interface ManagedMemberRow {
   member_id: string
   email: string
-  display_name: string
+  nickname: string
   birth_date: string | Date
   age: string | number
   member_kind: ManagedMemberKind
@@ -57,7 +57,7 @@ function mapMember(row: ManagedMemberRow): ManagedMember {
   return {
     memberId: row.member_id,
     email: row.email,
-    displayName: row.display_name,
+    nickname: row.nickname,
     birthDate: toDateOnly(row.birth_date),
     age: Number(row.age),
     memberKind: row.member_kind,
@@ -91,7 +91,7 @@ export async function listManagedMembers({ search = "", limit = 100 }: { search?
     SELECT
       profile.member_id,
       account.email,
-      account.display_name,
+      profile.nickname,
       TO_CHAR(profile.birth_date, 'YYYY-MM-DD') AS birth_date,
       CASE
         WHEN profile.birth_date IS NULL THEN NULL
@@ -121,6 +121,7 @@ export async function listManagedMembers({ search = "", limit = 100 }: { search?
        AND (
          LOWER(account.email) = ANY($1::text[])
          OR UPPER(profile.member_id) = ANY($2::text[])
+         OR LOWER(profile.nickname) = ANY($1::text[])
        )
        ORDER BY account.created_at DESC, profile.member_id
        LIMIT $3`,
@@ -136,7 +137,7 @@ export async function listManagedMembers({ search = "", limit = 100 }: { search?
        AND (
          account.email ILIKE '%' || $1 || '%'
          OR profile.member_id ILIKE '%' || $1 || '%'
-         OR account.display_name ILIKE '%' || $1 || '%'
+         OR profile.nickname ILIKE '%' || $1 || '%'
        )
        ORDER BY account.created_at DESC, profile.member_id
        LIMIT $2`,
@@ -161,7 +162,7 @@ export async function updateMemberProfile({
   actorAccountId,
   memberId,
   email,
-  displayName,
+  nickname,
   birthDate,
   memberKind,
   writerTier,
@@ -169,14 +170,14 @@ export async function updateMemberProfile({
   actorAccountId: string
   memberId: string
   email: string
-  displayName: string
+  nickname: string
   birthDate: string
   memberKind: ManagedMemberKind
   writerTier: ManagedWriterTier | null
 }) {
   await ensureUserAccountSchema()
   const sql = getNeonSql()
-  const details = JSON.stringify({ email, displayName, birthDate, memberKind, writerTier })
+  const details = JSON.stringify({ email, nickname, birthDate, memberKind, writerTier })
   const rows = await sql.query(
     `WITH target AS (
        SELECT account.account_id
@@ -195,7 +196,8 @@ export async function updateMemberProfile({
        RETURNING account.account_id
      ), updated_profile AS (
        UPDATE storychat_member_profiles profile
-       SET birth_date = $4::date,
+       SET nickname = $3,
+           birth_date = $4::date,
            member_kind = $5,
            writer_tier = $6,
            updated_at = NOW()
@@ -210,7 +212,7 @@ export async function updateMemberProfile({
        FROM target
      )
      SELECT account_id AS target_account_id FROM updated_account`,
-    [memberId, email, displayName, birthDate, memberKind, writerTier, actorAccountId, details],
+    [memberId, email, nickname, birthDate, memberKind, writerTier, actorAccountId, details],
   ) as unknown as TargetRow[]
   await assertUpdatedTargets(rows, [memberId])
 }

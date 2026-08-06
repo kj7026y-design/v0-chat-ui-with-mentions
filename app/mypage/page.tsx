@@ -46,14 +46,24 @@ import { EventDetailModal } from "@/components/chat/event-detail-modal"
 
 const PROFILE_STORAGE_KEY = "storychat_profile"
 const DEFAULT_PROFILE: ProfileState = {
-  name: "김지은",
-  email: "jieun@email.com",
+  name: "회원",
+  email: "",
 }
 
 interface ProfileState {
   name: string
   email: string
   avatarUrl?: string
+}
+
+interface MemberProfileData {
+  memberId: string
+  email: string
+  nickname: string
+  birthDate: string
+  memberKind: "writer" | "general"
+  writerTier: "prime" | "gold" | "silver" | null
+  credit: number
 }
 
 export default function MyPage() {
@@ -69,6 +79,9 @@ export default function MyPage() {
   const [isAccountDeleteConfirmOpen, setIsAccountDeleteConfirmOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileState>(DEFAULT_PROFILE)
   const [profileForm, setProfileForm] = useState<ProfileState>(profile)
+  const [memberProfile, setMemberProfile] = useState<MemberProfileData | null>(null)
+  const [isProfileLoading, setIsProfileLoading] = useState(true)
+  const [isProfileSaving, setIsProfileSaving] = useState(false)
   const credits = useAppStore((s) => s.credits)
   const events = useAppStore((s) => s.events)
   const isDark = mounted ? theme === "dark" : true
@@ -78,22 +91,40 @@ export default function MyPage() {
     setLibrary(getStoryChatLibrary())
     setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
 
+    let savedAvatarUrl: string | undefined
     const savedProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY)
     if (savedProfile) {
       try {
         const parsedProfile = JSON.parse(savedProfile) as Partial<ProfileState>
-        const nextProfile = {
-          ...DEFAULT_PROFILE,
-          name: parsedProfile.name?.trim() || DEFAULT_PROFILE.name,
-          email: parsedProfile.email?.trim() || DEFAULT_PROFILE.email,
-          avatarUrl: parsedProfile.avatarUrl || undefined,
-        }
-        setProfile(nextProfile)
-        setProfileForm(nextProfile)
+        savedAvatarUrl = parsedProfile.avatarUrl || undefined
       } catch {
         window.localStorage.removeItem(PROFILE_STORAGE_KEY)
       }
     }
+
+    const loadMemberProfile = async () => {
+      try {
+        const response = await fetch("/api/member/profile", { cache: "no-store" })
+        const data = await response.json().catch(() => ({})) as {
+          profile?: MemberProfileData
+          error?: string
+        }
+        if (!response.ok || !data.profile) throw new Error(data.error || "회원 정보를 불러오지 못했습니다.")
+        const nextProfile = {
+          name: data.profile.nickname,
+          email: data.profile.email,
+          avatarUrl: savedAvatarUrl,
+        }
+        setMemberProfile(data.profile)
+        setProfile(nextProfile)
+        setProfileForm(nextProfile)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "회원 정보를 불러오지 못했습니다.")
+      } finally {
+        setIsProfileLoading(false)
+      }
+    }
+    void loadMemberProfile()
 
     const syncGeneratedMedia = () => setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
     window.addEventListener("storychat-generated-media-updated", syncGeneratedMedia)
@@ -175,9 +206,10 @@ export default function MyPage() {
     setIsProfileDialogOpen(true)
   }
 
-  const handleProfileSave = () => {
+  const handleProfileSave = async () => {
+    if (isProfileSaving) return
     if (!profileForm.name.trim()) {
-      toast.error("이름을 입력해주세요.")
+      toast.error("닉네임을 입력해주세요.")
       return
     }
     if (!profileForm.email.trim()) {
@@ -185,15 +217,38 @@ export default function MyPage() {
       return
     }
 
-    const nextProfile: ProfileState = {
-      name: profileForm.name.trim(),
-      email: profileForm.email.trim(),
-      avatarUrl: profileForm.avatarUrl,
+    setIsProfileSaving(true)
+    try {
+      const response = await fetch("/api/member/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nickname: profileForm.name.trim(),
+          email: profileForm.email.trim(),
+        }),
+      })
+      const data = await response.json().catch(() => ({})) as {
+        profile?: MemberProfileData
+        error?: string
+      }
+      if (!response.ok || !data.profile) throw new Error(data.error || "프로필을 수정하지 못했습니다.")
+
+      const nextProfile: ProfileState = {
+        name: data.profile.nickname,
+        email: data.profile.email,
+        avatarUrl: profileForm.avatarUrl,
+      }
+      setMemberProfile(data.profile)
+      setProfile(nextProfile)
+      setProfileForm(nextProfile)
+      window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify({ avatarUrl: nextProfile.avatarUrl }))
+      setIsProfileDialogOpen(false)
+      toast("프로필을 수정했어요.")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "프로필을 수정하지 못했습니다.")
+    } finally {
+      setIsProfileSaving(false)
     }
-    setProfile(nextProfile)
-    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfile))
-    setIsProfileDialogOpen(false)
-    toast("프로필을 수정했어요.")
   }
 
   const handleLogout = async () => {
@@ -229,13 +284,21 @@ export default function MyPage() {
 
           {/* Profile Info */}
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-foreground">{profile.name}</h1>
+            <h1 className="text-xl font-bold text-foreground">
+              {isProfileLoading ? "회원 정보 불러오는 중" : profile.name}
+            </h1>
             <p className="text-sm text-muted-foreground mt-0.5">{profile.email}</p>
+            {memberProfile && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {memberProfile.memberId} · {getMemberGradeLabel(memberProfile)}
+              </p>
+            )}
           </div>
 
           {/* Edit Button */}
           <button
             onClick={handleProfileEdit}
+            disabled={isProfileLoading || !memberProfile}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors"
           >
             <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
@@ -509,6 +572,7 @@ export default function MyPage() {
         onOpenChange={setIsProfileDialogOpen}
         onChange={setProfileForm}
         onSave={handleProfileSave}
+        isSaving={isProfileSaving}
       />
       <ConfirmModal
         open={isAccountDeleteConfirmOpen}
@@ -528,12 +592,14 @@ function ProfileEditDialog({
   onOpenChange,
   onChange,
   onSave,
+  isSaving,
 }: {
   open: boolean
   profile: ProfileState
   onOpenChange: (open: boolean) => void
   onChange: (profile: ProfileState) => void
   onSave: () => void
+  isSaving: boolean
 }) {
   const update = (field: keyof ProfileState, value: string | undefined) => {
     onChange({ ...profile, [field]: value })
@@ -562,7 +628,7 @@ function ProfileEditDialog({
         <DialogHeader>
           <DialogTitle>프로필 수정</DialogTitle>
           <DialogDescription>
-            마이페이지에 표시될 이름, 이메일, 프로필 이미지를 수정해요.
+            DB에 저장될 닉네임과 이메일, 프로필 이미지를 수정해요.
           </DialogDescription>
         </DialogHeader>
 
@@ -606,7 +672,7 @@ function ProfileEditDialog({
 
           <div className="space-y-2">
             <label htmlFor="profile-name" className="text-sm font-medium text-foreground">
-              이름
+              닉네임
             </label>
             <Input
               id="profile-name"
@@ -631,12 +697,21 @@ function ProfileEditDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             취소
           </Button>
-          <Button onClick={onSave}>저장</Button>
+          <Button onClick={onSave} disabled={isSaving}>
+            {isSaving ? "저장 중..." : "저장"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
+}
+
+function getMemberGradeLabel(profile: MemberProfileData) {
+  if (profile.memberKind === "general") return "일반회원"
+  if (profile.writerTier === "prime") return "프라임 작가"
+  if (profile.writerTier === "gold") return "골드 작가"
+  return "실버 작가"
 }

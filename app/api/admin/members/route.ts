@@ -120,13 +120,13 @@ export async function PATCH(request: Request) {
       }
       const values = body.values
       const email = typeof values.email === "string" ? values.email.trim().toLowerCase() : ""
-      const displayName = typeof values.displayName === "string" ? values.displayName.trim() : ""
+      const nickname = typeof values.nickname === "string" ? values.nickname.trim() : ""
       const birthDate = typeof values.birthDate === "string" ? values.birthDate : ""
       const memberKind = values.memberKind
       const writerTier = values.writerTier
       if (
         !EMAIL_PATTERN.test(email) || email.length > 254 ||
-        !displayName || displayName.length > 100 ||
+        !nickname || nickname.length > 50 ||
         !isValidBirthDate(birthDate) ||
         !isMemberKind(memberKind) ||
         (memberKind === "writer" && !isWriterTier(writerTier)) ||
@@ -138,7 +138,7 @@ export async function PATCH(request: Request) {
         actorAccountId: auth.session.accountId,
         memberId: memberIds[0],
         email,
-        displayName,
+        nickname,
         birthDate,
         memberKind,
         writerTier,

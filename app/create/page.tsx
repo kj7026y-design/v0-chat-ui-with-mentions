@@ -12,15 +12,15 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleUserRound,
-  Layers3,
+  Layers,
   PenTool,
   Plus,
   Rocket,
   Save,
+  Smile,
   Sparkles,
   Trash2,
-  UserRound,
+  User,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -91,33 +91,6 @@ const workSteps: { id: WorkStep; label: string }[] = [
   { id: "character", label: "캐릭터" },
   { id: "world", label: "세계관" },
   { id: "review", label: "완성본" },
-]
-
-const createOptions = [
-  {
-    mode: "work" as EntryMode,
-    title: "작품 만들기",
-    description: "캐릭터와 세계관을 연결해서 바로 채팅할 수 있는 완성본을 만들어요.",
-    icon: Layers3,
-  },
-  {
-    mode: "character" as EntryMode,
-    title: "캐릭터 만들기",
-    description: "캐릭터만 따로 만들고 내 작품에 저장해요.",
-    icon: UserRound,
-  },
-  {
-    mode: "world" as EntryMode,
-    title: "세계관 만들기",
-    description: "이야기의 배경과 규칙만 따로 만들어요.",
-    icon: BookOpen,
-  },
-  {
-    mode: "persona" as EntryMode,
-    title: "자아 만들기",
-    description: "채팅에서 사용할 나의 역할을 따로 만들어요.",
-    icon: CircleUserRound,
-  },
 ]
 
 const emptyCharacter = (): StoryCharacter => ({
@@ -551,6 +524,8 @@ export default function CreatePage() {
         <main className="mx-auto w-full max-w-5xl p-4 md:p-8 pb-28 space-y-6">
           {mode === "menu" && (
             <CreateMenu
+              characterCount={library.characters.length}
+              worldCount={library.worlds.length}
               showWorkContinue={showWorkContinue}
               onContinueWork={() => {
                 setShowWorkContinue(false)
@@ -768,51 +743,109 @@ export default function CreatePage() {
 }
 
 function CreateMenu({
+  characterCount,
+  worldCount,
   showWorkContinue,
   onContinueWork,
   onStart,
 }: {
+  characterCount: number
+  worldCount: number
   showWorkContinue: boolean
   onContinueWork: () => void
   onStart: (mode: EntryMode) => void
 }) {
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold tracking-tight">무엇을 만들까요?</h2>
-        <p className="text-sm text-muted-foreground">
+    <div className="mx-auto w-full max-w-xl">
+      <div>
+        <h2 className="text-xl font-semibold text-foreground">무엇을 만들까요?</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
           필요한 항목만 따로 만들거나, 완성본으로 묶어 바로 채팅을 시작할 수 있어요.
         </p>
       </div>
 
       {showWorkContinue && (
-        <ContinueCard
-          title="작성 중인 작품이 있어요. 이어서 작성할까요?"
-          onContinue={onContinueWork}
-        />
+        <div className="mt-5">
+          <ContinueCard
+            title="작성 중인 작품이 있어요. 이어서 작성할까요?"
+            onContinue={onContinueWork}
+          />
+        </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {createOptions.map((option) => (
-          <button
-            key={option.mode}
-            onClick={() => onStart(option.mode)}
-            className="group rounded-xl border border-border bg-card p-4 text-left transition-colors hover:bg-accent"
-          >
-            <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
-                <option.icon className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 space-y-1">
-                <h3 className="font-semibold text-foreground">{option.title}</h3>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {option.description}
-                </p>
-              </div>
-            </div>
-          </button>
-        ))}
+      <button
+        type="button"
+        onClick={() => onStart("work")}
+        className="mt-5 w-full rounded-xl border-2 border-blue-500 bg-card p-4 text-left transition hover:bg-accent/40 active:scale-[0.99]"
+      >
+        <span className="inline-block rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+          추천 · 빠른 시작
+        </span>
+
+        <div className="mt-2.5 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <Layers className="h-5 w-5" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-medium text-foreground">작품 만들기</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              캐릭터와 세계관을 연결해서 바로 채팅할 수 있는 완성본을 만들어요.
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground/70">
+              보유 캐릭터 {characterCount}개 · 세계관 {worldCount}개 — 만드는 중에 새로 추가할 수 있어요
+            </p>
+          </div>
+
+          <ChevronRight className="mt-0.5 h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+        </div>
+      </button>
+
+      <p className="mb-2 mt-6 text-xs text-muted-foreground">구성 요소만 따로 만들기</p>
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <button
+          type="button"
+          onClick={() => onStart("character")}
+          className="rounded-xl border border-border bg-card p-3.5 text-left transition hover:bg-accent/40 active:scale-[0.98]"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <User className="h-[17px] w-[17px]" />
+          </div>
+          <p className="mt-2 text-sm font-medium text-foreground">캐릭터 만들기</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">캐릭터만 따로 만들어요.</p>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onStart("world")}
+          className="rounded-xl border border-border bg-card p-3.5 text-left transition hover:bg-accent/40 active:scale-[0.98]"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            <BookOpen className="h-[17px] w-[17px]" />
+          </div>
+          <p className="mt-2 text-sm font-medium text-foreground">세계관 만들기</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">배경과 규칙만 만들어요.</p>
+        </button>
       </div>
+
+      <button
+        type="button"
+        onClick={() => onStart("persona")}
+        className="mt-2.5 w-full rounded-xl border border-border bg-card p-3.5 text-left transition hover:bg-accent/40 active:scale-[0.98]"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+            <Smile className="h-[17px] w-[17px]" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-foreground">자아 만들기</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              채팅에서 쓸 나의 역할을 만들어요 (캐릭터와 달리 &apos;나&apos; 자신이에요).
+            </p>
+          </div>
+        </div>
+      </button>
     </div>
   )
 }
