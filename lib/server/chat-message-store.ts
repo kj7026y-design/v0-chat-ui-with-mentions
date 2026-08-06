@@ -24,6 +24,21 @@ interface MessageRow {
 
 interface ChatRoomRow {
   chat_room_id: string | number
+  room_key?: string
+  room_name?: string
+  character_name?: string
+  updated_at?: string | Date
+  last_message?: string | null
+  last_message_at?: string | Date | null
+}
+
+export interface StoredChatRoom {
+  roomId: string
+  roomName: string
+  characterName: string
+  updatedAt: string
+  lastMessage?: string
+  lastMessageAt?: string
 }
 
 export interface ChatMessagePage {
@@ -49,11 +64,23 @@ async function ensureSchema() {
         account_id TEXT NOT NULL REFERENCES storychat_accounts(account_id) ON DELETE CASCADE,
         room_key TEXT NOT NULL,
         character_name VARCHAR(100) NOT NULL DEFAULT '알 수 없는 캐릭터',
+        room_name VARCHAR(100) NOT NULL DEFAULT '알 수 없는 캐릭터',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (account_id, room_key)
       )
     `
+    await sql`
+      ALTER TABLE storychat_chat_rooms
+      ADD COLUMN IF NOT EXISTS room_name VARCHAR(100)
+    `
+    await sql`
+      UPDATE storychat_chat_rooms
+      SET room_name = character_name
+      WHERE room_name IS NULL OR BTRIM(room_name) = ''
+    `
+    await sql`ALTER TABLE storychat_chat_rooms ALTER COLUMN room_name SET DEFAULT '알 수 없는 캐릭터'`
+    await sql`ALTER TABLE storychat_chat_rooms ALTER COLUMN room_name SET NOT NULL`
     await sql`
       CREATE INDEX IF NOT EXISTS storychat_chat_rooms_account_idx
       ON storychat_chat_rooms (account_id, updated_at DESC)
@@ -119,7 +146,7 @@ async function findChatRoomId(accountId: string, roomId: string) {
   return rows[0] ? String(rows[0].chat_room_id) : null
 }
 
-async function ensureChatRoom({
+export async function ensureChatRoom({
   accountId,
   roomId,
   characterName,
@@ -131,10 +158,16 @@ async function ensureChatRoom({
   const sql = getNeonSql()
   const normalizedCharacterName = normalizeCharacterName(characterName)
   const rows = await sql.query(
-    `INSERT INTO storychat_chat_rooms (account_id, room_key, character_name)
-     VALUES ($1, $2, $3)
+    `INSERT INTO storychat_chat_rooms (account_id, room_key, character_name, room_name)
+     VALUES ($1, $2, $3, $3)
      ON CONFLICT (account_id, room_key)
      DO UPDATE SET
+       room_name = CASE
+         WHEN storychat_chat_rooms.room_name = storychat_chat_rooms.character_name
+           OR storychat_chat_rooms.room_name = $4
+         THEN EXCLUDED.character_name
+         ELSE storychat_chat_rooms.room_name
+       END,
        character_name = CASE
          WHEN EXCLUDED.character_name = $4 THEN storychat_chat_rooms.character_name
          ELSE EXCLUDED.character_name
@@ -144,6 +177,82 @@ async function ensureChatRoom({
     [accountId, roomId, normalizedCharacterName, UNKNOWN_CHARACTER_NAME],
   ) as unknown as ChatRoomRow[]
   return String(rows[0].chat_room_id)
+}
+
+function parseChatRoom(row: ChatRoomRow): StoredChatRoom {
+  return {
+    roomId: row.room_key ?? "",
+    roomName: row.room_name || row.character_name || UNKNOWN_CHARACTER_NAME,
+    characterName: row.character_name || UNKNOWN_CHARACTER_NAME,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+    lastMessage: row.last_message || undefined,
+    lastMessageAt: row.last_message_at ? new Date(row.last_message_at).toISOString() : undefined,
+  }
+}
+
+export async function getChatRooms(accountId: string, roomId?: string) {
+  await ensureSchema()
+  const sql = getNeonSql()
+  const rows = roomId
+    ? await sql.query(
+        `SELECT room.room_key, room.room_name, room.character_name, room.updated_at,
+                latest.content AS last_message, latest.client_timestamp AS last_message_at
+         FROM storychat_chat_rooms room
+         LEFT JOIN LATERAL (
+           SELECT message.content, message.client_timestamp
+           FROM storychat_messages message
+           WHERE message.chat_room_id = room.chat_room_id
+             AND message.message_type IN ('user', 'ai')
+           ORDER BY message.message_seq DESC
+           LIMIT 1
+         ) latest ON TRUE
+         WHERE room.account_id = $1 AND room.room_key = $2
+         LIMIT 1`,
+        [accountId, roomId],
+      ) as unknown as ChatRoomRow[]
+    : await sql.query(
+        `SELECT room.room_key, room.room_name, room.character_name, room.updated_at,
+                latest.content AS last_message, latest.client_timestamp AS last_message_at
+         FROM storychat_chat_rooms room
+         LEFT JOIN LATERAL (
+           SELECT message.content, message.client_timestamp
+           FROM storychat_messages message
+           WHERE message.chat_room_id = room.chat_room_id
+             AND message.message_type IN ('user', 'ai')
+           ORDER BY message.message_seq DESC
+           LIMIT 1
+         ) latest ON TRUE
+         WHERE room.account_id = $1
+         ORDER BY COALESCE(latest.client_timestamp, room.updated_at) DESC`,
+        [accountId],
+      ) as unknown as ChatRoomRow[]
+
+  return rows.map(parseChatRoom)
+}
+
+export async function updateChatRoomName({
+  accountId,
+  roomId,
+  roomName,
+  characterName,
+}: {
+  accountId: string
+  roomId: string
+  roomName: string
+  characterName?: string
+}) {
+  await ensureSchema()
+  await ensureChatRoom({ accountId, roomId, characterName })
+  const sql = getNeonSql()
+  const rows = await sql.query(
+    `UPDATE storychat_chat_rooms
+     SET room_name = $3, updated_at = NOW()
+     WHERE account_id = $1 AND room_key = $2
+     RETURNING room_key, room_name, character_name, updated_at`,
+    [accountId, roomId, roomName],
+  ) as unknown as ChatRoomRow[]
+
+  return rows[0] ? parseChatRoom(rows[0]) : null
 }
 
 const MESSAGE_COLUMN_KEYS = new Set(["id", "type", "content", "timestamp"])

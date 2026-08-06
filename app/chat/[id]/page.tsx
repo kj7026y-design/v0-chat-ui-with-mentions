@@ -9,6 +9,10 @@ import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatMessageList } from "@/components/chat/chat-message-list";
 import { ChatInput } from "@/components/chat/chat-input";
 import { ChatSettingsDrawer } from "@/components/chat/chat-settings-drawer";
+import {
+  ChatUtilityModal,
+  type ChatUtilityModalType,
+} from "@/components/chat/chat-utility-modal";
 import { ChatModelDrawer } from "@/components/chat/chat-model-drawer";
 import { WorkIntroModal } from "@/components/chat/work-intro-modal";
 import { QuestRewardPopup } from "@/components/chat/quest-reward-popup";
@@ -59,9 +63,12 @@ import {
 import { useAppStore, CREDIT_COSTS } from "@/lib/store";
 import {
   defaultChats,
+  getChatDisplayName,
   getChatList,
+  saveChatList,
   type ChatListItemData,
 } from "@/lib/chat-list-storage";
+import { ensureChatRoom } from "@/lib/chat-room-client";
 import {
   defaultChatReadingSettings,
   getChatReadingSettings,
@@ -84,6 +91,8 @@ import {
   getCurrentUserId,
   getImageGenerationUsage,
   incrementFreeImageGenerationUsage,
+  setGeneratedMediaUserId,
+  syncGeneratedMediaWithServer,
   saveGeneratedMedia,
 } from "@/lib/generated-media-storage";
 import {
@@ -100,6 +109,7 @@ import { withReturnTo } from "@/lib/safe-navigation";
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger";
 
+const CHAT_UTILITY_HISTORY_KEY = "__storyChatUtilityModal";
 const CHAT_THEME_BACKGROUNDS: Record<Exclude<ChatThemeId, "system">, string> = {
   light: "#FFFFFF",
   dark: "#121212",
@@ -433,6 +443,8 @@ export default function ChatPage() {
     string | null
   >(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [chatUtilityModal, setChatUtilityModal] =
+    useState<ChatUtilityModalType | null>(null);
   const [isModelDrawerOpen, setIsModelDrawerOpen] = useState(false);
   const [isStatusPanelOpen, setIsStatusPanelOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -498,6 +510,7 @@ export default function ChatPage() {
       ? searchResultIds[activeSearchResultIndex]
       : undefined;
   const characterName = chatMeta?.characterName ?? CHARACTER_NAME;
+  const roomName = chatMeta ? getChatDisplayName(chatMeta) : characterName;
   const characterEmoji = chatMeta?.characterEmoji ?? CHARACTER_EMOJI;
   const currentWork =
     library.works.find((work) => work.id === chatId) ??
@@ -507,6 +520,36 @@ export default function ChatPage() {
       );
       return character?.name === characterName;
     });
+
+  useEffect(() => {
+    const getHistoryModal = (state: unknown): ChatUtilityModalType | null => {
+      if (!state || typeof state !== "object") return null;
+      const value = (state as Record<string, unknown>)[CHAT_UTILITY_HISTORY_KEY];
+      return value === "gallery" || value === "timeline" ? value : null;
+    };
+    const syncUtilityModal = (event?: PopStateEvent) => {
+      setChatUtilityModal(getHistoryModal(event?.state ?? window.history.state));
+    };
+
+    syncUtilityModal();
+    window.addEventListener("popstate", syncUtilityModal);
+    return () => window.removeEventListener("popstate", syncUtilityModal);
+  }, []);
+
+  const openChatUtilityModal = (type: ChatUtilityModalType) => {
+    window.history.pushState(
+      { ...window.history.state, [CHAT_UTILITY_HISTORY_KEY]: type },
+      "",
+      window.location.href,
+    );
+    setChatUtilityModal(type);
+  };
+
+  const closeChatUtilityModal = () => {
+    const activeHistoryModal = window.history.state?.[CHAT_UTILITY_HISTORY_KEY];
+    if (activeHistoryModal === chatUtilityModal) window.history.back();
+    else setChatUtilityModal(null);
+  };
   const currentWorld = currentWork
     ? library.worlds.find((world) => world.id === currentWork.worldId)
     : undefined;
@@ -832,6 +875,10 @@ export default function ChatPage() {
       try {
         const session = await getAdminSessionState();
         if (cancelled || !session.authenticated) return;
+        if (session.accountId) {
+          setGeneratedMediaUserId(session.accountId, session.username ? [session.username] : []);
+          void syncGeneratedMediaWithServer(session.accountId).catch(() => undefined);
+        }
 
         const page = await loadChatHistoryPage(
           chatId,
@@ -1182,6 +1229,28 @@ export default function ChatPage() {
       window.removeEventListener("storychat-library-updated", syncChatMeta);
     };
   }, [chatId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void ensureChatRoom(chatId, characterName)
+      .then((room) => {
+        if (cancelled || !room) return;
+        const chats = getChatList();
+        const nextChats = chats.map((chat) =>
+          chat.id === chatId ? { ...chat, roomName: room.roomName } : chat,
+        );
+        saveChatList(nextChats);
+        setChatMeta((current) =>
+          current ? { ...current, roomName: room.roomName } : current,
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [characterName, chatId]);
 
   // --- Core send flow (uses chat-engine; easy to swap for real API) ---
   const handleSendMessage = async (
@@ -2483,7 +2552,7 @@ export default function ChatPage() {
       style={{ backgroundColor: chatBackgroundColor }}
     >
       <ChatHeader
-        characterName={characterName}
+        characterName={roomName}
         characterEmoji={characterEmoji}
         modelLabel={selectedModel.badge ?? selectedModel.label}
         statusSummary={canShowProgressStatus ? headerStatusSummary : undefined}
@@ -2526,6 +2595,16 @@ export default function ChatPage() {
         onReadingSettingsChange={setReadingSettings}
         onClearChat={handleClearChat}
         onLeaveChat={handleLeaveChat}
+        onGalleryOpen={() => openChatUtilityModal("gallery")}
+        onTimelineOpen={() => openChatUtilityModal("timeline")}
+      />
+
+      <ChatUtilityModal
+        type={chatUtilityModal}
+        chatId={chatId}
+        roomName={roomName}
+        characterName={characterName}
+        onClose={closeChatUtilityModal}
       />
 
       <ChatModelDrawer

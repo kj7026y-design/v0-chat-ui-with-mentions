@@ -18,6 +18,7 @@ import {
   updateMemberProfile,
 } from "@/lib/server/member-admin-store"
 import { DatabaseNotConfiguredError } from "@/lib/server/neon-database"
+import { getMemberNicknameLength } from "@/lib/member-nickname"
 
 export const runtime = "nodejs"
 
@@ -126,7 +127,7 @@ export async function PATCH(request: Request) {
       const writerTier = values.writerTier
       if (
         !EMAIL_PATTERN.test(email) || email.length > 254 ||
-        !nickname || nickname.length > 50 ||
+        !nickname || getMemberNicknameLength(nickname) > 8 ||
         !isValidBirthDate(birthDate) ||
         !isMemberKind(memberKind) ||
         (memberKind === "writer" && !isWriterTier(writerTier)) ||

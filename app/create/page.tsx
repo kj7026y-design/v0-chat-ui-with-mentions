@@ -12,11 +12,15 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Layers,
+  ListOrdered,
+  Map,
   PenTool,
   Plus,
   Rocket,
   Save,
+  Settings,
   Smile,
   Sparkles,
   Trash2,
@@ -60,8 +64,6 @@ import {
   cleanIntroScenarios,
   createId,
   defaultLibrary,
-  defaultStoryChapter,
-  defaultStoryProgressSettings,
   getStoryChatLibrary,
   saveStoryChatLibrary,
   type StoryChapter,
@@ -77,6 +79,15 @@ import { cn } from "@/lib/utils"
 import { useSafeBack } from "@/hooks/use-safe-back"
 
 type EntryMode = "menu" | "work" | "character" | "world" | "persona"
+
+const CREATE_HISTORY_STATE_KEY = "__storyChatCreateMode"
+
+const isEntryMode = (value: unknown): value is EntryMode =>
+  value === "menu" ||
+  value === "work" ||
+  value === "character" ||
+  value === "world" ||
+  value === "persona"
 type WorkStep = "character" | "world" | "review"
 type WorkFormMode = "simple" | "advanced"
 type SourceMode = "select" | "new"
@@ -120,6 +131,19 @@ const emptyCharacter = (): StoryCharacter => ({
   createdAt: "",
 })
 
+const emptyStoryChapter = (): StoryChapter => ({
+  id: createId("chapter"),
+  title: "",
+  description: "",
+  startCondition: "",
+  goal: "",
+  mission: "",
+  keyEvent: "",
+  emotionalDirection: "",
+  nextChapterCondition: "",
+  progressRange: { start: 0, end: 100 },
+})
+
 const emptyWorld = (): StoryWorld => ({
   id: "",
   name: "",
@@ -135,7 +159,10 @@ const emptyWorld = (): StoryWorld => ({
   progress: 0,
   forbiddenSettings: "",
   coverColor: "from-neutral-800 to-neutral-950",
-  storyProgressSettings: defaultStoryProgressSettings(),
+  storyProgressSettings: {
+    useChapters: false,
+    chapters: [emptyStoryChapter()],
+  },
   createdAt: "",
 })
 
@@ -223,8 +250,6 @@ export default function CreatePage() {
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [workDraft, setWorkDraft] = useState<WorkDraft>(() => emptyWorkDraft())
   const [workFormMode, setWorkFormMode] = useState<WorkFormMode>("simple")
-  const [characterFormMode, setCharacterFormMode] = useState<WorkFormMode>("simple")
-  const [worldFormMode, setWorldFormMode] = useState<WorkFormMode>("simple")
   const [personaFormMode, setPersonaFormMode] = useState<WorkFormMode>("simple")
   const [showWorkContinue, setShowWorkContinue] = useState(false)
   const [characterDraft, setCharacterDraft] = useState<StoryCharacter>(() => emptyCharacter())
@@ -237,15 +262,36 @@ export default function CreatePage() {
     setLibrary(getStoryChatLibrary())
     loadDrafts()
     const requestedMode = new URLSearchParams(window.location.search).get("mode") as EntryMode | null
-    if (
-      requestedMode === "work" ||
-      requestedMode === "character" ||
-      requestedMode === "world" ||
-      requestedMode === "persona"
-    ) {
-      setMode(requestedMode)
-      setEnteredModeDirectly(true)
+    const initialMode = requestedMode && requestedMode !== "menu" && isEntryMode(requestedMode)
+      ? requestedMode
+      : "menu"
+    const isDirectEntry = initialMode !== "menu"
+
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        [CREATE_HISTORY_STATE_KEY]: { mode: initialMode, direct: isDirectEntry },
+      },
+      "",
+      window.location.href,
+    )
+    setMode(initialMode)
+    setEnteredModeDirectly(isDirectEntry)
+
+    const handlePopState = (event: PopStateEvent) => {
+      const createState = event.state?.[CREATE_HISTORY_STATE_KEY] as
+        | { mode?: unknown; direct?: unknown }
+        | undefined
+
+      if (!isEntryMode(createState?.mode)) return
+
+      setIsExitPromptOpen(false)
+      setMode(createState.mode)
+      setEnteredModeDirectly(createState.direct === true)
     }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
   }, [])
 
   const loadDrafts = () => {
@@ -424,11 +470,29 @@ export default function CreatePage() {
         ? Boolean(resolveWorkCharacter())
         : workDraft.step === "world"
           ? Boolean(resolveWorkWorld())
-          : Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
+        : Boolean(resolveWorkCharacter() && resolveWorkWorld() && workDraft.title)
+
+  const enterCreateMode = (nextMode: EntryMode) => {
+    if (nextMode === "menu") {
+      setMode("menu")
+      return
+    }
+
+    window.history.pushState(
+      {
+        ...window.history.state,
+        [CREATE_HISTORY_STATE_KEY]: { mode: nextMode, direct: false },
+      },
+      "",
+      window.location.href,
+    )
+    setEnteredModeDirectly(false)
+    setMode(nextMode)
+  }
 
   const goBack = () => {
     if (mode === "menu" || enteredModeDirectly) goToPreviousPage()
-    else setMode("menu")
+    else window.history.back()
   }
 
   const saveCurrentDraft = () => {
@@ -529,12 +593,10 @@ export default function CreatePage() {
               showWorkContinue={showWorkContinue}
               onContinueWork={() => {
                 setShowWorkContinue(false)
-                setEnteredModeDirectly(false)
-                setMode("work")
+                enterCreateMode("work")
               }}
               onStart={(nextMode) => {
-                setEnteredModeDirectly(false)
-                setMode(nextMode)
+                enterCreateMode(nextMode)
                 if (nextMode === "work" && !showWorkContinue) {
                   setWorkDraft(emptyWorkDraft())
                 }
@@ -555,7 +617,9 @@ export default function CreatePage() {
                   }}
                 />
               )}
-              <CreateModeSwitch value={workFormMode} onChange={changeWorkFormMode} />
+              {workDraft.step !== "review" && (
+                <CreateModeSwitch value={workFormMode} onChange={changeWorkFormMode} />
+              )}
               {workFormMode === "simple" ? (
                 <SimpleWorkCreateStep
                   library={library}
@@ -598,13 +662,7 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, character: false }))
               }}
             >
-              <CreateModeSwitch
-                value={characterFormMode}
-                onChange={setCharacterFormMode}
-                simpleDescription="필수 정보만 입력해서 캐릭터를 빠르게 만들어요."
-                advancedDescription="말투, 비밀 설정, 이미지, 대표 대사까지 세밀하게 설정해요."
-              />
-              <CharacterCreateForm value={characterDraft} onChange={setCharacterDraft} formMode={characterFormMode} />
+              <CharacterCreateForm value={characterDraft} onChange={setCharacterDraft} formMode="advanced" />
             </IndividualShell>
           )}
 
@@ -618,13 +676,7 @@ export default function CreatePage() {
                 setShowItemContinue((prev) => ({ ...prev, world: false }))
               }}
             >
-              <CreateModeSwitch
-                value={worldFormMode}
-                onChange={setWorldFormMode}
-                simpleDescription="세계관 이름과 핵심 분위기만 입력해서 빠르게 만들어요."
-                advancedDescription="장소, 사건, 날짜, 금지 설정, 챕터 진행까지 세밀하게 설정해요."
-              />
-              <WorldForm value={worldDraft} onChange={setWorldDraft} formMode={worldFormMode} />
+              <WorldForm value={worldDraft} onChange={setWorldDraft} />
             </IndividualShell>
           )}
 
@@ -1172,7 +1224,6 @@ function WorldWorkStep({
           <WorldForm
             value={draft.world}
             onChange={(world) => setDraft((prev) => ({ ...prev, world }))}
-            formMode="advanced"
           />
         </TabsContent>
       </Tabs>
@@ -1758,105 +1809,238 @@ function ImageUploadField({
 function WorldForm({
   value,
   onChange,
-  formMode = "advanced",
 }: {
   value: StoryWorld
   onChange: (value: StoryWorld) => void
-  formMode?: WorkFormMode
 }) {
+  const [expanded, setExpanded] = useState({ basic: true, setting: false })
   const update = <K extends keyof StoryWorld>(key: K, nextValue: StoryWorld[K]) => {
     onChange({ ...value, [key]: nextValue })
   }
 
+  const hasText = (fieldValue: unknown) =>
+    typeof fieldValue === "string" && fieldValue.trim().length > 0
+  const basicFields = [value.name, value.genre, value.era, value.coverImageUrl]
+  const settingFields = [
+    value.coreSetting,
+    value.mood,
+    value.places,
+    value.events,
+    value.worldDate,
+    value.forbiddenSettings,
+  ]
+  const totalFieldCount = basicFields.length + settingFields.length
+  const filledCount = [...basicFields, ...settingFields].filter(hasText).length
+
   return (
-    <Card className="bg-card border-border">
-      <CardContent className="p-4 md:p-6">
-        <FieldGroup className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>세계관 이름</FieldLabel>
-              <Input value={value.name} onChange={(event) => update("name", event.target.value)} className="bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>세계관 장르</FieldLabel>
-              <GenreSelectWithCustomInput value={String(value.genre)} onChange={(genre) => update("genre", genre)} />
-            </Field>
+    <div className="mx-auto w-full max-w-2xl [&_[data-slot=input]]:shadow-none [&_[data-slot=select-trigger]]:shadow-none [&_[data-slot=textarea]]:shadow-none">
+      <div className="mb-3">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[13px] text-muted-foreground">전체 진행률</span>
+          <span className="text-[13px] font-medium text-blue-600 dark:text-blue-400">
+            {filledCount} / {totalFieldCount} 항목
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-blue-600 transition-[width] duration-300"
+            style={{ width: `${(filledCount / totalFieldCount) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <WorldFormSection
+          title="기본 정보"
+          icon={Map}
+          required
+          open={expanded.basic}
+          filledCount={basicFields.filter(hasText).length}
+          fieldLabels={["세계관 이름", "세계관 장르", "시대/배경", "대표 이미지"]}
+          onToggle={() => setExpanded((current) => ({ ...current, basic: !current.basic }))}
+        >
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <CompactField label="세계관 이름">
+              <Input
+                value={value.name}
+                onChange={(event) => update("name", event.target.value)}
+                placeholder="예: 멸망한 왕국 아르카디아"
+              />
+            </CompactField>
+            <CompactField label="세계관 장르">
+              <GenreSelectWithCustomInput
+                value={String(value.genre)}
+                onChange={(genre) => update("genre", genre)}
+              />
+            </CompactField>
           </div>
-          <Field>
-            <FieldLabel>시대/배경</FieldLabel>
-            <Input value={value.era} onChange={(event) => update("era", event.target.value)} className="bg-input" />
-          </Field>
+          <CompactField label="시대/배경">
+            <Input
+              value={value.era}
+              onChange={(event) => update("era", event.target.value)}
+              placeholder="예: AC 300년, 근미래 서울"
+            />
+          </CompactField>
           <CreateImageUploadField
             label="대표 이미지"
             value={value.coverImageUrl}
             onChange={(coverImageUrl) => update("coverImageUrl", coverImageUrl)}
           />
-          <Field>
-            <FieldLabel>핵심 설정</FieldLabel>
-            <Textarea value={value.coreSetting} onChange={(event) => update("coreSetting", event.target.value)} className="bg-input min-h-[90px]" />
-          </Field>
-          <Field>
-            <FieldLabel>세계관 분위기</FieldLabel>
-            <Input value={value.mood} onChange={(event) => update("mood", event.target.value)} className="bg-input" />
-          </Field>
-          {formMode === "advanced" && (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field>
-                  <FieldLabel>주요 장소</FieldLabel>
-                  <Textarea value={value.places} onChange={(event) => update("places", event.target.value)} className="bg-input min-h-[80px]" />
-                </Field>
-                <Field>
-                  <FieldLabel>주요 사건</FieldLabel>
-                  <Textarea value={value.events} onChange={(event) => update("events", event.target.value)} className="bg-input min-h-[80px]" />
-                </Field>
-              </div>
-              <Field>
-                <FieldLabel>세계관 날짜</FieldLabel>
-                <Input value={value.worldDate} onChange={(event) => update("worldDate", event.target.value)} className="bg-input" />
-              </Field>
-              <Field>
-                <FieldLabel>금지 설정</FieldLabel>
-                <Textarea value={value.forbiddenSettings} onChange={(event) => update("forbiddenSettings", event.target.value)} className="bg-input min-h-[80px]" />
-              </Field>
+        </WorldFormSection>
+
+        <WorldFormSection
+          title="세계관 설정"
+          icon={Settings}
+          required
+          open={expanded.setting}
+          filledCount={settingFields.filter(hasText).length}
+          fieldLabels={["핵심 설정", "분위기", "주요 장소", "주요 사건", "세계관 날짜", "금지 설정"]}
+          onToggle={() => setExpanded((current) => ({ ...current, setting: !current.setting }))}
+        >
+          <CompactField label="핵심 설정">
+            <Textarea
+              value={value.coreSetting}
+              onChange={(event) => update("coreSetting", event.target.value)}
+              placeholder="예: 마법이 기억을 대가로 발동되는 세계"
+              rows={3}
+            />
+          </CompactField>
+          <CompactField label="분위기">
+            <Input
+              value={value.mood}
+              onChange={(event) => update("mood", event.target.value)}
+              placeholder="예: 장엄하고 쓸쓸함"
+            />
+          </CompactField>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <CompactField label="주요 장소">
+              <Textarea
+                value={value.places}
+                onChange={(event) => update("places", event.target.value)}
+                placeholder="예: 무너진 왕성, 안개 숲, 예언자의 탑"
+                rows={3}
+              />
+            </CompactField>
+            <CompactField label="주요 사건">
+              <Textarea
+                value={value.events}
+                onChange={(event) => update("events", event.target.value)}
+                placeholder="예: 왕국의 몰락, 숨겨진 예언서 발견"
+                rows={3}
+              />
+            </CompactField>
+          </div>
+          <CompactField label="세계관 날짜">
+            <Input
+              value={value.worldDate}
+              onChange={(event) => update("worldDate", event.target.value)}
+              placeholder="예: AC 300년 4월 16일"
+            />
+          </CompactField>
+          <CompactField label="금지 설정">
+            <Textarea
+              value={value.forbiddenSettings}
+              onChange={(event) => update("forbiddenSettings", event.target.value)}
+              placeholder="예: 현대 기술이 갑자기 등장하는 전개"
+              rows={3}
+            />
+          </CompactField>
+        </WorldFormSection>
+
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="flex items-center gap-2 px-3 py-3">
+            <ListOrdered className="h-[18px] w-[18px] text-muted-foreground" />
+            <span className="flex-1 text-sm font-medium text-foreground">챕터 시스템</span>
+            <Switch
+              checked={value.storyProgressSettings.useChapters}
+              onCheckedChange={(checked) => update("storyProgressSettings", {
+                ...value.storyProgressSettings,
+                useChapters: checked,
+              })}
+              aria-label="챕터 시스템 사용"
+            />
+          </div>
+          {!value.storyProgressSettings.useChapters && (
+            <p className="px-3 pb-3 text-xs text-muted-foreground">
+              켜면 챕터별로 목표 · 진행도 · 다음 조건을 나눠 설정해요.
+            </p>
+          )}
+          {value.storyProgressSettings.useChapters && (
+            <div className="px-3 pb-3">
               <StoryProgressSettingsForm
                 value={value.storyProgressSettings}
                 onChange={(storyProgressSettings) => update("storyProgressSettings", storyProgressSettings)}
-                currentChapter={value.currentChapter}
-                currentGoal={value.currentGoal}
-                progress={value.progress}
-                onCurrentChapterChange={(currentChapter) => update("currentChapter", currentChapter)}
-                onCurrentGoalChange={(currentGoal) => update("currentGoal", currentGoal)}
-                onProgressChange={(progress) => update("progress", progress)}
+                hideToggle
               />
-            </>
+            </div>
           )}
-        </FieldGroup>
-      </CardContent>
-    </Card>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function WorldFormSection({
+  title,
+  icon: Icon,
+  required,
+  open,
+  filledCount,
+  fieldLabels,
+  onToggle,
+  children,
+}: {
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+  required: boolean
+  open: boolean
+  filledCount: number
+  fieldLabels: string[]
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <section className={cn("overflow-hidden rounded-xl border bg-card", open ? "border-blue-500" : "border-border")}>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3 py-3 text-left">
+        <Icon className={cn("h-[18px] w-[18px]", open ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground")} />
+        <span className="flex-1 text-sm font-medium text-foreground">{title}</span>
+        <span className={cn(
+          "rounded-full px-2 py-0.5 text-xs",
+          open ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" : "bg-muted text-muted-foreground",
+        )}>
+          {required ? "필수" : "선택"} · {filledCount}/{fieldLabels.length}
+        </span>
+        {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+      {open ? (
+        <div className="flex flex-col gap-2.5 px-3 pb-3">{children}</div>
+      ) : (
+        <p className="px-3 pb-3 text-xs text-muted-foreground">{fieldLabels.join(" · ")}</p>
+      )}
+    </section>
+  )
+}
+
+function CompactField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      {children}
+    </label>
   )
 }
 
 function StoryProgressSettingsForm({
   value,
   onChange,
-  currentChapter,
-  currentGoal,
-  progress,
-  onCurrentChapterChange,
-  onCurrentGoalChange,
-  onProgressChange,
+  hideToggle = false,
 }: {
   value: StoryWorld["storyProgressSettings"]
   onChange: (value: StoryWorld["storyProgressSettings"]) => void
-  currentChapter: string
-  currentGoal: string
-  progress: number
-  onCurrentChapterChange: (value: string) => void
-  onCurrentGoalChange: (value: string) => void
-  onProgressChange: (value: number) => void
+  hideToggle?: boolean
 }) {
-  const chapters = value.chapters.length ? value.chapters : [defaultStoryChapter()]
+  const chapters = value.chapters.length ? value.chapters : [emptyStoryChapter()]
+  const [openChapterId, setOpenChapterId] = useState<string | null>(() => chapters[0]?.id ?? null)
 
   const updateChapter = (chapterId: string, nextChapter: StoryChapter) => {
     onChange({
@@ -1866,19 +2050,23 @@ function StoryProgressSettingsForm({
   }
 
   const addChapter = () => {
+    const nextChapter = emptyStoryChapter()
     onChange({
       ...value,
       useChapters: true,
-      chapters: [...chapters, { ...defaultStoryChapter(), title: `새 챕터 ${chapters.length + 1}` }],
+      chapters: [...chapters, nextChapter],
     })
+    setOpenChapterId(nextChapter.id)
   }
 
   const deleteChapter = (chapterId: string) => {
     if (chapters.length <= 1) return
+    const nextChapters = chapters.filter((chapter) => chapter.id !== chapterId)
     onChange({
       ...value,
-      chapters: chapters.filter((chapter) => chapter.id !== chapterId),
+      chapters: nextChapters,
     })
+    if (openChapterId === chapterId) setOpenChapterId(nextChapters[0]?.id ?? null)
   }
 
   const moveChapter = (chapterId: string, direction: -1 | 1) => {
@@ -1893,54 +2081,23 @@ function StoryProgressSettingsForm({
   }
 
   return (
-    <section className="space-y-3 rounded-xl border border-border bg-secondary/40 p-3">
-      <ToggleRow
-        label="챕터 사용"
-        checked={value.useChapters}
-        onCheckedChange={(checked) =>
-          onChange({
-            ...value,
-            useChapters: checked,
-            chapters,
-          })
-        }
-      />
+    <section className={cn("space-y-3", !hideToggle && "rounded-xl border border-border bg-secondary/40 p-3")}>
+      {!hideToggle && (
+        <ToggleRow
+          label="챕터 사용"
+          checked={value.useChapters}
+          onCheckedChange={(checked) =>
+            onChange({
+              ...value,
+              useChapters: checked,
+              chapters,
+            })
+          }
+        />
+      )}
 
       {value.useChapters && (
         <div className="space-y-3">
-          <div className="grid gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-3">
-            <Field>
-              <FieldLabel>현재 챕터</FieldLabel>
-              <Input value={currentChapter} onChange={(event) => onCurrentChapterChange(event.target.value)} className="bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>현재 목표</FieldLabel>
-              <Input value={currentGoal} onChange={(event) => onCurrentGoalChange(event.target.value)} className="bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>진행도 기본값</FieldLabel>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={progress}
-                onChange={(event) => onProgressChange(Number(event.target.value))}
-                className="bg-input"
-              />
-            </Field>
-          </div>
-
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">챕터 설정</p>
-              <p className="text-xs text-muted-foreground">작품 진행 방식과 다음 챕터 조건을 정합니다.</p>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={addChapter}>
-              <Plus className="h-4 w-4" />
-              챕터 추가
-            </Button>
-          </div>
-
           <div className="space-y-2">
             {chapters.map((chapter, index) => (
               <ChapterEditorCard
@@ -1948,6 +2105,8 @@ function StoryProgressSettingsForm({
                 chapter={chapter}
                 index={index}
                 total={chapters.length}
+                expanded={openChapterId === chapter.id}
+                onToggle={() => setOpenChapterId((current) => current === chapter.id ? null : chapter.id)}
                 onChange={(nextChapter) => updateChapter(chapter.id, nextChapter)}
                 onDelete={() => deleteChapter(chapter.id)}
                 onMoveUp={() => moveChapter(chapter.id, -1)}
@@ -1955,6 +2114,15 @@ function StoryProgressSettingsForm({
               />
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={addChapter}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2.5 text-sm text-muted-foreground transition-colors hover:border-muted-foreground hover:text-foreground"
+          >
+            <Plus className="h-[15px] w-[15px]" />
+            챕터 추가
+          </button>
         </div>
       )}
     </section>
@@ -1965,6 +2133,8 @@ function ChapterEditorCard({
   chapter,
   index,
   total,
+  expanded,
+  onToggle,
   onChange,
   onDelete,
   onMoveUp,
@@ -1973,13 +2143,13 @@ function ChapterEditorCard({
   chapter: StoryChapter
   index: number
   total: number
+  expanded: boolean
+  onToggle: () => void
   onChange: (chapter: StoryChapter) => void
   onDelete: () => void
   onMoveUp: () => void
   onMoveDown: () => void
 }) {
-  const [expanded, setExpanded] = useState(index === 0)
-
   const update = <K extends keyof StoryChapter>(key: K, nextValue: StoryChapter[K]) => {
     onChange({ ...chapter, [key]: nextValue })
   }
@@ -1995,102 +2165,125 @@ function ChapterEditorCard({
   }
 
   return (
-    <Card className="border-border bg-card">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
       <button
         type="button"
-        onClick={() => setExpanded((current) => !current)}
-        className="flex w-full items-center gap-2 px-3 py-3 text-left"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="flex w-full items-start gap-2.5 px-3 py-3 text-left"
       >
-        <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-medium text-primary-foreground">
+          {index + 1}
+        </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {index + 1}. {chapter.title || "제목 없는 챕터"}
+          <p className="truncate text-sm font-medium text-foreground">
+            {chapter.title || `챕터 ${index + 1}`}
           </p>
-          <p className="truncate text-xs text-muted-foreground">{chapter.goal || "챕터 목표를 입력하세요."}</p>
+          {chapter.goal && <p className="mt-0.5 truncate text-xs text-muted-foreground">{chapter.goal}</p>}
         </div>
+        {expanded
+          ? <ChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          : <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />}
       </button>
 
       {expanded && (
-        <CardContent className="space-y-3 border-t border-border p-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>챕터 제목</FieldLabel>
-              <Input value={chapter.title} onChange={(event) => update("title", event.target.value)} className="bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>챕터 시작 조건</FieldLabel>
-              <Input value={chapter.startCondition} onChange={(event) => update("startCondition", event.target.value)} className="bg-input" />
-            </Field>
-          </div>
-          <Field>
-            <FieldLabel>챕터 설명</FieldLabel>
-            <Textarea value={chapter.description} onChange={(event) => update("description", event.target.value)} className="min-h-[70px] bg-input" />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>챕터 목표</FieldLabel>
-              <Textarea value={chapter.goal} onChange={(event) => update("goal", event.target.value)} className="min-h-[70px] bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>주요 미션</FieldLabel>
-              <Textarea value={chapter.mission} onChange={(event) => update("mission", event.target.value)} className="min-h-[70px] bg-input" />
-            </Field>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>핵심 사건</FieldLabel>
-              <Textarea value={chapter.keyEvent} onChange={(event) => update("keyEvent", event.target.value)} className="min-h-[70px] bg-input" />
-            </Field>
-            <Field>
-              <FieldLabel>감정 변화 방향</FieldLabel>
-              <Textarea value={chapter.emotionalDirection} onChange={(event) => update("emotionalDirection", event.target.value)} className="min-h-[70px] bg-input" />
-            </Field>
-          </div>
-          <Field>
-            <FieldLabel>다음 챕터로 넘어가는 조건</FieldLabel>
-            <Textarea value={chapter.nextChapterCondition} onChange={(event) => update("nextChapterCondition", event.target.value)} className="min-h-[70px] bg-input" />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field>
-              <FieldLabel>진행도 시작</FieldLabel>
+        <div className="flex flex-col gap-2.5 border-t border-border px-3 pb-3 pt-3">
+          <CompactField label="챕터 제목">
+            <Input
+              value={chapter.title}
+              onChange={(event) => update("title", event.target.value)}
+              placeholder="예: 봄의 시작"
+            />
+          </CompactField>
+          <CompactField label="챕터 시작 조건">
+            <Input
+              value={chapter.startCondition}
+              onChange={(event) => update("startCondition", event.target.value)}
+              placeholder="예: 첫 만남 이후 대화 시작"
+            />
+          </CompactField>
+          <CompactField label="챕터 설명">
+            <Textarea
+              value={chapter.description}
+              onChange={(event) => update("description", event.target.value)}
+              placeholder="예: 두 인물이 처음으로 서로를 의식하기 시작하는 구간"
+              rows={2}
+            />
+          </CompactField>
+          <CompactField label="챕터 목표">
+            <Textarea
+              value={chapter.goal}
+              onChange={(event) => update("goal", event.target.value)}
+              placeholder="예: 캐릭터의 경계심을 낮추고 첫 단서를 얻기"
+              rows={2}
+            />
+          </CompactField>
+          <CompactField label="주요 미션">
+            <Input
+              value={chapter.mission}
+              onChange={(event) => update("mission", event.target.value)}
+              placeholder="예: 캐릭터의 정체에 대한 단서 찾기"
+            />
+          </CompactField>
+          <CompactField label="핵심 사건">
+            <Input
+              value={chapter.keyEvent}
+              onChange={(event) => update("keyEvent", event.target.value)}
+              placeholder="예: 캐릭터가 자신의 과거를 처음 언급함"
+            />
+          </CompactField>
+          <CompactField label="감정 변화 방향">
+            <Input
+              value={chapter.emotionalDirection}
+              onChange={(event) => update("emotionalDirection", event.target.value)}
+              placeholder="예: 경계 → 호기심 → 약한 신뢰"
+            />
+          </CompactField>
+          <CompactField label="다음 챕터로 넘어가는 조건">
+            <Textarea
+              value={chapter.nextChapterCondition}
+              onChange={(event) => update("nextChapterCondition", event.target.value)}
+              placeholder="예: 신뢰도가 일정 이상이거나 핵심 단서를 발견했을 때"
+              rows={2}
+            />
+          </CompactField>
+          <div className="grid grid-cols-2 gap-2">
+            <CompactField label="진행도 시작">
               <Input
                 type="number"
                 min={0}
                 max={100}
                 value={chapter.progressRange.start}
                 onChange={(event) => updateProgressRange("start", Number(event.target.value))}
-                className="bg-input"
               />
-            </Field>
-            <Field>
-              <FieldLabel>진행도 종료</FieldLabel>
+            </CompactField>
+            <CompactField label="진행도 종료">
               <Input
                 type="number"
                 min={0}
                 max={100}
                 value={chapter.progressRange.end}
                 onChange={(event) => updateProgressRange("end", Number(event.target.value))}
-                className="bg-input"
               />
-            </Field>
+            </CompactField>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={index === 0} onClick={onMoveUp}>
-              <ArrowUp className="h-4 w-4" />
+          <div className="mt-0.5 flex flex-wrap justify-end gap-2">
+            <button type="button" disabled={index === 0} onClick={onMoveUp} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground disabled:opacity-40">
+              <ArrowUp className="h-[13px] w-[13px]" />
               위로
-            </Button>
-            <Button type="button" variant="outline" size="sm" disabled={index === total - 1} onClick={onMoveDown}>
-              <ArrowDown className="h-4 w-4" />
+            </button>
+            <button type="button" disabled={index === total - 1} onClick={onMoveDown} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground disabled:opacity-40">
+              <ArrowDown className="h-[13px] w-[13px]" />
               아래로
-            </Button>
-            <Button type="button" variant="outline" size="sm" disabled={total <= 1} onClick={onDelete}>
-              <Trash2 className="h-4 w-4" />
+            </button>
+            <button type="button" disabled={total <= 1} onClick={onDelete} className="flex items-center gap-1 rounded-lg border border-destructive/30 px-2.5 py-1.5 text-xs text-destructive disabled:opacity-40">
+              <Trash2 className="h-[13px] w-[13px]" />
               삭제
-            </Button>
+            </button>
           </div>
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   )
 }
 
@@ -2235,7 +2428,7 @@ function IndividualShell({
   children: React.ReactNode
 }) {
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {showContinue && (
         <ContinueCard
           title="작성 중인 초안이 있어요. 이어서 작성할까요?"
@@ -2490,7 +2683,7 @@ function normalizeWorld(world: StoryWorld): StoryWorld {
       useChapters: world.storyProgressSettings?.useChapters ?? false,
       chapters: world.storyProgressSettings?.chapters?.length
         ? world.storyProgressSettings.chapters
-        : [defaultStoryChapter()],
+        : [emptyStoryChapter()],
     },
     createdAt: world.createdAt || new Date().toLocaleDateString("ko-KR"),
   }

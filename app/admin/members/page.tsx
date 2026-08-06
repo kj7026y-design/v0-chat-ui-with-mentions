@@ -601,7 +601,7 @@ function MemberEditDialog({
                 id="member-nickname"
                 value={nickname}
                 onChange={(event) => setNickname(event.target.value)}
-                maxLength={50}
+                maxLength={8}
                 required
               />
             </div>

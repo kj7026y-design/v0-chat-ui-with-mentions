@@ -4,11 +4,16 @@ export const STORYCHAT_CHATS_KEY = "storychat_chats"
 
 export interface ChatListItemData {
   id: string
+  roomName?: string
   characterName: string
   characterEmoji: string
   lastMessage: string
   timestamp: Date
   unreadCount: number
+}
+
+export function getChatDisplayName(chat: Pick<ChatListItemData, "roomName" | "characterName">) {
+  return chat.roomName?.trim() || chat.characterName
 }
 
 export const defaultChats: ChatListItemData[] = [
@@ -97,6 +102,7 @@ export function getChatList() {
     const parsedChats = JSON.parse(savedChats) as Array<Omit<ChatListItemData, "timestamp"> & { timestamp: string }>
     const normalizedChats = parsedChats.map((chat) => ({
       ...chat,
+      roomName: chat.roomName?.trim() || chat.characterName,
       timestamp: new Date(chat.timestamp),
     }))
     return ensureDefaultChats(normalizedChats, ["6", "w7", "w8"])

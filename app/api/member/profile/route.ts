@@ -5,6 +5,7 @@ import {
   getMemberAccountProfile,
   updateMemberAccountProfile,
 } from "@/lib/server/user-account-store"
+import { getMemberNicknameLength } from "@/lib/member-nickname"
 
 export const runtime = "nodejs"
 
@@ -50,7 +51,7 @@ export async function PATCH(request: Request) {
   const body = await request.json().catch(() => null) as { email?: unknown; nickname?: unknown } | null
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : ""
   const nickname = typeof body?.nickname === "string" ? body.nickname.trim() : ""
-  if (!EMAIL_PATTERN.test(email) || email.length > 254 || !nickname || nickname.length > 50) {
+  if (!EMAIL_PATTERN.test(email) || email.length > 254 || !nickname || getMemberNicknameLength(nickname) > 8) {
     return NextResponse.json({ error: "닉네임과 이메일을 확인해 주세요." }, { status: 400 })
   }
 

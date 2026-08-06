@@ -157,6 +157,8 @@ interface ChatSettingsDrawerProps {
   onReadingSettingsChange?: (settings: ChatReadingSettings) => void;
   onClearChat?: () => void;
   onLeaveChat?: () => void;
+  onGalleryOpen?: () => void;
+  onTimelineOpen?: () => void;
 }
 
 export function ChatSettingsDrawer({
@@ -172,6 +174,8 @@ export function ChatSettingsDrawer({
   onReadingSettingsChange,
   onClearChat,
   onLeaveChat,
+  onGalleryOpen,
+  onTimelineOpen,
 }: ChatSettingsDrawerProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -374,9 +378,11 @@ export function ChatSettingsDrawer({
             aria-label="채팅방 바로가기"
           >
             <SettingsShortcut
-              href={withReturnTo(`/chat/${chatId}/media`, chatReturnPath)}
               label="갤러리"
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                onGalleryOpen?.();
+              }}
               icon={<ImageIcon className="h-5 w-5" />}
               badge={
                 sharedMedia.length > 0 ? String(sharedMedia.length) : undefined
@@ -395,9 +401,11 @@ export function ChatSettingsDrawer({
               onClick={onClose}
             />
             <SettingsShortcut
-              href={withReturnTo("/timeline", chatReturnPath)}
               label="타임라인"
-              onClick={onClose}
+              onClick={() => {
+                onClose();
+                onTimelineOpen?.();
+              }}
               icon={<ChartNoAxesCombined className="h-5 w-5" />}
             />
             <SettingsShortcut

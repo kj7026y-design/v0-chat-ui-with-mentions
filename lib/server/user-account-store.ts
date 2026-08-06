@@ -1,6 +1,6 @@
 import "server-only"
 
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto"
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto"
 import { getNeonSql } from "@/lib/server/neon-database"
 
 export type AccountType = "staff" | "member"
@@ -156,6 +156,48 @@ function verifyPassword(password: string, encodedHash: string) {
     return actual.length === expected.length && timingSafeEqual(actual, expected)
   } catch {
     return false
+  }
+}
+
+export async function createMemberAccount({
+  email,
+  password,
+  nickname,
+  birthDate,
+}: {
+  email: string
+  password: string
+  nickname: string
+  birthDate: string
+}): Promise<AuthenticatedAccount> {
+  await ensureUserAccountSchema()
+  const sql = getNeonSql()
+  const accountId = `member-${randomUUID()}`
+  const normalizedEmail = normalizeIdentifier(email)
+
+  await sql.query(
+    `WITH new_account AS (
+       INSERT INTO storychat_accounts (
+         account_id, account_type, role, login_id, email, normalized_identifier,
+         password_hash, display_name
+       ) VALUES ($1, 'member', 'member', NULL, $2, $2, $3, $4)
+       RETURNING account_id
+     )
+     INSERT INTO storychat_member_profiles (
+       account_id, nickname, member_kind, writer_tier, birth_date
+     )
+     SELECT account_id, $4, 'general', NULL, $5::date
+     FROM new_account`,
+    [accountId, normalizedEmail, hashPassword(password), nickname, birthDate],
+  )
+
+  return {
+    accountId,
+    accountType: "member",
+    role: "member",
+    identifier: normalizedEmail,
+    displayName: nickname,
+    memberKind: "general",
   }
 }
 

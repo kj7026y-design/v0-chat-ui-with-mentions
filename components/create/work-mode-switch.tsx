@@ -15,13 +15,11 @@ interface WorkModeSwitchProps {
 export function WorkModeSwitch({
   value,
   onChange,
-  simpleDescription = "처음이라면 쉬운 모드로 시작해도 충분해요. 나중에 상세 모드에서 세계관과 도입부를 더 추가할 수 있어요.",
-  advancedDescription = "작품의 분위기, 시작 장면, 상태바, 세계관 정보를 세밀하게 설정할 수 있어요.",
 }: WorkModeSwitchProps) {
   return (
-    <Card className="border-border bg-card">
-      <CardContent className="space-y-3 p-3">
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-background/70 p-1">
+    <Card className="border-border bg-card py-0 shadow-none">
+      <CardContent className="p-1">
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-background/70 p-1">
           {(["simple", "advanced"] as const).map((mode) => (
             <button
               key={mode}
@@ -38,9 +36,6 @@ export function WorkModeSwitch({
             </button>
           ))}
         </div>
-        <p className="px-1 text-xs leading-relaxed text-muted-foreground">
-          {value === "simple" ? simpleDescription : advancedDescription}
-        </p>
       </CardContent>
     </Card>
   )

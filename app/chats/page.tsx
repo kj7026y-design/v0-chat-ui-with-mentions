@@ -10,10 +10,12 @@ import { clearChatHistory } from "@/lib/chat-history-client"
 import {
   createChatId,
   defaultChats,
+  getChatDisplayName,
   getChatList,
   saveChatList,
   type ChatListItemData,
 } from "@/lib/chat-list-storage"
+import { getChatRooms, renameChatRoom } from "@/lib/chat-room-client"
 
 export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -25,6 +27,25 @@ export default function ChatsPage() {
   useEffect(() => {
     const syncChats = () => setChats(getChatList())
     syncChats()
+    void getChatRooms()
+      .then((rooms) => {
+        if (rooms.length === 0) return
+        const roomMetadata = new Map(rooms.map((room) => [room.roomId, room]))
+        const nextChats = getChatList()
+          .map((chat) => {
+            const room = roomMetadata.get(chat.id)
+            return {
+              ...chat,
+              roomName: room?.roomName || getChatDisplayName(chat),
+              lastMessage: room?.lastMessage || chat.lastMessage,
+              timestamp: room?.lastMessageAt ? new Date(room.lastMessageAt) : chat.timestamp,
+            }
+          })
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+        setChats(nextChats)
+        saveChatList(nextChats)
+      })
+      .catch(() => undefined)
     window.addEventListener("storage", syncChats)
     window.addEventListener("storychat-chats-updated", syncChats)
     return () => {
@@ -52,7 +73,7 @@ export default function ChatsPage() {
       {
         ...chat,
         id: createChatId(),
-        characterName: `${chat.characterName} 복제본`,
+        roomName: `${getChatDisplayName(chat)} 복제본`,
         timestamp: new Date(),
         unreadCount: 0,
       },
@@ -66,7 +87,7 @@ export default function ChatsPage() {
   }
 
   const filteredChats = chats.filter((chat) =>
-    chat.characterName.toLowerCase().includes(searchQuery.toLowerCase())
+    getChatDisplayName(chat).toLowerCase().includes(searchQuery.toLowerCase())
   )
   const renameTarget = chats.find((chat) => chat.id === renameTargetId)
 
@@ -125,15 +146,23 @@ export default function ChatsPage() {
         open={Boolean(renameTarget)}
         title="채팅방 이름 변경"
         message="채팅방 이름을 입력하세요."
-        defaultValue={renameTarget?.characterName ?? ""}
+        defaultValue={renameTarget ? getChatDisplayName(renameTarget) : ""}
         onOpenChange={(open) => {
           if (!open) setRenameTargetId(null)
         }}
         onConfirm={(nextName) => {
           if (!renameTargetId) return
-          persistChats(chats.map((item) => item.id === renameTargetId ? { ...item, characterName: nextName } : item))
+          const target = chats.find((item) => item.id === renameTargetId)
+          if (!target) return
+          const previousChats = chats
+          persistChats(chats.map((item) => item.id === renameTargetId ? { ...item, roomName: nextName } : item))
           setRenameTargetId(null)
-          toast("이름을 바꿨어요.")
+          void renameChatRoom(renameTargetId, nextName, target.characterName)
+            .then(() => toast("이름을 바꿨어요."))
+            .catch((error) => {
+              persistChats(previousChats)
+              toast.error(error instanceof Error ? error.message : "이름을 바꾸지 못했습니다.")
+            })
         }}
       />
       <ConfirmModal
@@ -212,7 +241,7 @@ function ChatListItem({
               "font-semibold truncate",
               chat.unreadCount > 0 ? "text-foreground" : "text-muted-foreground"
             )}>
-              {chat.characterName}
+              {getChatDisplayName(chat)}
             </span>
           </div>
           <p className={cn(

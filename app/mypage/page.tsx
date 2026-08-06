@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, type ChangeEvent } from "react"
+import { useState, useEffect, useMemo, type ChangeEvent } from "react"
 import { 
+  ArrowLeft,
   ChevronRight, 
   Gem, 
   FolderOpen, 
@@ -39,10 +40,15 @@ import { defaultLibrary, getStoryChatLibrary, type StoryChatLibrary } from "@/li
 import {
   getCurrentUserId,
   getGeneratedMediaByUser,
+  clearGeneratedMediaUserId,
+  setGeneratedMediaUserId,
+  syncGeneratedMediaWithServer,
   type GeneratedMedia,
 } from "@/lib/generated-media-storage"
 import { EventCard } from "@/components/chat/event-card"
 import { EventDetailModal } from "@/components/chat/event-detail-modal"
+import { getChatRooms } from "@/lib/chat-room-client"
+import { getChatDisplayName, getChatList } from "@/lib/chat-list-storage"
 
 const PROFILE_STORAGE_KEY = "storychat_profile"
 const DEFAULT_PROFILE: ProfileState = {
@@ -66,6 +72,15 @@ interface MemberProfileData {
   credit: number
 }
 
+interface AccountSessionData {
+  authenticated: boolean
+  accountId?: string
+  username?: string
+  displayName?: string
+  accountType?: "staff" | "member"
+  role?: "administrator" | "developer" | "operator" | "member"
+}
+
 export default function MyPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -73,13 +88,16 @@ export default function MyPage() {
   const [pushEnabled, setPushEnabled] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<SavedEvent | null>(null)
   const [selectedGeneratedMedia, setSelectedGeneratedMedia] = useState<GeneratedMedia | null>(null)
+  const [isGeneratedMediaGalleryOpen, setIsGeneratedMediaGalleryOpen] = useState(false)
   const [generatedMedia, setGeneratedMedia] = useState<GeneratedMedia[]>([])
+  const [chatRoomNames, setChatRoomNames] = useState<Record<string, string>>({})
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
   const [isAccountDeleteConfirmOpen, setIsAccountDeleteConfirmOpen] = useState(false)
   const [profile, setProfile] = useState<ProfileState>(DEFAULT_PROFILE)
   const [profileForm, setProfileForm] = useState<ProfileState>(profile)
   const [memberProfile, setMemberProfile] = useState<MemberProfileData | null>(null)
+  const [accountLabel, setAccountLabel] = useState("")
   const [isProfileLoading, setIsProfileLoading] = useState(true)
   const [isProfileSaving, setIsProfileSaving] = useState(false)
   const credits = useAppStore((s) => s.credits)
@@ -90,6 +108,22 @@ export default function MyPage() {
     setMounted(true)
     setLibrary(getStoryChatLibrary())
     setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
+
+    const syncLocalChatRoomNames = () => {
+      setChatRoomNames((current) => ({
+        ...Object.fromEntries(getChatList().map((chat) => [chat.id, getChatDisplayName(chat)])),
+        ...current,
+      }))
+    }
+    syncLocalChatRoomNames()
+    void getChatRooms()
+      .then((rooms) => {
+        setChatRoomNames((current) => ({
+          ...current,
+          ...Object.fromEntries(rooms.map((room) => [room.roomId, room.roomName])),
+        }))
+      })
+      .catch(() => undefined)
 
     let savedAvatarUrl: string | undefined
     const savedProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY)
@@ -102,8 +136,40 @@ export default function MyPage() {
       }
     }
 
-    const loadMemberProfile = async () => {
+    const loadAccountProfile = async () => {
       try {
+        const sessionResponse = await fetch("/api/admin/session", { cache: "no-store" })
+        const session = await sessionResponse.json().catch(() => ({})) as AccountSessionData
+        if (!sessionResponse.ok || !session.authenticated) {
+          router.push("/landing")
+          return
+        }
+
+        if (session.accountId) {
+          setGeneratedMediaUserId(
+            session.accountId,
+            session.username ? [session.username] : [],
+          )
+          setGeneratedMedia(getGeneratedMediaByUser(session.accountId))
+          void syncGeneratedMediaWithServer(session.accountId)
+            .then(setGeneratedMedia)
+            .catch((error) => toast.error(
+              error instanceof Error ? error.message : "생성 이미지를 동기화하지 못했습니다.",
+            ))
+        }
+
+        if (session.accountType === "staff") {
+          const nextProfile = {
+            name: session.displayName || "관리자",
+            email: session.username || "",
+            avatarUrl: savedAvatarUrl,
+          }
+          setProfile(nextProfile)
+          setProfileForm(nextProfile)
+          setAccountLabel(getStaffRoleLabel(session.role))
+          return
+        }
+
         const response = await fetch("/api/member/profile", { cache: "no-store" })
         const data = await response.json().catch(() => ({})) as {
           profile?: MemberProfileData
@@ -116,6 +182,7 @@ export default function MyPage() {
           avatarUrl: savedAvatarUrl,
         }
         setMemberProfile(data.profile)
+        setAccountLabel(getMemberGradeLabel(data.profile))
         setProfile(nextProfile)
         setProfileForm(nextProfile)
       } catch (error) {
@@ -124,19 +191,46 @@ export default function MyPage() {
         setIsProfileLoading(false)
       }
     }
-    void loadMemberProfile()
+    void loadAccountProfile()
 
     const syncGeneratedMedia = () => setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
     window.addEventListener("storychat-generated-media-updated", syncGeneratedMedia)
+    window.addEventListener("storychat-chats-updated", syncLocalChatRoomNames)
     window.addEventListener("storage", syncGeneratedMedia)
+    window.addEventListener("storage", syncLocalChatRoomNames)
     return () => {
       window.removeEventListener("storychat-generated-media-updated", syncGeneratedMedia)
+      window.removeEventListener("storychat-chats-updated", syncLocalChatRoomNames)
       window.removeEventListener("storage", syncGeneratedMedia)
+      window.removeEventListener("storage", syncLocalChatRoomNames)
     }
   }, [])
 
   const previewEvents = events.slice(0, 6)
-  const previewGeneratedMedia = generatedMedia.slice(0, 6)
+  const previewGeneratedMedia = generatedMedia.slice(0, 3)
+  const generatedMediaGroups = useMemo(() => {
+    const groups = new Map<string, {
+      key: string
+      chatId?: string
+      name: string
+      items: GeneratedMedia[]
+    }>()
+
+    generatedMedia.forEach((media) => {
+      const key = media.chatId || media.workId || "ungrouped"
+      const workName = media.workId
+        ? library.works.find((work) => work.id === media.workId)?.title
+        : undefined
+      const name = media.chatId
+        ? chatRoomNames[media.chatId] || workName || "이름 없는 채팅방"
+        : workName || "내 미디어"
+      const current = groups.get(key)
+      if (current) current.items.push(media)
+      else groups.set(key, { key, chatId: media.chatId, name, items: [media] })
+    })
+
+    return Array.from(groups.values())
+  }, [chatRoomNames, generatedMedia, library.works])
 
   const stats = [
     { label: "내 유니버스", value: library.works.length.toLocaleString(), href: "/my-works?tab=completed" },
@@ -253,6 +347,7 @@ export default function MyPage() {
 
   const handleLogout = async () => {
     await fetch("/api/admin/logout", { method: "POST" }).catch(() => undefined)
+    clearGeneratedMediaUserId()
     toast("로그아웃했어요.")
     router.push("/landing")
     router.refresh()
@@ -288,22 +383,24 @@ export default function MyPage() {
               {isProfileLoading ? "회원 정보 불러오는 중" : profile.name}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">{profile.email}</p>
-            {memberProfile && (
+            {accountLabel && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {memberProfile.memberId} · {getMemberGradeLabel(memberProfile)}
+                {memberProfile ? `${memberProfile.memberId} · ` : ""}{accountLabel}
               </p>
             )}
           </div>
 
           {/* Edit Button */}
-          <button
-            onClick={handleProfileEdit}
-            disabled={isProfileLoading || !memberProfile}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs text-foreground">프로필 수정</span>
-          </button>
+          {memberProfile && (
+            <button
+              onClick={handleProfileEdit}
+              disabled={isProfileLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs text-foreground">프로필 수정</span>
+            </button>
+          )}
         </div>
       </section>
 
@@ -380,7 +477,16 @@ export default function MyPage() {
             <ImageIcon className="w-3.5 h-3.5" />
             생성한 이미지
           </h2>
-          <span className="text-xs text-muted-foreground">{generatedMedia.length.toLocaleString()}개</span>
+          {generatedMedia.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsGeneratedMediaGalleryOpen(true)}
+              className="flex items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {generatedMedia.length.toLocaleString()}개 전체보기
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {previewGeneratedMedia.length > 0 ? (
@@ -395,10 +501,9 @@ export default function MyPage() {
                 <div className="aspect-square bg-muted">
                   <img src={media.imageUrl} alt={media.title || "생성 이미지"} className="h-full w-full object-cover" />
                 </div>
-                <div className="space-y-0.5 px-2 py-2">
-                  <p className="line-clamp-1 text-[11px] font-semibold text-foreground">{media.title || "AI 생성 이미지"}</p>
-                  <p className="line-clamp-1 text-[10px] text-muted-foreground">
-                    {media.workId || media.chatId || "내 미디어"}
+                <div className="px-2 py-2">
+                  <p className="line-clamp-1 text-[11px] font-semibold text-foreground">
+                    {media.title || "AI 생성 이미지"}
                   </p>
                 </div>
               </button>
@@ -457,9 +562,67 @@ export default function MyPage() {
       </section>
 
       <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      {isGeneratedMediaGalleryOpen && (
+        <section
+          className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background text-foreground"
+          role="dialog"
+          aria-modal="true"
+          aria-label="생성한 이미지 전체보기"
+        >
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIsGeneratedMediaGalleryOpen(false)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-accent"
+                aria-label="전체보기 닫기"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <h2 className="truncate text-base font-semibold">생성한 이미지</h2>
+            </div>
+            <span className="text-xs text-muted-foreground">{generatedMedia.length.toLocaleString()}개</span>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-5 pb-24">
+              {generatedMediaGroups.map((group) => (
+                <section key={group.key} className="space-y-2.5">
+                  <div className="flex items-center justify-between px-1">
+                    {group.chatId ? (
+                      <Link
+                        href={`/chat/${encodeURIComponent(group.chatId)}`}
+                        className="flex min-w-0 items-center gap-1 text-sm font-semibold hover:text-primary"
+                      >
+                        <span className="truncate">{group.name}</span>
+                        <ChevronRight className="h-4 w-4 shrink-0" />
+                      </Link>
+                    ) : (
+                      <h3 className="truncate text-sm font-semibold">{group.name}</h3>
+                    )}
+                    <span className="shrink-0 text-xs text-muted-foreground">{group.items.length}개</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {group.items.map((media) => (
+                      <button
+                        key={media.id}
+                        type="button"
+                        onClick={() => setSelectedGeneratedMedia(media)}
+                        className="aspect-square overflow-hidden rounded-xl border border-border bg-muted"
+                      >
+                        <img src={media.imageUrl} alt={media.title || "생성 이미지"} className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
       {selectedGeneratedMedia && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
           onClick={() => setSelectedGeneratedMedia(null)}
         >
           <div
@@ -678,6 +841,7 @@ function ProfileEditDialog({
               id="profile-name"
               value={profile.name}
               onChange={(event) => update("name", event.target.value)}
+              maxLength={8}
               className="bg-input"
             />
           </div>
@@ -714,4 +878,11 @@ function getMemberGradeLabel(profile: MemberProfileData) {
   if (profile.writerTier === "prime") return "프라임 작가"
   if (profile.writerTier === "gold") return "골드 작가"
   return "실버 작가"
+}
+
+function getStaffRoleLabel(role: AccountSessionData["role"]) {
+  if (role === "administrator") return "관리자 계정"
+  if (role === "developer") return "개발자 계정"
+  if (role === "operator") return "운영자 계정"
+  return "직원 계정"
 }
