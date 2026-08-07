@@ -59,9 +59,13 @@ export default function EditWorkPage() {
     const nextWork: StoryWork = {
       ...work,
       title: values.title.trim(),
+      characterId: values.characterId || work.characterId,
+      worldId: values.worldId || work.worldId,
       genre: values.genre.trim(),
       tagline: values.tagline.trim(),
+      authorNote: values.authorNote.trim(),
       coreSetting: values.coreSetting.trim(),
+      startScenario: values.relationship.trim() || work.startScenario,
       majorLocations: values.majorLocations,
       majorEvents: values.majorEvents,
       mood: values.mood.trim(),
@@ -101,17 +105,6 @@ export default function EditWorkPage() {
 
   return (
     <div className="min-h-full bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background px-4 py-3">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={goBack}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-lg font-bold">작품 수정하기</h1>
-            <p className="text-xs text-muted-foreground">{work.title}</p>
-          </div>
-        </div>
-      </header>
       <main className="mx-auto max-w-3xl px-4 py-5">
         <WorkForm
           mode="edit"
@@ -129,6 +122,11 @@ function toWorkFormValues(work: StoryWork, world: StoryWorld): WorkFormValues {
     title: work.title,
     genre: work.genre || String(world.genre || ""),
     tagline: work.tagline || world.tagline || "",
+    authorNote: work.authorNote || "",
+    characterId: work.characterId || "",
+    worldId: work.worldId || world.id || "",
+    relationship: work.startScenario || "",
+    openingScene: work.introScenarios?.[0]?.scene || work.startScenario || "",
     coreSetting: work.coreSetting || world.coreSetting || "",
     coverImageUrl: work.coverImageUrl || world.coverImageUrl || "",
     mood: work.mood || world.mood || "",

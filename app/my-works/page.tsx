@@ -8,11 +8,15 @@ import {
   Calendar,
   Copy,
   Edit3,
+  Globe,
   MapPin,
   MoreVertical,
+  Pencil,
   Play,
   Plus,
+  Smile,
   Trash2,
+  Users,
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -32,6 +36,7 @@ import {
   type StoryWorld,
 } from "@/lib/storychat-storage"
 import { PublicDetailView } from "@/components/my-works/public-detail-view"
+import { ImageUploadField } from "@/components/create/image-upload-field"
 import { useSafeBack } from "@/hooks/use-safe-back"
 import {
   getCurrentAppPath,
@@ -39,7 +44,7 @@ import {
   withReturnTo,
 } from "@/lib/safe-navigation"
 
-type TabId = "scenarios" | "characters" | "personas" | "completed"
+type TabId = "completed" | "characters" | "scenarios" | "personas"
 type DetailTarget =
   | { type: "scenarios"; id: string }
   | { type: "characters"; id: string }
@@ -52,10 +57,10 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: "scenarios", label: "내 세계관" },
+  { id: "completed", label: "내 작품" },
   { id: "characters", label: "내 캐릭터" },
+  { id: "scenarios", label: "내 세계관" },
   { id: "personas", label: "내 자아" },
-  { id: "completed", label: "완성작 아카이브" },
 ]
 
 export default function MyWorksPage() {
@@ -69,15 +74,17 @@ export default function MyWorksPage() {
 function MyWorksContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [activeTab, setActiveTab] = useState<TabId>("scenarios")
+  const [activeTab, setActiveTab] = useState<TabId>("completed")
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
   const [detail, setDetail] = useState<DetailTarget | null>(null)
   const [editingWorldId, setEditingWorldId] = useState<string | null>(null)
   const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null)
+  const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null)
   const [renameTarget, setRenameTarget] = useState<DetailTarget | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DetailTarget | null>(null)
   const [hasReturnDestination, setHasReturnDestination] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const goBack = useSafeBack(detail ? `/my-works?tab=${detail.type}` : "/")
 
@@ -129,6 +136,7 @@ function MyWorksContent() {
   const openDetail = (nextDetail: DetailTarget) => {
     setEditingWorldId(null)
     setEditingCharacterId(null)
+    setEditingPersonaId(null)
     setDetail(nextDetail)
     const detailPath = `/my-works?tab=${nextDetail.type}&detailType=${nextDetail.type}&detailId=${encodeURIComponent(nextDetail.id)}`
     router.push(withReturnTo(detailPath, getCurrentAppPath()))
@@ -138,18 +146,31 @@ function MyWorksContent() {
     setActiveTab(tab)
     setEditingWorldId(null)
     setEditingCharacterId(null)
+    setEditingPersonaId(null)
+    setOpenMenuId(null)
     const returnTo = normalizeInternalNavigationTarget(searchParams.get("returnTo"))
     const tabPath = `/my-works?tab=${tab}`
     router.replace(returnTo ? withReturnTo(tabPath, returnTo) : tabPath)
   }
 
   const handleEdit = (target: DetailTarget) => {
+    setEditingWorldId(null)
+    setEditingCharacterId(null)
+    setEditingPersonaId(null)
+
     if (target.type === "scenarios") {
-      router.push(withReturnTo(`/my-works/worlds/${target.id}/edit`, getCurrentAppPath()))
+      setDetail(target)
+      setEditingWorldId(target.id)
       return
     }
     if (target.type === "characters") {
-      router.push(withReturnTo(`/my-works/characters/${target.id}/edit`, getCurrentAppPath()))
+      setDetail(target)
+      setEditingCharacterId(target.id)
+      return
+    }
+    if (target.type === "personas") {
+      setDetail(target)
+      setEditingPersonaId(target.id)
       return
     }
     if (target.type === "completed") {
@@ -185,6 +206,15 @@ function MyWorksContent() {
     toast("캐릭터를 수정했어요.")
   }
 
+  const handleSavePersona = (persona: StoryPersona) => {
+    persistLibrary({
+      ...library,
+      personas: library.personas.map((item) => item.id === persona.id ? persona : item),
+    })
+    setEditingPersonaId(null)
+    toast("자아를 수정했어요.")
+  }
+
   const handleCopy = (target: DetailTarget) => {
     persistLibrary(copyTarget(library, target))
     toast("복사했어요.")
@@ -205,91 +235,89 @@ function MyWorksContent() {
   const renameLabel = renameTarget?.type === "completed" ? "작품 제목" : "이름"
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-background">
-      <header className="shrink-0 z-40 bg-background border-b border-border">
-        <div className="px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {detail || hasReturnDestination ? (
+    <div
+      className="mx-auto flex min-h-screen max-w-md flex-col bg-white pb-24 dark:bg-neutral-950"
+      onClick={() => openMenuId && setOpenMenuId(null)}
+    >
+      {/* 헤더 - detail이 없을 때만 목록 헤더 및 탭 바 표시 */}
+      {!detail && (
+        <div className="px-5 pt-4">
+          <div className="mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
               <button
+                type="button"
                 onClick={goBack}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
                 aria-label="뒤로 가기"
+                className="-ml-1 p-1 text-neutral-900 dark:text-neutral-100"
               >
-                <ArrowLeft className="w-5 h-5 text-foreground" />
+                <ArrowLeft size={20} />
               </button>
-            ) : (
-              <BookOpen className="w-5 h-5 text-muted-foreground" />
-            )}
-            <h1 className="text-lg font-bold text-foreground">
-              {detail ? getTargetName(library, detail) : "내 작품"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-1">
+              <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                내 보관함
+              </h1>
+            </div>
             <button
+              type="button"
               onClick={handleCreateClick}
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
-              aria-label={getCreateLabel(activeTab)}
-              title={getCreateLabel(activeTab)}
+              aria-label="새로 만들기"
+              className="p-1 text-neutral-900 dark:text-neutral-100"
             >
-              <Plus className="w-5 h-5 text-muted-foreground" />
+              <Plus size={22} />
             </button>
-            {detail && detailItem && (
-              <HeaderDetailMenu
-                target={detail}
-                onRename={handleEdit}
-                onDelete={handleDelete}
-              />
-            )}
+          </div>
+
+          {/* 탭 - 작품 → 캐릭터 → 세계관 → 자아 순서 */}
+          <div className="mb-5 flex gap-5 border-b border-neutral-100 dark:border-neutral-900">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => handleTabClick(t.id)}
+                className={`pb-3 text-sm ${
+                  activeTab === t.id
+                    ? "border-b-2 border-neutral-900 font-semibold text-neutral-900 dark:border-neutral-100 dark:text-neutral-100"
+                    : "text-neutral-400"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
+      )}
 
-        {!detail && (
-          <div className="relative px-2 overflow-x-auto scrollbar-hide">
-            <div className="flex min-w-full sm:min-w-0">
-              {tabs.map((tab, index) => (
-                <button
-                  key={tab.id}
-                  ref={(el) => { tabRefs.current[index] = el }}
-                  onClick={() => handleTabClick(tab.id)}
-                  className={cn(
-                    "min-w-max flex-1 px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap",
-                    activeTab === tab.id ? "text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <div
-              className="absolute bottom-0 h-0.5 bg-foreground transition-all duration-300 ease-out"
-              style={{
-                left: indicatorStyle.left,
-                width: indicatorStyle.width,
-              }}
-            />
-          </div>
-        )}
-      </header>
-
-      <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto px-5 py-6 pb-28 sm:pb-6">
+      <div className={cn("flex-1", !detail && "px-5")}>
         {detail && detailItem ? (
           editingWorldId && detail.type === "scenarios" ? (
-            <WorldEditPanel
-              world={detailItem as StoryWorld}
-              onSave={handleSaveWorld}
-              onCancel={() => setEditingWorldId(null)}
-            />
+            <div className="px-5 pt-4">
+              <WorldEditPanel
+                world={detailItem as StoryWorld}
+                onSave={handleSaveWorld}
+                onCancel={() => setEditingWorldId(null)}
+              />
+            </div>
           ) : editingCharacterId && detail.type === "characters" ? (
-            <CharacterEditPanel
-              character={detailItem as StoryCharacter}
-              onSave={handleSaveCharacter}
-              onCancel={() => setEditingCharacterId(null)}
-            />
+            <div className="px-5 pt-4">
+              <CharacterEditPanel
+                character={detailItem as StoryCharacter}
+                onSave={handleSaveCharacter}
+                onCancel={() => setEditingCharacterId(null)}
+              />
+            </div>
+          ) : editingPersonaId && detail.type === "personas" ? (
+            <div className="px-5 pt-4">
+              <PersonaEditPanel
+                persona={detailItem as StoryPersona}
+                onSave={handleSavePersona}
+                onCancel={() => setEditingPersonaId(null)}
+              />
+            </div>
           ) : (
             <DetailView
               detail={detail}
               item={detailItem}
               library={library}
+              onEdit={handleEdit}
               onRename={handleEdit}
               onDelete={handleDelete}
               onCopy={handleCopy}
@@ -297,46 +325,51 @@ function MyWorksContent() {
           )
         ) : (
           <>
-            {activeTab === "scenarios" && (
-              <ScenariosTab
-                scenarios={library.worlds}
-                onOpen={(id) => openDetail({ type: "scenarios", id })}
-                onRename={handleEdit}
-                onDelete={handleDelete}
-                onCopy={handleCopy}
+            {activeTab === "completed" && (
+              <CompletedTab
+                works={library.works}
+                library={library}
+                openMenuId={openMenuId}
+                onToggleMenu={(id) => setOpenMenuId((current) => (current === id ? null : id))}
+                onOpenDetail={(id) => openDetail({ type: "completed", id })}
+                onEdit={(id) => router.push(`/my-works/${id}/edit`)}
+                onDelete={(id) => handleDelete({ type: "completed", id })}
               />
             )}
             {activeTab === "characters" && (
               <CharactersTab
                 characters={library.characters}
-                onOpen={(id) => openDetail({ type: "characters", id })}
-                onRename={handleEdit}
-                onDelete={handleDelete}
-                onCopy={handleCopy}
+                openMenuId={openMenuId}
+                onToggleMenu={(id) => setOpenMenuId((current) => (current === id ? null : id))}
+                onOpenDetail={(id) => openDetail({ type: "characters", id })}
+                onEdit={(id) => router.push(`/create?mode=character&editId=${id}`)}
+                onDelete={(id) => handleDelete({ type: "characters", id })}
+              />
+            )}
+            {activeTab === "scenarios" && (
+              <ScenariosTab
+                scenarios={library.worlds}
+                openMenuId={openMenuId}
+                onToggleMenu={(id) => setOpenMenuId((current) => (current === id ? null : id))}
+                onOpenDetail={(id) => openDetail({ type: "scenarios", id })}
+                onEdit={(id) => router.push(`/create?mode=world&editId=${id}`)}
+                onDelete={(id) => handleDelete({ type: "scenarios", id })}
               />
             )}
             {activeTab === "personas" && (
               <PersonasTab
                 personas={library.personas}
-                onOpen={(id) => openDetail({ type: "personas", id })}
-                onRename={handleEdit}
-                onDelete={handleDelete}
-                onCopy={handleCopy}
-              />
-            )}
-            {activeTab === "completed" && (
-              <CompletedTab
-                works={library.works}
-                library={library}
-                onOpen={(id) => openDetail({ type: "completed", id })}
-                onRename={handleEdit}
-                onDelete={handleDelete}
-                onCopy={handleCopy}
+                openMenuId={openMenuId}
+                onToggleMenu={(id) => setOpenMenuId((current) => (current === id ? null : id))}
+                onOpenDetail={(id) => openDetail({ type: "personas", id })}
+                onEdit={(id) => router.push(`/create?mode=persona&editId=${id}`)}
+                onDelete={(id) => handleDelete({ type: "personas", id })}
               />
             )}
           </>
         )}
       </div>
+
       <PromptModal
         open={Boolean(renameTarget)}
         title="이름 수정"
@@ -371,446 +404,6 @@ function MyWorksContent() {
           toast("삭제했어요.")
         }}
       />
-    </div>
-  )
-}
-
-function ScenariosTab({
-  scenarios,
-  onOpen,
-  onRename,
-  onDelete,
-  onCopy,
-}: {
-  scenarios: StoryWorld[]
-  onOpen: (id: string) => void
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      {scenarios.map((scenario) => {
-        const target: DetailTarget = { type: "scenarios", id: scenario.id }
-        return (
-          <div
-            key={scenario.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onOpen(scenario.id)}
-            onKeyDown={(event) => handleCardKeyDown(event, () => onOpen(scenario.id))}
-            className={cn(
-              "relative cursor-pointer overflow-visible rounded-xl bg-gradient-to-br border border-white/10 text-left text-white",
-              scenario.coverColor,
-            )}
-          >
-            <div className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-base font-semibold text-white">{scenario.name}</h3>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <Calendar className="w-3 h-3 text-white/60" />
-                    <span className="text-xs text-white/60">{scenario.era}</span>
-                  </div>
-                </div>
-                <ItemMenu target={target} onRename={onRename} onDelete={onDelete} onCopy={onCopy} tone="inverse" />
-              </div>
-              <p className="text-sm text-white/72 mb-3">{scenario.coreSetting}</p>
-              <div className="space-y-1.5">
-                <span className="text-[10px] text-white/48 uppercase tracking-wider">
-                  주요 사건
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {scenario.events.split(",").filter(Boolean).map((event, index) => (
-                    <div key={index} className="flex items-center gap-1.5">
-                      <MapPin className="w-3 h-3 text-white/60" />
-                      <span className="text-xs text-white/70">{event.trim()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function CharactersTab({
-  characters,
-  onOpen,
-  onRename,
-  onDelete,
-  onCopy,
-}: {
-  characters: StoryCharacter[]
-  onOpen: (id: string) => void
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-}) {
-  return (
-    <div className="grid grid-cols-3 gap-3">
-      {characters.map((character) => {
-        const target: DetailTarget = { type: "characters", id: character.id }
-        return (
-          <div
-            key={character.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onOpen(character.id)}
-            onKeyDown={(event) => handleCardKeyDown(event, () => onOpen(character.id))}
-            className="relative flex min-h-[140px] cursor-pointer flex-col items-center p-4 bg-card rounded-xl border border-border text-center"
-          >
-            <div className="absolute right-2 top-2">
-              <ItemMenu target={target} onRename={onRename} onDelete={onDelete} onCopy={onCopy} />
-            </div>
-            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-3">
-              <span className="text-2xl">{character.emoji}</span>
-            </div>
-            <h3 className="text-sm font-semibold text-foreground mb-1">{character.name}</h3>
-            {getCharacterGenderLabel(character) && (
-              <p className="mb-1 text-[10px] text-muted-foreground">{getCharacterGenderLabel(character)}</p>
-            )}
-            <p className="mb-2 line-clamp-2 text-[10px] text-muted-foreground">{character.summary}</p>
-            <div className="flex flex-wrap justify-center gap-1">
-              {[...normalizeTagList(character.tags), ...normalizeTagList(character.visualTags), ...normalizeTagList(character.relationshipTags)].slice(0, 3).map((tag) => (
-                <span key={tag} className="px-1.5 py-0.5 text-[9px] bg-muted text-foreground rounded">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function PersonasTab({
-  personas,
-  onOpen,
-  onRename,
-  onDelete,
-  onCopy,
-}: {
-  personas: StoryPersona[]
-  onOpen: (id: string) => void
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      {personas.map((persona) => {
-        const target: DetailTarget = { type: "personas", id: persona.id }
-        return (
-          <div
-            key={persona.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onOpen(persona.id)}
-            onKeyDown={(event) => handleCardKeyDown(event, () => onOpen(persona.id))}
-            className="cursor-pointer p-4 bg-card rounded-xl border border-border text-left"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-foreground mb-1">{persona.name}</h3>
-                <p className="text-xs text-muted-foreground mb-2">
-                  {[`${persona.age}세`, persona.role, getPersonaGenderLabel(persona)].filter(Boolean).join(" / ")}
-                </p>
-                <p className="text-xs text-muted-foreground line-clamp-2">{persona.summary}</p>
-              </div>
-              <ItemMenu target={target} onRename={onRename} onDelete={onDelete} onCopy={onCopy} />
-            </div>
-            <div className="mt-3 pt-3 border-t border-border">
-              <span className="text-[10px] text-muted-foreground">생성일: {persona.createdAt}</span>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function CompletedTab({
-  works,
-  library,
-  onOpen,
-  onRename,
-  onDelete,
-  onCopy,
-}: {
-  works: StoryWork[]
-  library: StoryChatLibrary
-  onOpen: (id: string) => void
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      {works.map((work) => (
-        <CompletedWorkCard
-          key={work.id}
-          work={work}
-          library={library}
-          onOpen={onOpen}
-          onRename={onRename}
-          onDelete={onDelete}
-          onCopy={onCopy}
-        />
-      ))}
-      {works.length === 0 && <EmptyState />}
-    </div>
-  )
-}
-
-function CompletedWorkCard({
-  work,
-  library,
-  onOpen,
-  onRename,
-  onDelete,
-  onCopy,
-}: {
-  work: StoryWork
-  library: StoryChatLibrary
-  onOpen: (id: string) => void
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-}) {
-  const character = library.characters.find((item) => item.id === work.characterId)
-  const world = library.worlds.find((item) => item.id === work.worldId)
-  const target: DetailTarget = { type: "completed", id: work.id }
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(work.id)}
-      onKeyDown={(event) => handleCardKeyDown(event, () => onOpen(work.id))}
-      className="cursor-pointer bg-card rounded-xl border border-border overflow-visible text-left"
-    >
-      <div className="p-4">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-            <span className="text-xl">{character?.emoji ?? "✨"}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground">{character?.name ?? "캐릭터"}</span>
-              <span className="text-muted-foreground">+</span>
-              <span className="text-sm text-muted-foreground">{world?.name ?? "세계관"}</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5 truncate">{work.title}</p>
-          </div>
-          <ItemMenu target={target} onRename={onRename} onDelete={onDelete} onCopy={onCopy} />
-        </div>
-        <div className="flex items-center justify-between pt-3 border-t border-border">
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">완성작</span>
-            <span className="text-xs text-muted-foreground">{work.updatedAt}</span>
-          </div>
-          <Link
-            href={`/chat/${work.id}`}
-            onClick={(event) => event.stopPropagation()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80 rounded-lg transition-colors"
-          >
-            <Play className="w-3.5 h-3.5 text-foreground" />
-            <span className="text-xs font-medium text-foreground">대화 이어가기</span>
-          </Link>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ItemMenu({
-  target,
-  onRename,
-  onDelete,
-  onCopy,
-  tone = "default",
-}: {
-  target: DetailTarget
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-  tone?: "default" | "inverse"
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        onClick={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          setOpen((current) => !current)
-        }}
-        className={cn(
-          "w-8 h-8 flex items-center justify-center rounded-full transition-colors",
-          tone === "inverse" ? "hover:bg-white/10" : "hover:bg-accent",
-        )}
-        aria-label="더보기"
-      >
-        <MoreVertical className={cn("w-4 h-4", tone === "inverse" ? "text-white/70" : "text-muted-foreground")} />
-      </button>
-
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={(event) => {
-              event.stopPropagation()
-              setOpen(false)
-            }}
-          />
-          <div className="absolute right-0 top-10 z-50 bg-popover rounded-xl shadow-xl py-1.5 min-w-[140px] border border-border">
-            <MenuButton
-              icon={Edit3}
-              label="수정"
-              onClick={() => {
-                setOpen(false)
-                onRename(target)
-              }}
-            />
-            <MenuButton
-              icon={Copy}
-              label="복사"
-              onClick={() => {
-                setOpen(false)
-                onCopy(target)
-              }}
-            />
-            <div className="my-1 border-t border-border" />
-            <MenuButton
-              icon={Trash2}
-              label="삭제"
-              destructive
-              onClick={() => {
-                setOpen(false)
-                onDelete(target)
-              }}
-            />
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-function HeaderDetailMenu({
-  target,
-  onRename,
-  onDelete,
-}: {
-  target: DetailTarget
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="relative shrink-0">
-      <button
-        type="button"
-        onClick={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          setOpen((current) => !current)
-        }}
-        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
-        aria-label="상세 메뉴"
-      >
-        <MoreVertical className="w-5 h-5 text-muted-foreground" />
-      </button>
-
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={(event) => {
-              event.stopPropagation()
-              setOpen(false)
-            }}
-          />
-          <div className="absolute right-0 top-10 z-50 min-w-[140px] rounded-xl border border-border bg-popover py-1.5 shadow-xl">
-            <MenuButton
-              icon={Edit3}
-              label="수정"
-              onClick={() => {
-                setOpen(false)
-                onRename(target)
-              }}
-            />
-            <div className="my-1 border-t border-border" />
-            <MenuButton
-              icon={Trash2}
-              label="삭제"
-              destructive
-              onClick={() => {
-                setOpen(false)
-                onDelete(target)
-              }}
-            />
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-function MenuButton({
-  icon: Icon,
-  label,
-  destructive,
-  onClick,
-}: {
-  icon: typeof Edit3
-  label: string
-  destructive?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation()
-        onClick()
-      }}
-      className={cn(
-        "w-full px-4 py-2.5 text-left text-sm hover:bg-accent transition-colors flex items-center gap-2",
-        destructive
-          ? "font-semibold text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-300 dark:hover:bg-red-950/60 dark:hover:text-red-100"
-          : "text-popover-foreground",
-      )}
-    >
-      <Icon className="w-4 h-4" />
-      {label}
-    </button>
-  )
-}
-
-function DetailView({
-  detail,
-  item,
-  library,
-}: {
-  detail: DetailTarget
-  item: StoryCharacter | StoryWorld | StoryPersona | StoryWork
-  library: StoryChatLibrary
-  onRename: (target: DetailTarget) => void
-  onDelete: (target: DetailTarget) => void
-  onCopy: (target: DetailTarget) => void
-}) {
-  return (
-    <div className="max-w-full space-y-4 overflow-x-hidden">
-      <PublicDetailView detail={detail} item={item} library={library} />
     </div>
   )
 }
@@ -861,96 +454,49 @@ function WorldEditPanel({
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <WorldEditField label="세계관 이름">
-              <input
-                value={draft.name}
-                onChange={(event) => update("name", event.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
-              />
+              <input value={draft.name} onChange={(event) => update("name", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
             </WorldEditField>
             <WorldEditField label="장르">
-              <input
-                value={String(draft.genre)}
-                onChange={(event) => update("genre", event.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
-              />
+              <input value={String(draft.genre)} onChange={(event) => update("genre", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
             </WorldEditField>
           </div>
           <WorldEditField label="시대/배경">
-            <input
-              value={draft.era}
-              onChange={(event) => update("era", event.target.value)}
-              className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
-            />
+            <input value={draft.era} onChange={(event) => update("era", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
           </WorldEditField>
           <WorldEditField label="핵심 설정">
-            <textarea
-              value={draft.coreSetting}
-              onChange={(event) => update("coreSetting", event.target.value)}
-              className="field-sizing-content max-h-[220px] min-h-[92px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
-            />
+            <textarea value={draft.coreSetting} onChange={(event) => update("coreSetting", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[92px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
           </WorldEditField>
           <div className="grid gap-3 sm:grid-cols-2">
             <WorldEditField label="주요 장소">
-              <textarea
-                value={draft.places}
-                onChange={(event) => update("places", event.target.value)}
-                className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
-              />
+              <textarea value={draft.places} onChange={(event) => update("places", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
             </WorldEditField>
             <WorldEditField label="주요 사건">
-              <textarea
-                value={draft.events}
-                onChange={(event) => update("events", event.target.value)}
-                className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
-              />
+              <textarea value={draft.events} onChange={(event) => update("events", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
             </WorldEditField>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <WorldEditField label="분위기">
-              <input
-                value={draft.mood}
-                onChange={(event) => update("mood", event.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
-              />
+              <input value={draft.mood} onChange={(event) => update("mood", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
             </WorldEditField>
             <WorldEditField label="세계관 날짜">
-              <input
-                value={draft.worldDate}
-                onChange={(event) => update("worldDate", event.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
-              />
+              <input value={draft.worldDate} onChange={(event) => update("worldDate", event.target.value)} className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none" />
             </WorldEditField>
           </div>
           <WorldEditField label="금지 설정">
-            <textarea
-              value={draft.forbiddenSettings}
-              onChange={(event) => update("forbiddenSettings", event.target.value)}
-              className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
-            />
+            <textarea value={draft.forbiddenSettings} onChange={(event) => update("forbiddenSettings", event.target.value)} className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none" />
           </WorldEditField>
+          <ImageUploadField
+            label="대표 이미지"
+            value={draft.coverImageUrl ?? ""}
+            onChange={(url) => update("coverImageUrl", url ?? "")}
+          />
         </div>
       </section>
-
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="flex-1 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"
-        >
-          취소
-        </button>
-        <button
-          type="submit"
-          className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          저장
-        </button>
+        <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent">취소</button>
+        <button type="submit" className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">저장</button>
       </div>
-      <AlertModal
-        open={alertOpen}
-        message="세계관 이름, 장르, 핵심 설정을 입력해 주세요."
-        onOpenChange={setAlertOpen}
-      />
+      <AlertModal open={alertOpen} message="세계관 이름, 장르, 핵심 설정을 입력해 주세요." onOpenChange={setAlertOpen} />
     </form>
   )
 }
@@ -1095,6 +641,11 @@ function CharacterEditPanel({
             <EditableTagField label="외형 키워드" value={draft.visualTags ?? []} onChange={(visualTags) => update("visualTags", visualTags)} />
           </div>
           <EditableTagField label="관계 키워드" value={draft.relationshipTags ?? []} onChange={(relationshipTags) => update("relationshipTags", relationshipTags)} />
+          <ImageUploadField
+            label="프로필 이미지"
+            value={draft.avatarUrl || draft.coverImageUrl || ""}
+            onChange={(url) => update("avatarUrl", url ?? "")}
+          />
         </div>
       </section>
 
@@ -1109,6 +660,143 @@ function CharacterEditPanel({
       <AlertModal
         open={alertOpen}
         message="이름, 나이, 역할/직업, 한 줄 소개, 성격 키워드를 입력해 주세요."
+        onOpenChange={setAlertOpen}
+      />
+    </form>
+  )
+}
+
+function PersonaEditPanel({
+  persona,
+  onSave,
+  onCancel,
+}: {
+  persona: StoryPersona
+  onSave: (persona: StoryPersona) => void
+  onCancel: () => void
+}) {
+  const [draft, setDraft] = useState<StoryPersona>(persona)
+  const [alertOpen, setAlertOpen] = useState(false)
+
+  const update = <K extends keyof StoryPersona>(key: K, value: StoryPersona[K]) => {
+    setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!draft.name.trim()) {
+      setAlertOpen(true)
+      return
+    }
+    onSave(draft)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-border bg-card p-4">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <h2 className="text-base font-bold text-foreground">자아 수정하기</h2>
+        <span className="text-xs text-muted-foreground">{draft.name}</span>
+      </div>
+
+      <div className="space-y-3">
+        <WorldEditField label="이름">
+          <input
+            value={draft.name}
+            onChange={(event) => update("name", event.target.value)}
+            className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+          />
+        </WorldEditField>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <WorldEditField label="성별">
+            <select
+              value={draft.gender ?? "unknown"}
+              onChange={(event) => update("gender", event.target.value as StoryCharacterGender)}
+              className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+            >
+              <option value="female">여성</option>
+              <option value="male">남성</option>
+              <option value="nonbinary">논바이너리/기타</option>
+              <option value="unknown">설정하지 않음</option>
+              <option value="custom">직접 입력</option>
+            </select>
+          </WorldEditField>
+          <WorldEditField label="나이">
+            <input
+              value={draft.age ?? ""}
+              onChange={(event) => update("age", event.target.value)}
+              className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+            />
+          </WorldEditField>
+        </div>
+        {draft.gender === "custom" && (
+          <WorldEditField label="성별 직접 입력">
+            <input
+              value={draft.genderCustom ?? ""}
+              onChange={(event) => update("genderCustom", event.target.value)}
+              className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+            />
+          </WorldEditField>
+        )}
+        <WorldEditField label="역할 / 상태">
+          <input
+            value={draft.role ?? ""}
+            onChange={(event) => update("role", event.target.value)}
+            className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+          />
+        </WorldEditField>
+        <WorldEditField label="한 줄 소개">
+          <textarea
+            value={draft.summary ?? ""}
+            onChange={(event) => update("summary", event.target.value)}
+            className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
+          />
+        </WorldEditField>
+        <WorldEditField label="성격">
+          <textarea
+            value={draft.personality ?? ""}
+            onChange={(event) => update("personality", event.target.value)}
+            className="field-sizing-content max-h-[220px] min-h-[82px] w-full resize-y overflow-y-auto rounded-md border border-border bg-input px-3 py-2 text-sm outline-none"
+          />
+        </WorldEditField>
+        <WorldEditField label="말투">
+          <input
+            value={draft.speechStyle ?? ""}
+            onChange={(event) => update("speechStyle", event.target.value)}
+            className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+          />
+        </WorldEditField>
+        <WorldEditField label="관계">
+          <input
+            value={draft.relationship ?? ""}
+            onChange={(event) => update("relationship", event.target.value)}
+            className="h-10 w-full rounded-md border border-border bg-input px-3 text-sm outline-none"
+          />
+        </WorldEditField>
+        <ImageUploadField
+          label="프로필 이미지"
+          value={draft.avatarUrl ?? ""}
+          onChange={(url) => update("avatarUrl", url ?? "")}
+        />
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"
+        >
+          취소
+        </button>
+        <button
+          type="submit"
+          className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          저장
+        </button>
+      </div>
+      <AlertModal
+        open={alertOpen}
+        message="자아 이름을 입력해 주세요."
         onOpenChange={setAlertOpen}
       />
     </form>
@@ -1405,3 +1093,432 @@ function copyTarget(library: StoryChatLibrary, target: DetailTarget): StoryChatL
     works: [{ ...item, id: createId("work"), title: `${item.title}${suffix}`, createdAt: new Date().toISOString(), updatedAt: "오늘" }, ...library.works],
   }
 }
+
+function DetailView({
+  detail,
+  item,
+  library,
+  onEdit,
+}: {
+  detail: DetailTarget
+  item: StoryCharacter | StoryWorld | StoryPersona | StoryWork | null
+  library: StoryChatLibrary
+  onEdit?: (target: DetailTarget) => void
+  onRename?: (target: DetailTarget) => void
+  onDelete?: (target: DetailTarget) => void
+  onCopy?: (target: DetailTarget) => void
+}) {
+  if (!item) return null
+
+  const isWork = detail.type === "completed"
+  const title = isWork
+    ? (item as StoryWork).title
+    : (item as StoryCharacter | StoryWorld | StoryPersona).name
+
+  return (
+    <div className="max-w-full overflow-x-hidden">
+      {/* 헤더 - 내 작품 view와 동일한 형식 */}
+      <div className="flex items-center justify-between px-5 pt-4 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.history.back()}
+            aria-label="뒤로 가기"
+            className="-ml-1 rounded-full p-1.5 text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-base font-semibold text-neutral-900 dark:text-neutral-100 truncate max-w-[200px]">
+            {title}
+          </h1>
+        </div>
+        {onEdit && !isWork && (
+          <button
+            type="button"
+            onClick={() => onEdit(detail)}
+            className="flex items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
+          >
+            <Pencil size={13} />
+            수정
+          </button>
+        )}
+      </div>
+      <div className="px-5 space-y-4 pb-4">
+        <PublicDetailView detail={detail} item={item} library={library} />
+      </div>
+    </div>
+  )
+}
+
+function CompletedTab({
+  works,
+  library,
+  openMenuId,
+  onToggleMenu,
+  onOpenDetail,
+  onEdit,
+  onDelete,
+}: {
+  works: StoryWork[]
+  library: StoryChatLibrary
+  openMenuId: string | null
+  onToggleMenu: (id: string) => void
+  onOpenDetail: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const router = useRouter()
+
+  if (works.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-neutral-400 dark:text-neutral-600">
+        아직 만든 작품이 없어요. 오른쪽 위 + 버튼으로 만들어보세요.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {works.map((w) => {
+        const character = library.characters.find((c) => c.id === w.characterId)
+        const world = library.worlds.find((item) => item.id === w.worldId)
+        const item = {
+          id: w.id,
+          emoji: character?.emoji || "📖",
+          title: character?.name || w.title,
+          subtitle: world?.name || w.genre || "세계관",
+          description: w.title || w.coreSetting || "작품 대화",
+          status: "완성작",
+          updatedAt: w.updatedAt || "오늘",
+        }
+
+        return (
+          <WorkCard
+            key={w.id}
+            item={item}
+            onOpenDetail={() => onOpenDetail(w.id)}
+            onContinueChat={() => router.push(`/chat/${w.id}`)}
+            menuOpen={openMenuId === w.id}
+            onToggleMenu={() => onToggleMenu(w.id)}
+            onEdit={() => onEdit(w.id)}
+            onDelete={() => onDelete(w.id)}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function CharactersTab({
+  characters,
+  openMenuId,
+  onToggleMenu,
+  onOpenDetail,
+  onEdit,
+  onDelete,
+}: {
+  characters: StoryCharacter[]
+  openMenuId: string | null
+  onToggleMenu: (id: string) => void
+  onOpenDetail: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const items = characters.map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: `${c.role || "캐릭터"} · ${c.speechStyle || c.summary || "설정 완료"}`,
+    imageUrl: c.avatarUrl || c.coverImageUrl,
+  }))
+
+  return (
+    <EntryList
+      icon={Users}
+      iconColor="text-lime-600 dark:text-lime-400"
+      iconBg="bg-lime-50 dark:bg-lime-950"
+      items={items}
+      openMenuId={openMenuId}
+      onToggleMenu={onToggleMenu}
+      onOpenDetail={onOpenDetail}
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
+  )
+}
+
+function ScenariosTab({
+  scenarios,
+  openMenuId,
+  onToggleMenu,
+  onOpenDetail,
+  onEdit,
+  onDelete,
+}: {
+  scenarios: StoryWorld[]
+  openMenuId: string | null
+  onToggleMenu: (id: string) => void
+  onOpenDetail: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const items = scenarios.map((w) => ({
+    id: w.id,
+    name: w.name,
+    description: `${w.genre || "장르"} · ${w.coreSetting || w.era || "세계관"}`,
+    imageUrl: w.coverImageUrl,
+  }))
+
+  return (
+    <EntryList
+      icon={Globe}
+      iconColor="text-amber-600 dark:text-amber-400"
+      iconBg="bg-amber-50 dark:bg-amber-950"
+      items={items}
+      openMenuId={openMenuId}
+      onToggleMenu={onToggleMenu}
+      onOpenDetail={onOpenDetail}
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
+  )
+}
+
+function PersonasTab({
+  personas,
+  openMenuId,
+  onToggleMenu,
+  onOpenDetail,
+  onEdit,
+  onDelete,
+}: {
+  personas: StoryPersona[]
+  openMenuId: string | null
+  onToggleMenu: (id: string) => void
+  onOpenDetail: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  const items = personas.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: `${p.role || "자아"} · ${p.summary || p.relationship || "설정 완료"}`,
+    imageUrl: p.avatarUrl,
+  }))
+
+  return (
+    <EntryList
+      icon={Smile}
+      iconColor="text-violet-600 dark:text-violet-400"
+      iconBg="bg-violet-50 dark:bg-violet-950"
+      items={items}
+      openMenuId={openMenuId}
+      onToggleMenu={onToggleMenu}
+      onOpenDetail={onOpenDetail}
+      onEdit={onEdit}
+      onDelete={onDelete}
+    />
+  )
+}
+
+function WorkCard({
+  item,
+  onOpenDetail,
+  onContinueChat,
+  menuOpen,
+  onToggleMenu,
+  onEdit,
+  onDelete,
+}: {
+  item: {
+    id: string
+    emoji: string
+    title: string
+    subtitle: string
+    description: string
+    status: string
+    updatedAt: string
+  }
+  onOpenDetail?: () => void
+  onContinueChat: () => void
+  menuOpen: boolean
+  onToggleMenu: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div
+      onClick={onOpenDetail}
+      className="cursor-pointer rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800 bg-white dark:bg-neutral-900 transition-colors hover:border-blue-400/50 dark:hover:border-blue-500/50"
+    >
+      <div className="mb-3 flex items-start gap-3.5">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-xl dark:bg-neutral-800">
+          {item.emoji}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[15px] text-neutral-900 dark:text-neutral-100 truncate">
+            <span className="font-semibold">{item.title}</span>
+            <span className="mx-1 text-neutral-400">+</span>
+            {item.subtitle}
+          </p>
+          <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400 line-clamp-2">
+            {item.description}
+          </p>
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="더보기"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleMenu()
+            }}
+            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+          >
+            <MoreVertical size={18} />
+          </button>
+          {menuOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-0 top-6 z-10 w-32 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  onEdit()
+                }}
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                <Pencil size={14} />
+                수정
+              </button>
+              <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+              <button
+                type="button"
+                onClick={() => {
+                  onDelete()
+                }}
+                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+              >
+                <Trash2 size={14} />
+                삭제
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="my-3 h-px bg-neutral-100 dark:bg-neutral-800" />
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+          {item.status} · {item.updatedAt}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onContinueChat()
+          }}
+          className="flex items-center gap-1.5 rounded-full bg-neutral-100 px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 transition-colors"
+        >
+          <Play size={12} fill="currentColor" />
+          대화 이어가기
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function EntryList({
+  icon: Icon,
+  iconColor,
+  iconBg,
+  items,
+  openMenuId,
+  onToggleMenu,
+  onOpenDetail,
+  onEdit,
+  onDelete,
+}: {
+  icon: typeof Users
+  iconColor: string
+  iconBg: string
+  items: Array<{ id: string; name: string; description: string; imageUrl?: string }>
+  openMenuId: string | null
+  onToggleMenu: (id: string) => void
+  onOpenDetail?: (id: string) => void
+  onEdit: (id: string) => void
+  onDelete: (id: string) => void
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-neutral-400 dark:text-neutral-600">
+        아직 만든 항목이 없어요. 오른쪽 위 + 버튼으로 만들어보세요.
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {items.map((item) => (
+        <div
+          key={item.id}
+          onClick={() => onOpenDetail?.(item.id)}
+          className="cursor-pointer flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3.5 py-3 dark:border-neutral-800 dark:bg-neutral-900 transition-colors hover:border-blue-400/50 dark:hover:border-blue-500/50"
+        >
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg overflow-hidden ${!item.imageUrl ? iconBg : ""}`}>
+            {item.imageUrl ? (
+              <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+            ) : (
+              <Icon size={17} className={iconColor} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">
+              {item.name}
+            </p>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 truncate">
+              {item.description}
+            </p>
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="더보기"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleMenu(item.id)
+              }}
+              className="p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+            >
+              <MoreVertical size={17} />
+            </button>
+            {openMenuId === item.id && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 top-6 z-10 w-32 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
+              >
+                <button
+                  type="button"
+                  onClick={() => onEdit(item.id)}
+                  className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  <Pencil size={14} />
+                  수정
+                </button>
+                <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+                <button
+                  type="button"
+                  onClick={() => onDelete(item.id)}
+                  className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                >
+                  <Trash2 size={14} />
+                  삭제
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+

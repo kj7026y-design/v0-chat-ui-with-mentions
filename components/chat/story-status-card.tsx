@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { ChevronDown, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ChevronDown, Pencil, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface StoryStatus {
@@ -25,14 +26,35 @@ export interface StoryStatus {
 
 interface StoryStatusCardProps {
   status: StoryStatus
+  workId?: string
+  onEditWork?: () => void
   compactPanel?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
 
-export function StoryStatusCard({ status, compactPanel = false, open, onOpenChange }: StoryStatusCardProps) {
+export function StoryStatusCard({
+  status,
+  workId,
+  onEditWork,
+  compactPanel = false,
+  open,
+  onOpenChange,
+}: StoryStatusCardProps) {
+  const router = useRouter()
   const [internalExpanded, setInternalExpanded] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+
+  const handleEdit = () => {
+    onOpenChange?.(false)
+    setInternalExpanded(false)
+    if (onEditWork) {
+      onEditWork()
+    } else if (workId) {
+      router.push(`/my-works/${workId}/edit`)
+    }
+  }
+
   const expanded = open ?? internalExpanded
   const setExpanded = onOpenChange ?? setInternalExpanded
   const progress = Math.max(0, Math.min(100, status.chapterProgress ?? 0))
@@ -89,14 +111,26 @@ export function StoryStatusCard({ status, compactPanel = false, open, onOpenChan
       >
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <p className="min-w-0 truncate text-xs font-semibold text-foreground">진행상황</p>
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="rounded-full p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            aria-label="진행상황 닫기"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            {(workId || onEditWork) && (
+              <button
+                type="button"
+                onClick={handleEdit}
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              >
+                <Pencil className="h-3 w-3" />
+                수정
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="rounded-full p-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              aria-label="진행상황 닫기"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
         <div className="max-h-[calc(58dvh-2.5rem)] overflow-y-auto pb-4">
           <StatusDetails

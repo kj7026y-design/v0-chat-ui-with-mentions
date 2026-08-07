@@ -132,6 +132,7 @@ export interface StoryWork {
   storyProgressSettings?: StoryProgressSettings
   genre?: string
   tagline?: string
+  authorNote?: string
   coreSetting?: string
   majorLocations?: string | string[]
   majorEvents?: string | string[]

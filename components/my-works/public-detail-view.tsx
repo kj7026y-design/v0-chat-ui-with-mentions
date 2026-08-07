@@ -4,12 +4,16 @@ import { useState, type MouseEvent, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
+  ArrowLeft,
   BookOpen,
   ChevronDown,
   Compass,
   Edit3,
   Eye,
+  Heart,
   MapPin,
+  Pencil,
+  PenLine,
   Play,
   Quote,
   ScrollText,
@@ -28,7 +32,6 @@ import type {
 } from "@/lib/storychat-storage"
 import { getIntroPreviewText, normalizeIntroScenarios } from "@/lib/storychat-storage"
 import { WorkComments } from "@/components/work/work-comments"
-import { WorkLikeButton } from "@/components/work/work-like-button"
 import { cn } from "@/lib/utils"
 import { getCurrentAppPath, withReturnTo } from "@/lib/safe-navigation"
 
@@ -113,23 +116,12 @@ export function PublicDetailView({
     }
 
     return (
-      <div className="max-w-full space-y-3 overflow-x-hidden">
-        <div className="flex justify-end">
-          <ReturnPathLink
-            href={`/my-works/${work.id}/edit`}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent"
-          >
-            <Edit3 className="h-3.5 w-3.5" />
-            수정하기
-          </ReturnPathLink>
-        </div>
-        <WorkLandingPage
-          work={work}
-          world={world}
-          characters={character ? [character] : []}
-          personas={persona ? [persona] : []}
-        />
-      </div>
+      <WorkLandingPage
+        work={work}
+        world={world}
+        characters={character ? [character] : []}
+        personas={persona ? [persona] : []}
+      />
     )
   }
 
@@ -138,6 +130,15 @@ export function PublicDetailView({
   }
 
   return <PersonaLandingPage persona={item as StoryPersona} />
+}
+
+interface CastMember {
+  id: string
+  emoji: string
+  name: string
+  type: "캐릭터" | "자아"
+  tagline: string
+  keyword: string
 }
 
 export function WorkLandingPage({
@@ -155,211 +156,307 @@ export function WorkLandingPage({
   showSocial?: boolean
   onLikeCountChange?: (count: number) => void
 }) {
+  const router = useRouter()
+  const [liked, setLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(work.likeCount ?? 0)
+  const [selectedScene, setSelectedScene] = useState<string | null>(null)
+
   const highlights = normalizeList(work.majorEvents ?? world.events)
   const places = normalizeLocations(work.majorLocations ?? world.places, world.locationImages)
-  const preview = buildWorkPreview(work, world, places, highlights)
-
-  return (
-    <article className="max-w-full space-y-6 overflow-x-hidden pb-10">
-      <WorkLandingHero work={work} world={world} />
-
-      <WorkPreviewSection
-        preview={preview}
-        work={work}
-        showLike={showSocial}
-        onLikeCountChange={onLikeCountChange}
-      />
-
-      {(characters.length > 0 || personas.length > 0) && (
-        <CharacterPreviewSection characters={characters} personas={personas} />
-      )}
-
-      <WorkStartSceneSection work={work} world={world} />
-
-      <WorkIntroScenariosPreview work={work} />
-
-      {highlights.length > 0 && <WorkHighlightSection highlights={highlights} />}
-
-      {showSocial && (
-        <div className="space-y-4">
-          <WorkComments workId={work.id} />
-        </div>
-      )}
-
-      <div className="rounded-[24px] border border-border bg-card p-4 text-center">
-        <p className="mb-3 text-sm leading-relaxed text-muted-foreground">이야기의 문턱에 섰습니다. 첫 장면에서 바로 대화를 시작해 보세요.</p>
-        <Link
-          href={`/chat/${work.id}`}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-bold text-black hover:bg-amber-100"
-        >
-          <Play className="h-4 w-4" />
-          채팅 시작하기
-        </Link>
-      </div>
-    </article>
-  )
-}
-
-function WorkIntroScenariosPreview({ work }: { work: StoryWork }) {
+  const previewText = buildWorkPreview(work, world, places, highlights)
   const intros = normalizeIntroScenarios(work)
-  if (intros.length === 0) {
-    return (
-      <section className="rounded-[22px] border border-border bg-card/80 p-4">
-        <SectionTitle icon={ScrollText} title="시작 장면" />
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">자유롭게 첫 문장을 입력해 이야기를 시작할 수 있어요.</p>
-      </section>
-    )
+
+  const title = work.title || "작품 제목"
+  const tagline = work.tagline || world.tagline || work.coreSetting || world.coreSetting || "천년의 잠에서 깨어난 왕국의 마지막 이야기"
+  const genre = work.genre || world.genre || "판타지"
+  const mood = work.mood || world.mood || "장엄하고 쓸쓸함"
+
+  const currentChapterTitle = work.currentChapter || world.currentChapter || "1장: 잠에서 깨어난 성"
+  const currentChapterDesc = work.startScenario || world.coreSetting || "안개 낀 산길에서 이무기와 마주친다."
+  const currentChapterGoal = work.currentGoal || world.currentGoal || "왕국 몰락의 원인을 찾는다"
+
+  const cast: CastMember[] = [
+    ...characters.map((c) => ({
+      id: c.id,
+      emoji: c.emoji || "🐍",
+      name: c.name,
+      type: "캐릭터" as const,
+      tagline: c.summary || c.role || "천년을 기다린 용이 되지 못한 존재",
+      keyword: c.personality || c.speechStyle || "신비롭고 고독하며 지혜로움",
+    })),
+    ...personas.map((p) => ({
+      id: p.id,
+      emoji: "🛡️",
+      name: p.name,
+      type: "자아" as const,
+      tagline: [p.age ? `${p.age}세` : "", p.role].filter(Boolean).join(" · ") || "잊혀진 왕국의 마지막 기사",
+      keyword: p.summary || p.personality || "왕국을 지키기 위해 남은 유일한 사람",
+    })),
+  ]
+
+  const handleLike = () => {
+    const nextLiked = !liked
+    const nextCount = nextLiked ? likeCount + 1 : Math.max(0, likeCount - 1)
+    setLiked(nextLiked)
+    setLikeCount(nextCount)
+    onLikeCountChange?.(nextCount)
+  }
+
+  const handleStartChat = (sceneId?: string) => {
+    const targetScene = sceneId || selectedScene
+    if (targetScene) {
+      router.push(`/chat/${work.id}?scene=${encodeURIComponent(targetScene)}`)
+    } else {
+      router.push(`/chat/${work.id}`)
+    }
   }
 
   return (
-    <section className="space-y-3">
-      <SectionTitle icon={ScrollText} title="시작 장면" />
-      <p className="text-xs text-muted-foreground">원하는 장면에서 이야기를 시작할 수 있어요.</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {intros.map((intro) => (
-          <IntroPreviewCard key={intro.id} intro={intro} />
-        ))}
-      </div>
-    </section>
-  )
-}
+    <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white pb-8 dark:bg-neutral-950">
+      <div className="px-5 pt-4">
+        {/* 헤더 */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              aria-label="뒤로 가기"
+              className="-ml-1 shrink-0 p-1 text-neutral-900 dark:text-neutral-100"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="truncate text-base font-medium text-neutral-900 dark:text-neutral-100">
+              {title}
+            </h1>
+          </div>
+          <Link
+            href={`/my-works/${work.id}/edit`}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+          >
+            <Pencil size={12} />
+            수정하기
+          </Link>
+        </div>
 
-function IntroPreviewCard({ intro }: { intro: IntroScenario }) {
-  return (
-    <div className="overflow-hidden rounded-[20px] border border-border bg-card/80">
-      {intro.imageUrl && <img src={intro.imageUrl} alt={intro.title} className="h-28 w-full object-cover" />}
-      <div className="p-3">
-        <h3 className="line-clamp-1 text-sm font-bold text-foreground">{intro.title}</h3>
-        <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{getIntroPreviewText(intro)}</p>
-      </div>
-    </div>
-  )
-}
+        {/* 히어로 */}
+        <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-neutral-800 to-neutral-950 p-5">
+          <p className="mb-1.5 text-lg font-semibold text-white">{title}</p>
+          <p className="mb-3.5 text-sm text-neutral-300">{tagline}</p>
+          <div className="mb-4 flex gap-1.5">
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-neutral-100">
+              {genre}
+            </span>
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-neutral-100">
+              {mood}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleStartChat()}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-white py-2.5 text-sm font-medium text-neutral-900 hover:bg-neutral-100 transition-colors"
+            >
+              <Play size={13} fill="currentColor" />
+              채팅 시작하기
+            </button>
+            <Link
+              href={`/my-works/${work.id}/world`}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/20 py-2.5 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+            >
+              <BookOpen size={13} />
+              세계관 보기
+            </Link>
+          </div>
+        </div>
 
-function WorkLandingHero({ work, world }: { work: StoryWork; world: StoryWorld }) {
-  const copy = work.tagline || world.tagline || work.coreSetting || world.coreSetting || "아직 기록되지 않은 이야기가 당신을 기다리고 있다."
-  const imageUrl = work.coverImageUrl || world.coverImageUrl
-  const backgroundStyle = imageUrl
-    ? { backgroundImage: `url(${imageUrl})` }
-    : undefined
-
-  return (
-    <section
-      className={cn(
-        "relative min-h-[320px] overflow-hidden rounded-[24px] border border-white/10 bg-cover bg-center p-5",
-        !imageUrl && fantasyGradient(work.genre || String(world.genre)),
-      )}
-      style={backgroundStyle}
-    >
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/62 to-black/18" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(245,158,11,0.20),transparent_34%),radial-gradient(circle_at_76%_26%,rgba(99,102,241,0.18),transparent_32%)]" />
-
-      <div className="relative flex min-h-[280px] flex-col justify-end gap-4">
-        <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/80">Featured Story</p>
-          <div>
-            <h2 className="text-3xl font-black leading-tight text-white md:text-5xl">{work.title}</h2>
-            <p className="mt-3 line-clamp-3 max-w-2xl text-sm leading-relaxed text-white/76 md:text-base">
-              {copy}
+        {/* 작가의 한마디 */}
+        {work.authorNote && (
+          <div className="mb-5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <p className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              <PenLine size={15} className="text-neutral-500" />
+              작가의 한마디
+            </p>
+            <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+              {work.authorNote}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-[11px] font-medium text-white/72">
-            {[work.genre || world.genre, work.mood || world.mood, "작가의 세계"].filter(Boolean).map((item) => (
-              <span key={String(item)} className="rounded-full border border-white/12 bg-white/8 px-2.5 py-1 backdrop-blur">
-                {String(item)}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/chat/${work.id}`}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-100"
-          >
-            <Play className="h-4 w-4" />
-            채팅 시작하기
-          </Link>
-          <ReturnPathLink
-            href={`/my-works/${work.id}/world`}
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/15"
-          >
-            <Compass className="h-4 w-4" />
-            세계관 보기
-          </ReturnPathLink>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function WorkPreviewSection({
-  preview,
-  work,
-  showLike,
-  onLikeCountChange,
-}: {
-  preview: string
-  work: StoryWork
-  showLike: boolean
-  onLikeCountChange?: (count: number) => void
-}) {
-  return (
-    <section className="rounded-[22px] border border-border bg-card/80 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <SectionTitle icon={Sparkles} title="작품 미리보기" />
-        {showLike && (
-          <WorkLikeButton
-            workId={work.id}
-            initialCount={work.likeCount ?? 0}
-            onCountChange={onLikeCountChange}
-          />
         )}
-      </div>
-      <p className="mt-3 text-sm leading-[1.75] text-foreground/85">{preview}</p>
-    </section>
-  )
-}
 
-function WorkStartSceneSection({ work, world }: { work: StoryWork; world: StoryWorld }) {
-  const useChapters = work.storyProgressSettings?.useChapters ?? world.storyProgressSettings?.useChapters ?? false
-  if (!useChapters) return null
-
-  const chapter = useChapters ? work.currentChapter || world.currentChapter : ""
-  const goal = work.currentGoal || world.currentGoal
-  if (!chapter && !goal && !work.startScenario) return null
-
-  return (
-    <section className="rounded-[22px] border border-amber-300/15 bg-[linear-gradient(135deg,rgba(245,158,11,0.10),rgba(24,24,27,0.92))] p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">
-          현재 장면
-        </span>
-      </div>
-      {chapter && <h3 className="text-lg font-bold text-white">{chapter}</h3>}
-      <p className="mt-2 text-sm leading-relaxed text-white/74">{work.startScenario || goal}</p>
-      {goal && (
-        <div className="mt-3 flex items-start gap-3 rounded-2xl border border-white/8 bg-black/24 p-3">
-          <Target className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-200" />
-          <p className="text-sm leading-relaxed text-white/82">{goal}</p>
+        {/* 작품 미리보기 */}
+        <div className="mb-5 rounded-2xl border border-neutral-200 p-4 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+          <div className="mb-2.5 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              <Sparkles size={15} className="text-amber-500" />
+              작품 미리보기
+            </span>
+            {showSocial && (
+              <button
+                type="button"
+                onClick={handleLike}
+                className="flex items-center gap-1 text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+              >
+                <Heart
+                  size={15}
+                  className={liked ? "fill-red-500 text-red-500" : ""}
+                />
+                좋아요 {likeCount}
+              </button>
+            )}
+          </div>
+          <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+            {previewText}
+          </p>
         </div>
-      )}
-    </section>
-  )
-}
 
-function WorkHighlightSection({ highlights }: { highlights: string[] }) {
-  return (
-    <section className="space-y-3">
-      <SectionTitle icon={ScrollText} title="주요 매력" />
-      <div className="flex flex-wrap gap-2">
-        {highlights.map((highlight) => (
-          <span key={highlight} className="rounded-full border border-amber-500/25 bg-amber-400/10 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-50/85">
-            {highlight}
+        {/* 등장 캐릭터 · 자아 */}
+        {cast.length > 0 && (
+          <>
+            <p className="mb-3 flex items-center gap-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              <Users size={15} className="text-neutral-500" />
+              등장 캐릭터 · 자아
+            </p>
+            <div className="mb-6 flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+              {cast.map((member) => {
+                const targetTab = member.type === "캐릭터" ? "characters" : "personas"
+                const href = `/my-works?tab=${targetTab}&detailType=${targetTab}&detailId=${encodeURIComponent(member.id)}`
+                return (
+                  <ReturnPathLink
+                    key={member.id}
+                    href={href}
+                    className="w-40 shrink-0 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-left transition-transform active:scale-[0.99] hover:border-neutral-300 dark:hover:border-neutral-700"
+                  >
+                    <div className="flex h-24 items-center justify-center bg-neutral-900 text-3xl">
+                      {member.emoji}
+                    </div>
+                    <div className="p-3">
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <span className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                          {member.name}
+                        </span>
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] ${
+                            member.type === "캐릭터"
+                              ? "bg-lime-50 text-lime-700 dark:bg-lime-950 dark:text-lime-300"
+                              : "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300"
+                          }`}
+                        >
+                          {member.type}
+                        </span>
+                      </div>
+                      <p className="line-clamp-2 text-xs text-neutral-500 dark:text-neutral-400">
+                        {member.tagline}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+                        {member.keyword}
+                      </p>
+                    </div>
+                  </ReturnPathLink>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* 현재 장면 */}
+        <div className="mb-6 rounded-2xl bg-gradient-to-br from-neutral-700 to-neutral-900 p-4">
+          <span className="mb-2 inline-block rounded-full bg-amber-400/90 px-2 py-0.5 text-[11px] font-medium text-neutral-900">
+            현재 장면
           </span>
-        ))}
+          <p className="mb-1 text-[15px] font-medium text-white">
+            {currentChapterTitle}
+          </p>
+          <p className="mb-3 text-sm text-neutral-300">
+            {currentChapterDesc}
+          </p>
+          {currentChapterGoal && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs text-neutral-100">
+              <Target size={13} className="shrink-0 text-amber-300" />
+              {currentChapterGoal}
+            </div>
+          )}
+        </div>
+
+        {/* 시작 장면 */}
+        <p className="mb-1 flex items-center gap-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+          <BookOpen size={15} className="text-neutral-500" />
+          시작 장면
+        </p>
+        <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+          원하는 장면에서 이야기를 시작할 수 있어요.
+        </p>
+        <div className="mb-6 flex flex-col gap-2.5">
+          {intros.length > 0 ? (
+            intros.map((scene) => {
+              const active = selectedScene === scene.id;
+              return (
+                <button
+                  key={scene.id}
+                  type="button"
+                  onClick={() => setSelectedScene(scene.id)}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                    active
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-950/40"
+                      : "border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
+                  }`}
+                >
+                  <p className="mb-0.5 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                    {scene.title}
+                  </p>
+                  <p className="text-xs leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
+                    {getIntroPreviewText(scene)}
+                  </p>
+                </button>
+              );
+            })
+          ) : (
+            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 text-xs text-neutral-500 dark:text-neutral-400 bg-white dark:bg-neutral-900">
+              기본 장면에서 바로 대화를 시작해보세요.
+            </div>
+          )}
+        </div>
+
+        {/* 주요 매력 */}
+        {highlights.length > 0 && (
+          <>
+            <p className="mb-3 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              주요 매력
+            </p>
+            <div className="mb-6 flex flex-wrap gap-1.5">
+              {highlights.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* 댓글 */}
+        {showSocial && (
+          <div className="mb-6">
+            <WorkComments workId={work.id} />
+          </div>
+        )}
+
+        {/* 마무리 CTA */}
+        <div className="rounded-2xl bg-neutral-50 p-5 text-center dark:bg-neutral-900">
+          <p className="mb-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+            이야기의 문턱에 섰습니다. 첫 장면에서 바로 대화를 시작해보세요.
+          </p>
+          <button
+            type="button"
+            onClick={() => handleStartChat(selectedScene ?? undefined)}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            <Play size={13} fill="currentColor" />
+            채팅 시작하기
+          </button>
+        </div>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -492,29 +589,6 @@ function WorldCurrentStatusSection({
   )
 }
 
-function StorySceneCard({ world }: { world: StoryWorld }) {
-  return (
-    <section className="rounded-[22px] border border-amber-300/15 bg-[linear-gradient(135deg,rgba(245,158,11,0.10),rgba(24,24,27,0.92))] p-4 shadow-lg shadow-black/25">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">
-          현재 장면
-        </span>
-        {world.progress > 0 && <span className="text-[11px] text-white/55">{world.progress}% 진행 중</span>}
-      </div>
-      {world.currentChapter && <h3 className="text-lg font-bold leading-snug text-white">{world.currentChapter}</h3>}
-      {world.currentGoal && (
-        <div className="mt-3 flex items-start gap-3 rounded-2xl border border-white/8 bg-black/24 p-3">
-          <Target className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-200" />
-          <div>
-            <p className="text-[11px] font-medium text-white/48">진행 중인 목표</p>
-            <p className="mt-1 text-sm leading-relaxed text-white/82">{world.currentGoal}</p>
-          </div>
-        </div>
-      )}
-    </section>
-  )
-}
-
 function CharacterPreviewSection({
   characters,
   personas,
@@ -558,49 +632,6 @@ function CharacterPreviewSection({
               <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{persona.summary}</p>
             </div>
           </ReturnPathLink>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function LocationGallery({ locations, genre }: { locations: LocationItem[]; genre: StoryWorld["genre"] }) {
-  return (
-    <section className="space-y-3">
-      <SectionTitle icon={MapPin} title="무대" />
-      <div className="grid grid-cols-2 gap-3">
-        {locations.map((location, index) => (
-          <div
-            key={`${location.name}-${index}`}
-            className={cn(
-              "relative min-h-[132px] overflow-hidden rounded-[20px] border border-white/10 bg-cover bg-center",
-              !location.imageUrl && locationGradient(index, genre),
-            )}
-            style={location.imageUrl ? { backgroundImage: `url(${location.imageUrl})` } : undefined}
-            role="img"
-            aria-label={location.name}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/88 via-black/30 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-3">
-              <h3 className="text-sm font-bold text-white">{location.name}</h3>
-              {location.description && <p className="mt-1 line-clamp-2 text-[11px] text-white/64">{location.description}</p>}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function ClueSection({ clues }: { clues: string[] }) {
-  return (
-    <section className="space-y-3">
-      <SectionTitle icon={ScrollText} title="세계의 단서" />
-      <div className="flex flex-wrap gap-2">
-        {clues.map((clue) => (
-          <span key={clue} className="rounded-full border border-border bg-card px-3 py-2 text-xs leading-relaxed text-foreground/85">
-            {clue}
-          </span>
         ))}
       </div>
     </section>
@@ -872,11 +903,6 @@ function getPersonasForWorld(world: StoryWorld, library: StoryChatLibrary) {
   return library.personas.filter((persona) => personaIds.has(persona.id))
 }
 
-function getFirstChatHrefForWorld(worldId: string, library: StoryChatLibrary) {
-  const work = library.works.find((item) => item.worldId === worldId)
-  return work ? `/chat/${work.id}` : "/create?mode=work"
-}
-
 function buildWorkPreview(
   work: StoryWork,
   world: StoryWorld,
@@ -937,15 +963,4 @@ function fantasyGradient(genre?: string) {
     return "bg-[radial-gradient(circle_at_24%_18%,rgba(124,58,237,0.34),transparent_34%),linear-gradient(135deg,#09090b,#181123_48%,#050508)]"
   }
   return "bg-[radial-gradient(circle_at_30%_16%,rgba(245,158,11,0.22),transparent_30%),linear-gradient(135deg,#09090b,#161616_48%,#050505)]"
-}
-
-function locationGradient(index: number, genre?: string) {
-  const gradients = [
-    "bg-[linear-gradient(135deg,#18181b,#312e81_54%,#030712)]",
-    "bg-[linear-gradient(135deg,#111827,#064e3b_58%,#020617)]",
-    "bg-[linear-gradient(135deg,#1c1917,#78350f_56%,#09090b)]",
-    "bg-[linear-gradient(135deg,#0f172a,#4c1d95_52%,#020617)]",
-  ]
-  if (String(genre ?? "").includes("판타지")) return gradients[index % gradients.length]
-  return gradients[(index + 1) % gradients.length]
 }

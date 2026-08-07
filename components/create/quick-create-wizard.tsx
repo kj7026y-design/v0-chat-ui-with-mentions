@@ -11,9 +11,17 @@ export interface QuickCreateData {
   character: QuickOptionKey | null
   world: QuickOptionKey | null
   persona: QuickOptionKey | null
+  defaultCharacterId: string
+  defaultWorldId: string
+  defaultPersonaId: string
   customCharacter: QuickCustomEntry
   customWorld: QuickCustomEntry
   customPersona: QuickCustomEntry
+}
+
+export interface QuickDefaultOption {
+  id: string
+  label: string
 }
 
 interface FieldConfig {
@@ -55,9 +63,15 @@ const QUICK_CREATE_STEP_KEY = "__storyChatQuickCreateStep"
 export function QuickCreateWizard({
   onExit,
   onComplete,
+  characterOptions,
+  worldOptions,
+  personaOptions,
 }: {
   onExit: () => void
   onComplete: (data: QuickCreateData) => void
+  characterOptions: QuickDefaultOption[]
+  worldOptions: QuickDefaultOption[]
+  personaOptions: QuickDefaultOption[]
 }) {
   const [step, setStep] = useState(0)
   const [data, setData] = useState<QuickCreateData>({
@@ -65,6 +79,9 @@ export function QuickCreateWizard({
     character: null,
     world: null,
     persona: null,
+    defaultCharacterId: "",
+    defaultWorldId: "",
+    defaultPersonaId: "",
     customCharacter: emptyEntry(CHARACTER_FIELDS),
     customWorld: emptyEntry(WORLD_FIELDS),
     customPersona: emptyEntry(PERSONA_FIELDS),
@@ -103,13 +120,13 @@ export function QuickCreateWizard({
 
   const canGoNext =
     (step === 0 && Boolean(data.title.trim())) ||
-    (step === 1 && (data.character === "default" || (data.character === "custom" && Boolean(data.customCharacter.name.trim())))) ||
-    (step === 2 && (data.world === "default" || (data.world === "custom" && Boolean(data.customWorld.name.trim())))) ||
-    (step === 3 && (data.persona === "default" || (data.persona === "custom" && Boolean(data.customPersona.name.trim())))) ||
+    (step === 1 && ((data.character === "default" && Boolean(data.defaultCharacterId)) || (data.character === "custom" && Boolean(data.customCharacter.name.trim())))) ||
+    (step === 2 && ((data.world === "default" && Boolean(data.defaultWorldId)) || (data.world === "custom" && Boolean(data.customWorld.name.trim())))) ||
+    (step === 3 && ((data.persona === "default" && Boolean(data.defaultPersonaId)) || (data.persona === "custom" && Boolean(data.customPersona.name.trim())))) ||
     step === 4
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-md flex-col px-1 pb-4">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col px-1">
       <div className="mb-5 flex items-center justify-between">
         <button
           type="button"
@@ -130,7 +147,7 @@ export function QuickCreateWizard({
         ))}
       </div>
 
-      <div className="flex-1">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-4">
         {step === 0 && <TitleStep value={data.title} onChange={(title) => setData((current) => ({ ...current, title }))} />}
         {step === 1 && (
           <ChoiceStep
@@ -140,6 +157,9 @@ export function QuickCreateWizard({
             defaultIcon={Users}
             defaultLabel="기본 캐릭터 고르기"
             customLabel="간단히 직접 만들기"
+            defaultOptions={characterOptions}
+            defaultSelectedId={data.defaultCharacterId}
+            onDefaultSelect={(defaultCharacterId) => setData((current) => ({ ...current, defaultCharacterId }))}
             fields={CHARACTER_FIELDS}
             customEntry={data.customCharacter}
             onCustomChange={(customCharacter) => setData((current) => ({ ...current, customCharacter }))}
@@ -153,6 +173,9 @@ export function QuickCreateWizard({
             defaultIcon={Globe}
             defaultLabel="기본 세계관 고르기"
             customLabel="간단히 직접 만들기"
+            defaultOptions={worldOptions}
+            defaultSelectedId={data.defaultWorldId}
+            onDefaultSelect={(defaultWorldId) => setData((current) => ({ ...current, defaultWorldId }))}
             fields={WORLD_FIELDS}
             customEntry={data.customWorld}
             onCustomChange={(customWorld) => setData((current) => ({ ...current, customWorld }))}
@@ -166,19 +189,22 @@ export function QuickCreateWizard({
             defaultIcon={UserCircle}
             defaultLabel="기본 자아 고르기"
             customLabel="간단히 나만의 자아 만들기"
+            defaultOptions={personaOptions}
+            defaultSelectedId={data.defaultPersonaId}
+            onDefaultSelect={(defaultPersonaId) => setData((current) => ({ ...current, defaultPersonaId }))}
             fields={PERSONA_FIELDS}
             customEntry={data.customPersona}
             onCustomChange={(customPersona) => setData((current) => ({ ...current, customPersona }))}
           />
         )}
-        {step === 4 && <SummaryStep data={data} />}
+        {step === 4 && <SummaryStep data={data} characterOptions={characterOptions} worldOptions={worldOptions} personaOptions={personaOptions} />}
       </div>
 
       <button
         type="button"
         disabled={!canGoNext}
         onClick={() => step === STEP_COUNT - 1 ? onComplete(data) : goToNextStep()}
-        className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-blue-500 text-sm font-medium text-white transition-colors disabled:bg-muted disabled:text-muted-foreground"
+        className="mt-3 flex h-12 w-full shrink-0 items-center justify-center rounded-xl bg-blue-500 text-sm font-medium text-white transition-colors disabled:bg-muted disabled:text-muted-foreground"
       >
         {step === STEP_COUNT - 1 ? "채팅 시작하기" : "다음"}
       </button>
@@ -195,13 +221,16 @@ function TitleStep({ value, onChange }: { value: string; onChange: (value: strin
   )
 }
 
-function ChoiceStep({ question, selected, onSelect, defaultIcon: DefaultIcon, defaultLabel, customLabel, fields, customEntry, onCustomChange }: {
+function ChoiceStep({ question, selected, onSelect, defaultIcon: DefaultIcon, defaultLabel, customLabel, defaultOptions, defaultSelectedId, onDefaultSelect, fields, customEntry, onCustomChange }: {
   question: string
   selected: QuickOptionKey | null
   onSelect: (value: QuickOptionKey) => void
   defaultIcon: typeof Users
   defaultLabel: string
   customLabel: string
+  defaultOptions: QuickDefaultOption[]
+  defaultSelectedId: string
+  onDefaultSelect: (id: string) => void
   fields: FieldConfig[]
   customEntry: QuickCustomEntry
   onCustomChange: (entry: QuickCustomEntry) => void
@@ -213,6 +242,21 @@ function ChoiceStep({ question, selected, onSelect, defaultIcon: DefaultIcon, de
         <OptionCard icon={DefaultIcon} label={defaultLabel} active={selected === "default"} onClick={() => onSelect("default")} />
         <OptionCard icon={Pencil} label={customLabel} active={selected === "custom"} onClick={() => onSelect("custom")} />
       </div>
+      {selected === "default" && (
+        <div className="mt-4 rounded-xl bg-muted/60 p-4">
+          <label className="block">
+            <span className="mb-1.5 block text-xs text-muted-foreground">목록에서 선택</span>
+            <select
+              value={defaultSelectedId}
+              onChange={(event) => onDefaultSelect(event.target.value)}
+              className="h-11 w-full rounded-lg border border-border bg-background px-3.5 text-sm text-foreground outline-none focus:border-blue-500"
+            >
+              <option value="">선택해주세요</option>
+              {defaultOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
       {selected === "custom" && (
         <div className="mt-4 flex flex-col gap-3 rounded-xl bg-muted/60 p-4">
           <FieldGrid fields={fields} values={customEntry} onChange={(key, value) => onCustomChange({ ...customEntry, [key]: value })} />
@@ -258,12 +302,17 @@ function OptionCard({ icon: Icon, label, active, onClick }: { icon: typeof Users
   )
 }
 
-function SummaryStep({ data }: { data: QuickCreateData }) {
+function SummaryStep({ data, characterOptions, worldOptions, personaOptions }: {
+  data: QuickCreateData
+  characterOptions: QuickDefaultOption[]
+  worldOptions: QuickDefaultOption[]
+  personaOptions: QuickDefaultOption[]
+}) {
   const rows = [
     ["작품명", data.title],
-    ["캐릭터", data.character === "default" ? "기본 제공" : data.customCharacter.name],
-    ["세계관", data.world === "default" ? "기본 제공" : data.customWorld.name],
-    ["내 자아", data.persona === "default" ? "기본 제공" : data.customPersona.name],
+    ["캐릭터", data.character === "default" ? characterOptions.find((option) => option.id === data.defaultCharacterId)?.label : data.customCharacter.name],
+    ["세계관", data.world === "default" ? worldOptions.find((option) => option.id === data.defaultWorldId)?.label : data.customWorld.name],
+    ["내 자아", data.persona === "default" ? personaOptions.find((option) => option.id === data.defaultPersonaId)?.label : data.customPersona.name],
   ]
   return (
     <div>

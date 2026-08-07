@@ -17,6 +17,15 @@ import {
   Camera,
   Upload,
   X,
+  ShieldCheck,
+  Compass,
+  MessageCircle,
+  Plus,
+  User,
+  Users,
+  Globe,
+  Smile,
+  Layers,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -358,13 +367,12 @@ export default function MyPage() {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-background pb-6">
-      {/* Profile Section */}
-      <section className="px-5 pt-8 pb-6">
-        <div className="flex items-center gap-4">
-          {/* Profile Image */}
-          <div className="relative">
-            <div className="w-20 h-20 rounded-full bg-muted overflow-hidden flex items-center justify-center">
+    <div className="mx-auto min-h-screen max-w-md bg-blue-50/40 pb-24 dark:bg-neutral-950">
+      <div className="px-5 pt-6">
+        {/* 프로필 */}
+        <div className="mb-4 flex items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-200 overflow-hidden dark:bg-neutral-800">
               {profile.avatarUrl ? (
                 <img
                   src={profile.avatarUrl}
@@ -372,194 +380,242 @@ export default function MyPage() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span className="text-3xl">👤</span>
+                <User size={24} className="text-neutral-500 dark:text-neutral-400" />
+              )}
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                {isProfileLoading ? "회원 정보 불러오는 중" : profile.name}
+              </p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                {profile.email}
+              </p>
+              {accountLabel && (
+                <p className="text-xs text-neutral-400 dark:text-neutral-500">
+                  {memberProfile ? `${memberProfile.memberId} · ` : ""}{accountLabel}
+                </p>
               )}
             </div>
           </div>
-
-          {/* Profile Info */}
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-foreground">
-              {isProfileLoading ? "회원 정보 불러오는 중" : profile.name}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{profile.email}</p>
-            {accountLabel && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {memberProfile ? `${memberProfile.memberId} · ` : ""}{accountLabel}
-              </p>
-            )}
-          </div>
-
-          {/* Edit Button */}
           {memberProfile && (
             <button
+              type="button"
               onClick={handleProfileEdit}
               disabled={isProfileLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors"
+              className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs text-neutral-600 shadow-sm transition-colors hover:bg-neutral-50 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
-              <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs text-foreground">프로필 수정</span>
+              <Edit3 size={12} />
+              수정
             </button>
           )}
         </div>
-      </section>
 
-      {/* Stats Grid */}
-      <section className="px-5 pb-6">
-        <div className="grid grid-cols-3 gap-3">
-          {stats.map((stat) => (
-            <Link
-              key={stat.label}
-              href={stat.href}
-              className="bg-card border border-border rounded-xl p-4 text-center"
-            >
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-              <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-            </Link>
-          ))}
+        {/* 통계 - "세계관"으로 용어 통일 */}
+        <div className="mb-4 grid grid-cols-3 gap-2.5">
+          <Link href="/my-works?tab=characters">
+            <StatCard value={library.characters.length} label="캐릭터" />
+          </Link>
+          <Link href="/my-works?tab=scenarios">
+            <StatCard value={library.works.length} label="세계관" />
+          </Link>
+          <Link href="/chats">
+            <StatCard value="1.2k" label="누적 대화" />
+          </Link>
         </div>
-      </section>
 
-      {/* Main Menu */}
-      <section className="px-5 pb-6">
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {mainMenuItems.map((item, index) => {
-            const innerContent = (
-              <>
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <item.icon className="w-5 h-5 text-muted-foreground" />
-                </div>
-
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium text-foreground">{item.label}</p>
-                  {item.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-                  )}
-                </div>
-
-                {item.value ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{item.value}</span>
-                    {item.action && (
-                      <span className="px-3 py-1 rounded-full bg-secondary text-xs text-secondary-foreground">
-                        {item.action}
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                )}
-              </>
-            )
-
-            const itemClass = cn(
-              "flex items-center gap-4 px-4 py-4 w-full hover:bg-accent transition-colors",
-              index !== mainMenuItems.length - 1 && "border-b border-border"
-            )
-
-            if (item.href) {
-              return (
-                <Link key={item.label} href={item.href} className={itemClass}>
-                  {innerContent}
-                </Link>
-              )
-            }
-
-            return null
-          })}
-        </div>
-      </section>
-
-      {/* Generated Media */}
-      <section className="px-5 pb-6">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            <ImageIcon className="w-3.5 h-3.5" />
-            생성한 이미지
-          </h2>
-          {generatedMedia.length > 0 && (
+        {/* 크레딧 */}
+        <div className="mb-5 flex items-center justify-between rounded-2xl bg-white p-4 dark:bg-neutral-900">
+          <div className="flex items-center gap-2.5">
+            <Gem size={18} className="text-blue-500" />
+            <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              나의 크레딧
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+              {credits.toLocaleString()}
+            </span>
             <button
               type="button"
-              onClick={() => setIsGeneratedMediaGalleryOpen(true)}
-              className="flex items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => router.push("/credits")}
+              className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
             >
-              {generatedMedia.length.toLocaleString()}개 전체보기
-              <ChevronRight className="h-3.5 w-3.5" />
+              충전
             </button>
-          )}
+          </div>
         </div>
 
-        {previewGeneratedMedia.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2">
-            {previewGeneratedMedia.map((media) => (
-              <button
-                key={media.id}
-                type="button"
-                onClick={() => setSelectedGeneratedMedia(media)}
-                className="overflow-hidden rounded-xl border border-border bg-card text-left"
-              >
-                <div className="aspect-square bg-muted">
-                  <img src={media.imageUrl} alt={media.title || "생성 이미지"} className="h-full w-full object-cover" />
-                </div>
-                <div className="px-2 py-2">
-                  <p className="line-clamp-1 text-[11px] font-semibold text-foreground">
-                    {media.title || "AI 생성 이미지"}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="bg-card border border-border rounded-xl px-4 py-8 text-center">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
-              <ImageIcon className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
-              아직 생성한 이미지가 없어요.
-              <br />
-              채팅에서 /이미지 명령어로 장면을 만들어보세요.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* Event Gallery */}
-      <section className="px-5 pb-6">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h2 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            <ImageIcon className="w-3.5 h-3.5" />
-            이벤트 갤러리
-          </h2>
-          {events.length > 0 && (
-            <Link
-              href="/gallery"
-              className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              전체 보기
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          )}
+        {/* 라이브러리 - 작품을 대표 항목으로 맨 위에, 나머지는 구성 요소 순서(캐릭터·세계관·자아)로 */}
+        <div className="mb-6 overflow-hidden rounded-2xl bg-white dark:bg-neutral-900">
+          <FolderRow
+            icon={Layers}
+            iconColor="text-blue-600 dark:text-blue-400"
+            iconBg="bg-blue-50 dark:bg-blue-950"
+            title="내 작품"
+            description="캐릭터, 세계관, 자아를 연결한 작품"
+            onClick={() => router.push("/my-works?tab=completed")}
+            featured
+          />
+          <Divider />
+          <FolderRow
+            icon={Users}
+            iconColor="text-lime-600 dark:lime-400"
+            iconBg="bg-lime-50 dark:bg-lime-950"
+            title="내 캐릭터"
+            description="작품 만들기에 사용할 캐릭터"
+            onClick={() => router.push("/my-works?tab=characters")}
+          />
+          <Divider />
+          <FolderRow
+            icon={Globe}
+            iconColor="text-amber-600 dark:text-amber-400"
+            iconBg="bg-amber-50 dark:bg-amber-950"
+            title="내 세계관"
+            description="내가 저장하거나 만든 세계관"
+            onClick={() => router.push("/my-works?tab=scenarios")}
+          />
+          <Divider />
+          <FolderRow
+            icon={Smile}
+            iconColor="text-violet-600 dark:text-violet-400"
+            iconBg="bg-violet-50 dark:bg-violet-950"
+            title="내 자아"
+            description="채팅에서 사용할 나의 역할"
+            onClick={() => router.push("/my-works?tab=personas")}
+          />
         </div>
 
-        {events.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2">
-            {previewEvents.map((event) => (
-              <EventCard key={event.id} event={event} onClick={() => setSelectedEvent(event)} />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-card border border-border rounded-xl px-4 py-8 text-center">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
-              <ImageIcon className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
-              아직 저장한 장면이 없어요.
-              <br />
-              채팅 중 마음에 드는 장면을 저장해보세요.
-            </p>
+        {/* 생성한 이미지 & 갤러리 섹션 */}
+        {(generatedMedia.length > 0 || events.length > 0) && (
+          <div className="mb-6 space-y-4 rounded-2xl bg-white p-4 dark:bg-neutral-900">
+            {generatedMedia.length > 0 && (
+              <div>
+                <div className="mb-2.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                    <ImageIcon size={14} />
+                    생성한 이미지
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsGeneratedMediaGalleryOpen(true)}
+                    className="flex items-center gap-0.5 text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                  >
+                    {generatedMedia.length.toLocaleString()}개 전체보기
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {previewGeneratedMedia.map((media) => (
+                    <button
+                      key={media.id}
+                      type="button"
+                      onClick={() => setSelectedGeneratedMedia(media)}
+                      className="aspect-square overflow-hidden rounded-xl border border-neutral-100 bg-neutral-100 text-left dark:border-neutral-800 dark:bg-neutral-800"
+                    >
+                      <img src={media.imageUrl} alt={media.title || "생성 이미지"} className="h-full w-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {events.length > 0 && (
+              <div>
+                <div className="mb-2.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                    <ImageIcon size={14} />
+                    이벤트 갤러리
+                  </span>
+                  <Link
+                    href="/gallery"
+                    className="flex items-center gap-0.5 text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                  >
+                    전체 보기
+                    <ChevronRight size={14} />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {previewEvents.map((event) => (
+                    <EventCard key={event.id} event={event} onClick={() => setSelectedEvent(event)} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
-      </section>
+
+        {/* 앱 설정 */}
+        <p className="mb-3 text-sm text-neutral-500 dark:text-neutral-400">
+          앱 설정
+        </p>
+        <div className="mb-6 overflow-hidden rounded-2xl bg-white dark:bg-neutral-900">
+          <ToggleRow
+            icon={Bell}
+            label="푸시 알림 설정"
+            checked={pushEnabled}
+            onChange={setPushEnabled}
+          />
+          <Divider />
+          <ToggleRow
+            icon={Moon}
+            label="다크 모드"
+            checked={isDark}
+            onChange={() => setTheme(isDark ? "light" : "dark")}
+          />
+          <Divider />
+          <button
+            type="button"
+            onClick={() => router.push("/landing")}
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+          >
+            <HelpCircle size={18} className="text-neutral-500 dark:text-neutral-400" />
+            <span className="flex-1 text-sm text-neutral-900 dark:text-neutral-100">
+              고객센터 및 FAQ
+            </span>
+            <ChevronRight size={16} className="text-neutral-400" />
+          </button>
+        </div>
+
+        <div className="flex flex-col items-center gap-3 pb-4">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+          >
+            <LogOut size={14} />
+            로그아웃
+          </button>
+          <button
+            type="button"
+            onClick={handleAccountDelete}
+            className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-600 hover:text-neutral-500 dark:hover:text-neutral-400"
+          >
+            <UserX size={13} />
+            계정 탈퇴
+          </button>
+        </div>
+      </div>
+
+      {/* 하단 내비게이션 */}
+      <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-neutral-100 bg-white px-5 py-2 dark:border-neutral-900 dark:bg-neutral-950">
+        <div className="flex justify-between">
+          <Link href="/admin">
+            <NavItem icon={ShieldCheck} label="어드민" />
+          </Link>
+          <Link href="/timeline">
+            <NavItem icon={Compass} label="탐색" />
+          </Link>
+          <Link href="/chats">
+            <NavItem icon={MessageCircle} label="채팅" />
+          </Link>
+          <Link href="/create">
+            <NavItem icon={Plus} label="만들기" />
+          </Link>
+          <Link href="/mypage">
+            <NavItem icon={User} label="마이페이지" active />
+          </Link>
+        </div>
+      </div>
 
       <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
       {isGeneratedMediaGalleryOpen && (
@@ -654,80 +710,6 @@ export default function MyPage() {
           </div>
         </div>
       )}
-
-      {/* App Settings */}
-      <section className="px-5 pb-6">
-        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 px-1">
-          앱 설정
-        </h2>
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          {settingsItems.map((item, index) => {
-            const content = (
-              <>
-                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <item.icon className="w-5 h-5 text-muted-foreground" />
-                </div>
-                
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium text-foreground">{item.label}</p>
-                </div>
-
-                {item.type === "toggle" ? (
-                  <Switch
-                    checked={item.value}
-                    onCheckedChange={item.onToggle}
-                  />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                )}
-              </>
-            )
-
-            const className = cn(
-              "flex items-center gap-4 px-4 py-4 w-full hover:bg-accent transition-colors",
-              index !== settingsItems.length - 1 && "border-b border-border"
-            )
-
-            if (item.type === "toggle") {
-              return (
-                <div key={item.label} className={className}>
-                  {content}
-                </div>
-              )
-            }
-
-            if ("href" in item && item.href) {
-              return (
-                <Link key={item.label} href={item.href} className={className}>
-                  {content}
-                </Link>
-              )
-            }
-
-            return null
-          })}
-        </div>
-      </section>
-
-      {/* Account Actions */}
-      <section className="px-5 pb-8">
-        <div className="flex flex-col gap-4 items-center pt-4">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="text-sm">로그아웃</span>
-          </button>
-          <button
-            onClick={handleAccountDelete}
-            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <UserX className="w-4 h-4" />
-            <span className="text-xs">계정 탈퇴</span>
-          </button>
-        </div>
-      </section>
 
       <ProfileEditDialog
         open={isProfileDialogOpen}
@@ -886,3 +868,122 @@ function getStaffRoleLabel(role: AccountSessionData["role"]) {
   if (role === "operator") return "운영자 계정"
   return "직원 계정"
 }
+
+function StatCard({ value, label }: { value: number | string; label: string }) {
+  return (
+    <div className="rounded-2xl bg-white py-3.5 text-center dark:bg-neutral-900">
+      <p className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+        {value}
+      </p>
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
+    </div>
+  )
+}
+
+function FolderRow({
+  icon: Icon,
+  iconColor,
+  iconBg,
+  title,
+  description,
+  onClick,
+  featured,
+}: {
+  icon: typeof Layers
+  iconColor: string
+  iconBg: string
+  title: string
+  description: string
+  onClick: () => void
+  featured?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 px-4 py-3.5 text-left ${
+        featured ? "bg-blue-50/60 dark:bg-blue-950/20" : ""
+      }`}
+    >
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+        <Icon size={17} className={iconColor} />
+      </div>
+      <div className="flex-1">
+        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+          {title}
+        </p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          {description}
+        </p>
+      </div>
+      <ChevronRight size={16} className="text-neutral-400" />
+    </button>
+  )
+}
+
+function ToggleRow({
+  icon: Icon,
+  label,
+  checked,
+  onChange,
+}: {
+  icon: typeof Bell
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      <Icon size={18} className="text-neutral-500 dark:text-neutral-400" />
+      <span className="flex-1 text-sm text-neutral-900 dark:text-neutral-100">
+        {label}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-5 w-9 rounded-full transition-colors ${
+          checked ? "bg-blue-500" : "bg-neutral-200 dark:bg-neutral-700"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+            checked ? "translate-x-4" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+    </div>
+  )
+}
+
+function Divider() {
+  return <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+}
+
+function NavItem({
+  icon: Icon,
+  label,
+  active,
+}: {
+  icon: typeof ShieldCheck
+  label: string
+  active?: boolean
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 py-1.5">
+      <Icon
+        size={20}
+        className={active ? "text-blue-600 dark:text-blue-400" : "text-neutral-400"}
+      />
+      <span
+        className={`text-[11px] ${
+          active ? "font-medium text-blue-600 dark:text-blue-400" : "text-neutral-400"
+        }`}
+      >
+        {label}
+      </span>
+    </div>
+  )
+}
+

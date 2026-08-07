@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { AlertModal } from "@/components/ui/app-modal";
 import { SLASH_COMMANDS } from "@/lib/chat-types";
 import { hasUnclosedActionMarker } from "@/lib/rp-input-parser";
@@ -11,6 +12,7 @@ import {
   ChevronsUpDown,
   Image as ImageIcon,
   MessageCircle,
+  Pencil,
   Send,
   Sparkles,
   X,
@@ -1029,6 +1031,8 @@ function CharacterContextBox({
   onSelect,
   onClose,
 }: CharacterContextBoxProps) {
+  const router = useRouter();
+
   useEffect(() => {
     if (!open) return;
 
@@ -1091,30 +1095,60 @@ function CharacterContextBox({
             type="button"
             onClick={() => onSelect(character)}
             className={cn(
-              "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent",
+              "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent",
               selectedIndex === index + (showAll ? 1 : 0) && "bg-accent",
             )}
           >
-            {character.avatarUrl ? (
-              <img
-                src={character.avatarUrl}
-                alt={character.name}
-                className="h-9 w-9 shrink-0 rounded-full object-cover"
-              />
-            ) : (
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm">
-                {character.emoji || character.name.slice(0, 1)}
-              </span>
-            )}
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-foreground">
-                {character.name}
-              </span>
-              {(character.role || character.summary) && (
-                <span className="block truncate text-xs text-muted-foreground">
-                  {character.role || character.summary}
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              {character.avatarUrl ? (
+                <img
+                  src={character.avatarUrl}
+                  alt={character.name}
+                  className="h-9 w-9 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary text-sm">
+                  {character.emoji || character.name.slice(0, 1)}
                 </span>
               )}
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-foreground">
+                  {character.name}
+                </span>
+                {(character.role || character.summary) && (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {character.role || character.summary}
+                  </span>
+                )}
+              </span>
+            </div>
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={`${character.name} 수정하기`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+                router.push(
+                  `/my-works?tab=characters&detailType=characters&detailId=${encodeURIComponent(
+                    character.id,
+                  )}`,
+                );
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  onClose();
+                  router.push(
+                    `/my-works?tab=characters&detailType=characters&detailId=${encodeURIComponent(
+                      character.id,
+                    )}`,
+                  );
+                }
+              }}
+              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" />
             </span>
           </button>
         ))}

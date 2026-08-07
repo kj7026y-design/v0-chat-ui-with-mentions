@@ -2634,6 +2634,7 @@ export default function ChatPage() {
         readingSettings.showStoryStatus && (
         <StoryStatusCard
           status={chatStoryStatus}
+          workId={chatId}
           compactPanel
           open={isStatusPanelOpen}
           onOpenChange={setIsStatusPanelOpen}

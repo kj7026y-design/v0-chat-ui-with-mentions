@@ -61,6 +61,14 @@ import {
   QuickCreateWizard,
   type QuickCreateData,
 } from "@/components/create/quick-create-wizard"
+import AdvancedCreateHome from "@/components/create/advanced-create-home"
+import {
+  CharacterCreateScreen,
+  WorldCreateScreen,
+  PersonaCreateScreen,
+  WorkCreateScreen,
+} from "@/components/create/advanced-create-screens"
+import { WorkForm, type WorkFormValues } from "@/components/my-works/work-form"
 import { IntroScenariosFormSection } from "@/components/my-works/intro-scenarios-form-section"
 import {
   cleanIntroScenarios,
@@ -81,12 +89,13 @@ import { cn } from "@/lib/utils"
 import { useSafeBack } from "@/hooks/use-safe-back"
 import { getChatList, saveChatList } from "@/lib/chat-list-storage"
 
-type EntryMode = "menu" | "work" | "character" | "world" | "persona"
+type EntryMode = "menu" | "advanced" | "work" | "character" | "world" | "persona"
 
 const CREATE_HISTORY_STATE_KEY = "__storyChatCreateMode"
 
 const isEntryMode = (value: unknown): value is EntryMode =>
   value === "menu" ||
+  value === "advanced" ||
   value === "work" ||
   value === "character" ||
   value === "world" ||
@@ -199,6 +208,7 @@ interface WorkDraft {
   title: string
   genre: string
   tagline: string
+  authorNote: string
   coreSetting: string
   coverImageUrl: string
   mood: string
@@ -230,6 +240,7 @@ const emptyWorkDraft = (): WorkDraft => ({
   title: "",
   genre: "",
   tagline: "",
+  authorNote: "",
   coreSetting: "",
   coverImageUrl: "",
   mood: "",
@@ -262,13 +273,60 @@ export default function CreatePage() {
   const [isExitPromptOpen, setIsExitPromptOpen] = useState(false)
 
   useEffect(() => {
-    setLibrary(getStoryChatLibrary())
+    const currentLibrary = getStoryChatLibrary()
+    setLibrary(currentLibrary)
     loadDrafts()
-    const requestedMode = new URLSearchParams(window.location.search).get("mode") as EntryMode | null
+    const params = new URLSearchParams(window.location.search)
+    const rawMode = params.get("mode") || params.get("type") || params.get("tab")
+    const editId = params.get("editId") || params.get("id")
+    const normalizedMode = rawMode === "scenarios" ? "world" : rawMode
+    const requestedMode = (normalizedMode as EntryMode | null)
     const initialMode = requestedMode && requestedMode !== "menu" && isEntryMode(requestedMode)
       ? requestedMode
       : "menu"
     const isDirectEntry = initialMode !== "menu"
+
+    if (editId && initialMode !== "menu") {
+      if (initialMode === "character") {
+        const found = currentLibrary.characters.find((c) => c.id === editId)
+        if (found) setCharacterDraft(found)
+      } else if (initialMode === "world") {
+        const found = currentLibrary.worlds.find((w) => w.id === editId)
+        if (found) setWorldDraft(found)
+      } else if (initialMode === "persona") {
+        const found = currentLibrary.personas.find((p) => p.id === editId)
+        if (found) setPersonaDraft(found)
+      } else if (initialMode === "work") {
+        const found = currentLibrary.works.find((w) => w.id === editId)
+        if (found) {
+          const char = currentLibrary.characters.find((c) => c.id === found.characterId)
+          const wrld = currentLibrary.worlds.find((w) => w.id === found.worldId)
+          setWorkDraft({
+            ...emptyWorkDraft(),
+            title: found.title,
+            authorNote: found.authorNote || "",
+            selectedCharacterId: found.characterId,
+            selectedWorldId: found.worldId,
+            character: char || emptyCharacter(),
+            world: wrld || emptyWorld(),
+            startScenario: found.startScenario,
+            introScenarios: found.introScenarios || [],
+            genre: found.genre || "",
+            tagline: found.tagline || "",
+            coreSetting: found.coreSetting || "",
+            majorLocations: Array.isArray(found.majorLocations) ? found.majorLocations.join(", ") : found.majorLocations || "",
+            majorEvents: Array.isArray(found.majorEvents) ? found.majorEvents.join(", ") : found.majorEvents || "",
+            mood: found.mood || "",
+            currentChapter: found.currentChapter || "",
+            currentGoal: found.currentGoal || "",
+            worldDate: found.worldDate || "",
+            coverImageUrl: found.coverImageUrl || "",
+            statusBarEnabled: Boolean(found.statusBarEnabled),
+            statusBarText: found.statusBarText || "",
+          })
+        }
+      }
+    }
 
     window.history.replaceState(
       {
@@ -426,6 +484,7 @@ export default function CreatePage() {
       storyProgressSettings: world.storyProgressSettings,
       genre: workDraft.genre.trim() || String(world.genre),
       tagline: workDraft.tagline.trim() || world.tagline,
+      authorNote: workDraft.authorNote.trim(),
       coreSetting: workDraft.coreSetting.trim() || workDraft.tagline.trim() || world.coreSetting,
       majorLocations: workDraft.majorLocations.trim() || world.places,
       majorEvents: workDraft.majorEvents.trim() || world.events,
@@ -611,74 +670,184 @@ export default function CreatePage() {
     leaveCreateMode()
   }
 
+  if (mode === "work") {
+    const emptyValues: WorkFormValues = {
+      title: workDraft.title,
+      authorNote: workDraft.authorNote || "",
+      characterId: workDraft.selectedCharacterId || library.characters[0]?.id || "",
+      worldId: workDraft.selectedWorldId || library.worlds[0]?.id || "",
+      relationship: workDraft.startScenario || "",
+      openingScene: workDraft.introScenarios[0]?.scene || "",
+      genre: workDraft.genre,
+      tagline: workDraft.tagline,
+      coreSetting: workDraft.coreSetting,
+      coverImageUrl: workDraft.coverImageUrl,
+      mood: workDraft.mood,
+      majorLocations: workDraft.majorLocations,
+      majorEvents: workDraft.majorEvents,
+      currentChapter: workDraft.currentChapter,
+      currentGoal: workDraft.currentGoal,
+      worldDate: workDraft.worldDate,
+      statusBarEnabled: workDraft.statusBarEnabled,
+      statusBarText: workDraft.statusBarText,
+      introScenarios: workDraft.introScenarios,
+    }
+
+    return (
+      <div className="min-h-full bg-background text-foreground px-4 py-5">
+        <WorkForm
+          mode="create"
+          initialValues={emptyValues}
+          onCancel={goBack}
+          onSubmit={async (values) => {
+            const character = library.characters.find((c) => c.id === values.characterId) || library.characters[0]
+            const world = library.worlds.find((w) => w.id === values.worldId) || library.worlds[0]
+            if (!character || !world || !values.title) return
+
+            const now = new Date().toISOString()
+            const work: StoryWork = {
+              id: createId("work"),
+              title: values.title,
+              characterId: character.id,
+              worldId: world.id,
+              personaId: "",
+              authorNote: values.authorNote,
+              startScenario: values.relationship || values.openingScene || character.defaultStartScenario,
+              introScenarios: values.introScenarios,
+              storyProgressSettings: world.storyProgressSettings,
+              genre: values.genre || String(world.genre),
+              tagline: values.tagline || world.tagline,
+              coreSetting: values.coreSetting || world.coreSetting,
+              majorLocations: values.majorLocations || world.places,
+              majorEvents: values.majorEvents || world.events,
+              mood: values.mood || world.mood,
+              currentChapter: values.currentChapter || world.currentChapter,
+              currentGoal: values.currentGoal || world.currentGoal,
+              worldDate: values.worldDate || world.worldDate,
+              coverImageUrl: values.coverImageUrl || world.coverImageUrl,
+              statusBarEnabled: values.statusBarEnabled,
+              statusBarText: values.statusBarText,
+              createdAt: now,
+              updatedAt: "오늘",
+            }
+
+            const nextLibrary = {
+              ...library,
+              works: [work, ...library.works],
+            }
+
+            setLibraryAndPersist(nextLibrary)
+            window.localStorage.removeItem(WORK_DRAFT_KEY)
+            toast("작품을 저장하고 채팅을 시작해요.")
+            router.push(`/chat/${work.id}`)
+          }}
+        />
+      </div>
+    )
+  }
+
+  // 캐릭터/세계관/자아는 자체 레이아웃을 가진 화면으로 early return
+  if (mode === "advanced") {
+    return (
+      <AdvancedCreateHome
+        onBack={() => setMode("menu")}
+        onSelectWork={() => {
+          changeWorkFormMode("simple")
+          setShowWorkContinue(false)
+          setWorkDraft(emptyWorkDraft())
+          enterCreateMode("work")
+        }}
+        onSelectCharacter={() => enterCreateMode("character")}
+        onSelectWorld={() => enterCreateMode("world")}
+        onSelectPersona={() => enterCreateMode("persona")}
+        characterCount={library.characters.length}
+        worldCount={library.worlds.length}
+      />
+    )
+  }
+
+  if (mode === "character") {
+    return (
+      <CharacterCreateScreen
+        initialValue={characterDraft}
+        onBack={goBack}
+        onSave={(character) => {
+          if (!isCharacterReady(character)) return
+          const saved = normalizeCharacter(character)
+          setLibraryAndPersist({ ...library, characters: upsertById(library.characters, saved) })
+          window.localStorage.removeItem(CHARACTER_DRAFT_KEY)
+          toast("내 캐릭터에 저장했어요.")
+          setCharacterDraft(emptyCharacter())
+          setMode("menu")
+        }}
+        onDraftSave={(character) => {
+          setCharacterDraft(character)
+          window.localStorage.setItem(
+            CHARACTER_DRAFT_KEY,
+            JSON.stringify({ item: character, savedAt: new Date().toISOString() }),
+          )
+          toast("임시저장했어요.")
+        }}
+      />
+    )
+  }
+
+  if (mode === "world") {
+    return (
+      <WorldCreateScreen
+        initialValue={worldDraft}
+        onBack={goBack}
+        onSave={(world) => {
+          if (!isWorldReady(world)) return
+          const saved = normalizeWorld(world)
+          setLibraryAndPersist({ ...library, worlds: upsertById(library.worlds, saved) })
+          window.localStorage.removeItem(WORLD_DRAFT_KEY)
+          toast("내 세계관에 저장했어요.")
+          setWorldDraft(emptyWorld())
+          setMode("menu")
+        }}
+        onDraftSave={(world) => {
+          setWorldDraft(world)
+          window.localStorage.setItem(
+            WORLD_DRAFT_KEY,
+            JSON.stringify({ item: world, savedAt: new Date().toISOString() }),
+          )
+          toast("임시저장했어요.")
+        }}
+        WorldFormComponent={WorldForm}
+      />
+    )
+  }
+
+  if (mode === "persona") {
+    return (
+      <PersonaCreateScreen
+        initialValue={personaDraft}
+        onBack={goBack}
+        onSave={(persona) => {
+          if (!isPersonaReady(persona)) return
+          const saved = normalizePersona(persona)
+          setLibraryAndPersist({ ...library, personas: upsertById(library.personas, saved) })
+          window.localStorage.removeItem(PERSONA_DRAFT_KEY)
+          toast("내 자아에 저장했어요.")
+          setPersonaDraft(emptyPersona())
+          setMode("menu")
+        }}
+        onDraftSave={(persona) => {
+          setPersonaDraft(persona)
+          window.localStorage.setItem(
+            PERSONA_DRAFT_KEY,
+            JSON.stringify({ item: persona, savedAt: new Date().toISOString() }),
+          )
+          toast("임시저장했어요.")
+        }}
+        PersonaFormComponent={PersonaForm}
+      />
+    )
+  }
+
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden bg-background text-foreground">
-      {!(mode === "work" && workFormMode === "simple") && <header className="shrink-0 z-50 border-b border-border bg-background backdrop-blur supports-[backdrop-filter]:bg-background">
-        <div className="flex h-14 items-center gap-4 px-4 md:px-6">
-          <Button variant="ghost" size="icon" onClick={goBack} className="shrink-0">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-lg font-semibold">
-            {mode === "menu"
-              ? "만들기"
-              : mode === "work"
-                ? "작품 만들기"
-                : mode === "character"
-                  ? "캐릭터 만들기"
-                  : mode === "world"
-                    ? "세계관 만들기"
-                    : "자아 만들기"}
-          </h1>
-          {mode !== "menu" && (
-            <Button variant="outline" size="sm" onClick={() => setIsExitPromptOpen(true)} className="ml-auto">
-              나가기
-            </Button>
-          )}
-        </div>
-        {mode === "work" && workFormMode === "advanced" && <WorkStepper step={workDraft.step} />}
-      </header>}
-
-      <AlertDialog open={isExitPromptOpen} onOpenChange={setIsExitPromptOpen}>
-        <AlertDialogContent className="w-[min(calc(100vw-2rem),340px)] gap-0 rounded-[20px] border-0 bg-[#FFFFFF] px-5 pb-5 pt-6 text-[#1A1A1A] shadow-2xl shadow-black/25 dark:bg-[#2E2E2C] dark:text-[#F5F5F3] sm:max-w-none">
-          <AlertDialogCancel className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border-0 bg-transparent p-0 text-[#9B9A93] shadow-none transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#888780] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]">
-            <X className="h-4 w-4" />
-            <span className="sr-only">닫기</span>
-          </AlertDialogCancel>
-
-          <div className="mb-[14px] flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary">
-            <Save className="h-[22px] w-[22px]" />
-          </div>
-
-          <AlertDialogHeader className="gap-2 text-left">
-            <AlertDialogTitle className="text-[18px] font-medium leading-tight tracking-normal text-[#1A1A1A] dark:text-[#F5F5F3]">
-              임시 저장할까요?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-[14px] font-normal leading-[1.6] text-[#6B6B68] dark:text-[#B4B2A9]">
-              작성 중인 내용이 있어요. 임시저장하면 다음에 이어서 작성할 수 있습니다.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter className="mt-5 flex-col gap-2 sm:flex-col sm:justify-start">
-            <AlertDialogAction
-              onClick={handleSaveAndExit}
-              className="flex h-11 w-full items-center justify-center rounded-xl bg-primary px-4 text-[14px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              임시저장 후 나가기
-            </AlertDialogAction>
-            <Button
-              variant="ghost"
-              onClick={leaveCreateMode}
-              className="flex h-11 w-full items-center justify-center rounded-xl bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]"
-            >
-              저장 안 함
-            </Button>
-            <AlertDialogCancel className="flex h-11 w-full items-center justify-center rounded-xl border-0 bg-transparent px-4 text-[14px] font-medium text-[#6B6B68] shadow-none transition-colors hover:bg-black/5 hover:text-[#1A1A1A] dark:text-[#B4B2A9] dark:hover:bg-white/10 dark:hover:text-[#F5F5F3]">
-              취소
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <ScrollArea className="flex-1 min-h-0 overflow-hidden">
         <main className="mx-auto w-full max-w-5xl p-4 md:p-8 pb-28 space-y-6">
           {mode === "menu" && (
@@ -689,184 +858,11 @@ export default function CreatePage() {
                 setWorkDraft(emptyWorkDraft())
                 enterCreateMode("work")
               }}
-              onSelectAdvanced={() => {
-                changeWorkFormMode("advanced")
-                enterCreateMode("work")
-                if (!showWorkContinue) setWorkDraft(emptyWorkDraft())
-              }}
+              onSelectAdvanced={() => enterCreateMode("advanced")}
             />
-          )}
-
-          {mode === "work" && (
-            <>
-              {showWorkContinue && (
-                <ContinueCard
-                  title="작성 중인 작품이 있어요. 이어서 작성할까요?"
-                  onContinue={() => setShowWorkContinue(false)}
-                  onDiscard={() => {
-                    window.localStorage.removeItem(WORK_DRAFT_KEY)
-                    setShowWorkContinue(false)
-                    setWorkDraft(emptyWorkDraft())
-                  }}
-                />
-              )}
-              {workFormMode === "simple" ? (
-                <QuickCreateWizard
-                  onExit={goBack}
-                  onComplete={completeQuickWork}
-                />
-              ) : (
-                <>
-                  {workDraft.step === "character" && (
-                    <CharacterWorkStep
-                      library={library}
-                      draft={workDraft}
-                      setDraft={setWorkDraft}
-                    />
-                  )}
-                  {workDraft.step === "world" && (
-                    <WorldWorkStep library={library} draft={workDraft} setDraft={setWorkDraft} />
-                  )}
-                  {workDraft.step === "review" && (
-                    <ReviewStep
-                      draft={workDraft}
-                      setDraft={setWorkDraft}
-                      character={selectedCharacter}
-                      world={selectedWorld}
-                      formMode={workFormMode}
-                    />
-                  )}
-                </>
-              )}
-            </>
-          )}
-
-          {mode === "character" && (
-            <IndividualShell
-              showContinue={Boolean(showItemContinue.character)}
-              onContinue={() => setShowItemContinue((prev) => ({ ...prev, character: false }))}
-              onDiscard={() => {
-                window.localStorage.removeItem(CHARACTER_DRAFT_KEY)
-                setCharacterDraft(emptyCharacter())
-                setShowItemContinue((prev) => ({ ...prev, character: false }))
-              }}
-            >
-              <CharacterCreateForm value={characterDraft} onChange={setCharacterDraft} formMode="advanced" />
-            </IndividualShell>
-          )}
-
-          {mode === "world" && (
-            <IndividualShell
-              showContinue={Boolean(showItemContinue.world)}
-              onContinue={() => setShowItemContinue((prev) => ({ ...prev, world: false }))}
-              onDiscard={() => {
-                window.localStorage.removeItem(WORLD_DRAFT_KEY)
-                setWorldDraft(emptyWorld())
-                setShowItemContinue((prev) => ({ ...prev, world: false }))
-              }}
-            >
-              <WorldForm value={worldDraft} onChange={setWorldDraft} />
-            </IndividualShell>
-          )}
-
-          {mode === "persona" && (
-            <IndividualShell
-              showContinue={Boolean(showItemContinue.persona)}
-              onContinue={() => setShowItemContinue((prev) => ({ ...prev, persona: false }))}
-              onDiscard={() => {
-                window.localStorage.removeItem(PERSONA_DRAFT_KEY)
-                setPersonaDraft(emptyPersona())
-                setShowItemContinue((prev) => ({ ...prev, persona: false }))
-              }}
-            >
-              <CreateModeSwitch
-                value={personaFormMode}
-                onChange={setPersonaFormMode}
-                simpleDescription="자아의 기본 역할만 입력해서 빠르게 만들어요."
-                advancedDescription="말투, 외형, 비밀 설정, 선호/금지 전개까지 세밀하게 설정해요."
-              />
-              <PersonaForm value={personaDraft} onChange={setPersonaDraft} formMode={personaFormMode} />
-            </IndividualShell>
           )}
         </main>
       </ScrollArea>
-
-      {mode === "work" && workFormMode === "advanced" && (
-        <BottomActions>
-          <Button variant="outline" className="flex-1" onClick={saveWorkDraft}>
-            <Save className="h-4 w-4" />
-            임시저장
-          </Button>
-          <>
-              <Button
-                variant="outline"
-                className="flex-1"
-                disabled={!previousStep}
-                onClick={() => previousStep && setWorkDraft((prev) => ({ ...prev, step: previousStep }))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                이전
-              </Button>
-              {nextStep ? (
-                <Button
-                  className="flex-1"
-                  disabled={!canGoNext}
-                  onClick={() => setWorkDraft((prev) => ({ ...prev, step: nextStep }))}
-                >
-                  다음
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" className="flex-1" disabled={!canGoNext} onClick={() => completeWork(false)}>
-                    내 작품에 저장
-                  </Button>
-                  <Button className="flex-1" disabled={!canGoNext} onClick={() => completeWork(true)}>
-                    <Rocket className="h-4 w-4" />
-                    바로 채팅 시작
-                  </Button>
-                </>
-              )}
-          </>
-        </BottomActions>
-      )}
-
-      {mode === "character" && (
-        <BottomActions>
-          <Button variant="outline" className="flex-1" onClick={() => saveItemDraft("character")}>
-            <Save className="h-4 w-4" />
-            임시저장
-          </Button>
-          <Button className="flex-1" disabled={!isCharacterReady(characterDraft)} onClick={completeCharacter}>
-            내 캐릭터에 저장
-          </Button>
-        </BottomActions>
-      )}
-
-      {mode === "world" && (
-        <BottomActions>
-          <Button variant="outline" className="flex-1" onClick={() => saveItemDraft("world")}>
-            <Save className="h-4 w-4" />
-            임시저장
-          </Button>
-          <Button className="flex-1" disabled={!isWorldReady(worldDraft)} onClick={completeWorld}>
-            내 세계관에 저장
-          </Button>
-        </BottomActions>
-      )}
-
-      {mode === "persona" && (
-        <BottomActions>
-          <Button variant="outline" className="flex-1" onClick={() => saveItemDraft("persona")}>
-            <Save className="h-4 w-4" />
-            임시저장
-          </Button>
-          <Button className="flex-1" disabled={!isPersonaReady(personaDraft)} onClick={completePersona}>
-            내 자아에 저장
-          </Button>
-        </BottomActions>
-      )}
-
     </div>
   )
 }

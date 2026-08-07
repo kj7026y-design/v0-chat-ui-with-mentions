@@ -54,7 +54,15 @@ export function WorkIntroModal({
         >
           <X className="h-5 w-5" />
         </button>
-        <div className="mx-auto w-full max-w-5xl">
+        <div
+          className="mx-auto w-full max-w-5xl"
+          onClick={(e) => {
+            const target = e.target as HTMLElement | null
+            if (target?.closest("a")) {
+              onClose()
+            }
+          }}
+        >
           {work ? (
             <WorkLandingPage
               work={work}
