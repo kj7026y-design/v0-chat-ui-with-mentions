@@ -28,7 +28,7 @@ export function canEditStoryWork(
 }
 
 export function getStoryWorkAuthor(session?: StoryWorkPermissionSession | null) {
-  if (!session?.authenticated || !session.accountId) return null
+  if (!session?.authenticated || !session.accountId || session.accountId === "guest_user") return null
   return {
     authorId: session.accountId,
     authorName: session.displayName || session.username || "작품 생성자",

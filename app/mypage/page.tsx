@@ -59,6 +59,8 @@ import { EventCard } from "@/components/chat/event-card"
 import { EventDetailModal } from "@/components/chat/event-detail-modal"
 import { getChatRooms } from "@/lib/chat-room-client"
 import { getChatDisplayName, getChatList } from "@/lib/chat-list-storage"
+import { useAccountSession } from "@/hooks/use-account-session"
+import type { AdminSessionState } from "@/lib/chat-history-client"
 
 const PROFILE_STORAGE_KEY = "storychat_profile"
 const DEFAULT_PROFILE: ProfileState = {
@@ -82,17 +84,9 @@ interface MemberProfileData {
   credit: number
 }
 
-interface AccountSessionData {
-  authenticated: boolean
-  accountId?: string
-  username?: string
-  displayName?: string
-  accountType?: "staff" | "member"
-  role?: "administrator" | "developer" | "operator" | "member"
-}
-
 export default function MyPage() {
   const router = useRouter()
+  const { session, isLoading: isSessionLoading } = useAccountSession()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(true)
@@ -115,6 +109,14 @@ export default function MyPage() {
   const isDark = mounted ? theme === "dark" : true
 
   useEffect(() => {
+    if (!isSessionLoading && !session?.authenticated) {
+      router.replace("/landing?auth=login&returnTo=%2Fmypage")
+    }
+  }, [isSessionLoading, router, session?.authenticated])
+
+  useEffect(() => {
+    if (isSessionLoading || !session?.authenticated) return
+
     setMounted(true)
     setLibrary(getStoryChatLibrary())
     void syncStoryWorksFromDatabase()
@@ -151,13 +153,6 @@ export default function MyPage() {
 
     const loadAccountProfile = async () => {
       try {
-        const sessionResponse = await fetch("/api/admin/session", { cache: "no-store" })
-        const session = await sessionResponse.json().catch(() => ({})) as AccountSessionData
-        if (!sessionResponse.ok || !session.authenticated) {
-          router.push("/landing")
-          return
-        }
-
         if (session.accountId) {
           setGeneratedMediaUserId(
             session.accountId,
@@ -217,7 +212,7 @@ export default function MyPage() {
       window.removeEventListener("storage", syncGeneratedMedia)
       window.removeEventListener("storage", syncLocalChatRoomNames)
     }
-  }, [])
+  }, [isSessionLoading, session])
 
   const previewEvents = events.slice(0, 6)
   const previewGeneratedMedia = generatedMedia.slice(0, 3)
@@ -368,6 +363,10 @@ export default function MyPage() {
 
   const handleAccountDelete = () => {
     setIsAccountDeleteConfirmOpen(true)
+  }
+
+  if (isSessionLoading || !session?.authenticated) {
+    return <div className="min-h-screen bg-background" />
   }
 
   return (
@@ -866,7 +865,7 @@ function getMemberGradeLabel(profile: MemberProfileData) {
   return "실버 작가"
 }
 
-function getStaffRoleLabel(role: AccountSessionData["role"]) {
+function getStaffRoleLabel(role: AdminSessionState["role"]) {
   if (role === "administrator") return "관리자 계정"
   if (role === "developer") return "개발자 계정"
   if (role === "operator") return "운영자 계정"

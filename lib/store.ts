@@ -233,7 +233,7 @@ interface AppState {
   createBranch: (branch: Omit<Branch, "id" | "createdAt">) => void
   // Credits
   hydrateCredits: () => void
-  chargeCredit: (amount: number, title?: string, description?: string) => void
+  chargeCredit: (amount: number, title?: string, description?: string) => Promise<boolean>
   spendCredit: (amount: number, title?: string, description?: string) => boolean
 }
 
@@ -511,15 +511,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     })
   },
-  chargeCredit: (amount, title = "크레딧 충전", description) => {
-    if (amount <= 0) return
-    const nextCredits = get().credits + amount
-    set({ credits: nextCredits })
-    saveStoredCredits(nextCredits)
-    addCreditHistory({ type: "earned", title, amount, description })
-    void syncCreditActionToServer("charge", amount, title, description).then((res) => {
-      if (res?.credits !== undefined) set({ credits: res.credits })
-    })
+  chargeCredit: async (amount, title = "크레딧 충전", description) => {
+    if (amount <= 0) return false
+    const result = await syncCreditActionToServer("charge", amount, title, description)
+    if (result?.credits === undefined) return false
+    set({ credits: result.credits })
+    return true
   },
   spendCredit: (amount, title = "크레딧 사용", description) => {
     if (amount <= 0) return true

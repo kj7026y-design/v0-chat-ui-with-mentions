@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { AlertModal } from "@/components/ui/app-modal";
 import { SLASH_COMMANDS } from "@/lib/chat-types";
 import { hasUnclosedActionMarker } from "@/lib/rp-input-parser";
@@ -12,7 +11,6 @@ import {
   ChevronsUpDown,
   Image as ImageIcon,
   MessageCircle,
-  Pencil,
   Send,
   Sparkles,
   X,
@@ -1031,8 +1029,6 @@ function CharacterContextBox({
   onSelect,
   onClose,
 }: CharacterContextBoxProps) {
-  const router = useRouter();
-
   useEffect(() => {
     if (!open) return;
 
@@ -1122,34 +1118,6 @@ function CharacterContextBox({
                 )}
               </span>
             </div>
-            <span
-              role="button"
-              tabIndex={0}
-              aria-label={`${character.name} 수정하기`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-                router.push(
-                  `/my-works?tab=characters&detailType=characters&detailId=${encodeURIComponent(
-                    character.id,
-                  )}`,
-                );
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.stopPropagation();
-                  onClose();
-                  router.push(
-                    `/my-works?tab=characters&detailType=characters&detailId=${encodeURIComponent(
-                      character.id,
-                    )}`,
-                  );
-                }
-              }}
-              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </span>
           </button>
         ))}
         {!showAll && characters.length === 0 && (

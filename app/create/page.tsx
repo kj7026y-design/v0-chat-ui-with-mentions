@@ -422,11 +422,16 @@ export default function CreatePage() {
     const author = getStoryWorkAuthor(session)
     if (author) return author
 
-    toast.error(
-      isSessionLoading
-        ? "로그인 정보를 확인하고 있습니다. 잠시 후 다시 시도해 주세요."
-        : "로그인한 사용자만 작품을 저장할 수 있습니다.",
-    )
+    if (!isSessionLoading) {
+      toast.error("로그인한 사용자만 작품을 생성하고 저장할 수 있습니다.", {
+        action: {
+          label: "로그인하러 가기",
+          onClick: () => router.push("/mypage"),
+        },
+      })
+    } else {
+      toast.error("로그인 정보를 확인하고 있습니다. 잠시 후 다시 시도해 주세요.")
+    }
     return null
   }
 

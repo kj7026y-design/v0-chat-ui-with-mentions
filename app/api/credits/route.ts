@@ -24,6 +24,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  let requestedAction: "spend" | "charge" | undefined
+
   try {
     const body = await request.json().catch(() => null) as unknown
     if (!body || typeof body !== "object") {
@@ -40,10 +42,14 @@ export async function POST(request: Request) {
     if ((action !== "spend" && action !== "charge") || typeof amount !== "number" || amount <= 0) {
       return NextResponse.json({ error: "Invalid credit action parameters" }, { status: 400 })
     }
+    requestedAction = action
 
     const session = await getAdminSession()
     if (!session) {
-      // 로그인하지 않은 게스트는 성공으로 응답하여 로컬 fallback이 작동하도록 함
+      if (action === "charge") {
+        return NextResponse.json({ error: "크레딧 충전은 로그인이 필요합니다." }, { status: 401 })
+      }
+      // 게스트의 기존 체험 크레딧 사용은 로컬 fallback으로 유지한다.
       return NextResponse.json({ isGuest: true, success: true })
     }
 
@@ -59,6 +65,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ isGuest: false, success: true, ...data })
   } catch (error) {
     if (error instanceof DatabaseNotConfiguredError) {
+      if (requestedAction === "charge") {
+        return NextResponse.json({ error: "크레딧 충전 DB를 사용할 수 없습니다." }, { status: 503 })
+      }
       return NextResponse.json({ isGuest: true, success: true })
     }
     if (error instanceof Error && error.message === "INSUFFICIENT_CREDITS") {

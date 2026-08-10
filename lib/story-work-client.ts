@@ -106,35 +106,29 @@ export function syncStoryWorksFromDatabase(): Promise<StoryChatLibrary> {
 
 async function performStoryWorkSync(): Promise<StoryChatLibrary> {
   const localLibrary = getStoryChatLibrary()
-  const response = await fetch("/api/works", { cache: "no-store" })
-  const result = await readResponse<WorkListResponse>(response)
+  const response = await fetch("/api/works", { cache: "no-store" }).catch(() => null)
+  if (!response || !response.ok) return localLibrary
+
+  const result = await readResponse<WorkListResponse>(response).catch(() => null)
+  if (!result) return localLibrary
+
   const defaultWorkIds = new Set(defaultLibrary.works.map((work) => work.id))
-  const knownWorkIds = getKnownIds(DB_WORK_IDS_KEY)
-  const migrationKey = `${DB_MIGRATION_KEY_PREFIX}${result.accountId}`
-  const migrationCompleted = window.localStorage.getItem(migrationKey) === "true"
+  const remoteIds = new Set(result.bundles.map((bundle) => bundle.work.id))
   const migratedBundles: StoryWorkBundle[] = []
 
-  if (!migrationCompleted) {
-    const remoteIds = new Set(result.bundles.map((bundle) => bundle.work.id))
-    const migrationCandidates = localLibrary.works.filter((work) =>
-      !defaultWorkIds.has(work.id) &&
-      !knownWorkIds.has(work.id) &&
-      !remoteIds.has(work.id) &&
-      (!work.authorId || work.authorId === result.accountId),
-    )
+  // DB에 저장되어 있지 않은 모든 작품들 (기본 작품 및 유저 생성 작품)을 탐색하여 DB 저장
+  const missingWorks = localLibrary.works.filter((work) => !remoteIds.has(work.id))
 
-    let migrationIncomplete = false
-    for (const work of migrationCandidates) {
-      const bundle = buildStoryWorkBundle(localLibrary, work)
-      if (!bundle) {
-        migrationIncomplete = true
-        continue
-      }
+  for (const work of missingWorks) {
+    const bundle = buildStoryWorkBundle(localLibrary, work)
+    if (!bundle) continue
+    try {
       const migrated = await requestBundle("POST", bundle)
       rememberBundleIds([migrated.bundle])
       migratedBundles.push(migrated.bundle)
+    } catch (err) {
+      console.warn(`[DB Sync Failed for work ${work.id}]`, err)
     }
-    if (!migrationIncomplete) window.localStorage.setItem(migrationKey, "true")
   }
 
   const bundles = [...migratedBundles, ...result.bundles]

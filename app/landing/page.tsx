@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -15,9 +15,17 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { generateMemberNickname } from "@/lib/member-nickname"
+import { normalizeInternalNavigationTarget } from "@/lib/safe-navigation"
 
 export default function LandingPage() {
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null)
+  const [returnTo, setReturnTo] = useState<string | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("auth") === "login") setAuthMode("login")
+    setReturnTo(normalizeInternalNavigationTarget(params.get("returnTo")))
+  }, [])
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -71,16 +79,24 @@ export default function LandingPage() {
         </p>
       </footer>
 
-      {authMode && <AuthModal initialMode={authMode} onClose={() => setAuthMode(null)} />}
+      {authMode && (
+        <AuthModal
+          initialMode={authMode}
+          returnTo={returnTo}
+          onClose={() => setAuthMode(null)}
+        />
+      )}
     </div>
   )
 }
 
 function AuthModal({
   initialMode,
+  returnTo,
   onClose,
 }: {
   initialMode: "login" | "signup"
+  returnTo?: string | null
   onClose: () => void
 }) {
   const router = useRouter()
@@ -142,7 +158,7 @@ function AuthModal({
       const data = await response.json().catch(() => ({})) as { error?: string; accountId?: string }
       if (!response.ok) throw new Error(data.error || (mode === "login" ? "로그인하지 못했습니다." : "회원가입하지 못했습니다."))
       if (data.accountId) window.localStorage.setItem("storychat_media_user_id", data.accountId)
-      router.push("/chats")
+      router.push(returnTo || "/chats")
       router.refresh()
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "요청을 처리하지 못했습니다.")

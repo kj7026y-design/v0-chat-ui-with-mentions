@@ -19,6 +19,8 @@ const adminNavItem = { icon: ShieldCheck, label: "어드민", href: "/admin/memb
 export function BottomNavBar() {
   const pathname = usePathname()
   const [canManageMembers, setCanManageMembers] = useState(false)
+  const [sessionResolved, setSessionResolved] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const isChatRoom = /^\/chat\/[^/]+$/.test(pathname ?? "")
   const navItems = canManageMembers ? [adminNavItem, ...defaultNavItems] : defaultNavItems
 
@@ -28,6 +30,8 @@ export function BottomNavBar() {
     void getAdminSessionState()
       .then((session) => {
         if (cancelled) return
+        setIsAuthenticated(session.authenticated)
+        setSessionResolved(true)
         setCanManageMembers(
           session.authenticated &&
           session.accountType === "staff" &&
@@ -35,7 +39,11 @@ export function BottomNavBar() {
         )
       })
       .catch(() => {
-        if (!cancelled) setCanManageMembers(false)
+        if (!cancelled) {
+          setIsAuthenticated(false)
+          setSessionResolved(true)
+          setCanManageMembers(false)
+        }
       })
 
     return () => {
@@ -49,6 +57,9 @@ export function BottomNavBar() {
     <nav className="bg-background backdrop-blur-md border-t border-border">
       <div className="flex items-center justify-around py-2">
         {navItems.map((item) => {
+          const href = item.href === "/mypage" && sessionResolved && !isAuthenticated
+            ? "/landing?auth=login&returnTo=%2Fmypage"
+            : item.href
           const isActive = pathname === item.href || 
             (item.href === "/chats" && pathname?.startsWith("/chat")) ||
             (item.href === "/admin/members" && pathname?.startsWith("/admin"))
@@ -56,7 +67,7 @@ export function BottomNavBar() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={href}
               className={cn(
                 "flex flex-col items-center gap-1 rounded-lg px-2.5 py-2 transition-colors",
                 isActive ? "text-foreground" : "text-muted-foreground"

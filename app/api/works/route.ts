@@ -88,15 +88,16 @@ function errorResponse(error: unknown) {
 
 export async function GET() {
   const session = await getAdminSession()
-  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
+  const accountId = session?.accountId || ""
+  const permissionSession = session ? sessionForPermission(session) : undefined
 
   try {
     const records = await getVisibleStoryWorks(
-      session.accountId,
-      canEditAnyStoryWork(sessionForPermission(session)),
+      accountId,
+      canEditAnyStoryWork(permissionSession),
     )
     return NextResponse.json({
-      accountId: session.accountId,
+      accountId,
       bundles: records.map((record) => record.bundle),
     })
   } catch (error) {
@@ -106,7 +107,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await getAdminSession()
-  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
+  if (!session) return NextResponse.json({ error: "로그인한 사용자만 작품을 생성할 수 있습니다." }, { status: 401 })
 
   const bundle = await readBundle(request)
   if (!bundle) return NextResponse.json({ error: "저장할 작품 형식이 올바르지 않습니다." }, { status: 400 })
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   const session = await getAdminSession()
-  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
+  if (!session) return NextResponse.json({ error: "로그인한 사용자만 작품을 수정할 수 있습니다." }, { status: 401 })
 
   const bundle = await readBundle(request)
   if (!bundle) return NextResponse.json({ error: "수정할 작품 형식이 올바르지 않습니다." }, { status: 400 })
@@ -159,7 +160,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   const session = await getAdminSession()
-  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
+  if (!session) return NextResponse.json({ error: "로그인한 사용자만 작품을 삭제할 수 있습니다." }, { status: 401 })
 
   const body = await request.json().catch(() => null) as { workId?: unknown } | null
   const workId = validId(body?.workId) ? String(body?.workId) : null

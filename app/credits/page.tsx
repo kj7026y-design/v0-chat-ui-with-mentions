@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { ChevronLeft, Gem, Sparkles, Info, X } from "lucide-react"
 import { toast } from "sonner"
 import { useAppStore, CREDIT_COSTS } from "@/lib/store"
@@ -9,6 +10,7 @@ import { CreditProductCard } from "@/components/chat/credit-product-card"
 import { cn } from "@/lib/utils"
 import { getCreditHistory, subscribeCreditUpdates, type CreditHistoryItem } from "@/lib/credit-storage"
 import { useSafeBack } from "@/hooks/use-safe-back"
+import { useAccountSession } from "@/hooks/use-account-session"
 
 const products = [
   { amount: 100, price: "₩1,200" },
@@ -40,12 +42,16 @@ const demoCreditHistory: CreditHistoryItem[] = [
 ]
 
 export default function CreditsPage() {
+  const router = useRouter()
   const goBack = useSafeBack("/mypage")
+  const { session, isLoading: isSessionLoading } = useAccountSession()
   const credits = useAppStore((s) => s.credits)
   const chargeCredit = useAppStore((s) => s.chargeCredit)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [historyTab, setHistoryTab] = useState<CreditHistoryTab>("all")
   const [history, setHistory] = useState<CreditHistoryItem[]>([])
+  const [isCharging, setIsCharging] = useState(false)
+  const chargingRef = useRef(false)
   const displayHistory = [...history, ...demoCreditHistory]
   const visibleHistory = useMemo(
     () => displayHistory.filter((item) => historyTab === "all" || item.type === historyTab),
@@ -58,15 +64,62 @@ export default function CreditsPage() {
     return subscribeCreditUpdates(syncHistory)
   }, [])
 
-  const handlePurchase = (product: typeof products[number]) => {
-    const total = product.amount + (product.bonus ?? 0)
-    chargeCredit(total, "크레딧 충전", `${product.price} 상품${product.bonus ? ` · 보너스 ${product.bonus} 포함` : ""}`)
-    toast.success(`${total.toLocaleString()} 크레딧이 충전됐어요.`)
+  const requireLogin = () => {
+    if (isSessionLoading) {
+      toast("로그인 정보를 확인하고 있어요.")
+      return false
+    }
+    if (session?.authenticated) return true
+
+    toast.error("크레딧 충전은 로그인이 필요합니다.", {
+      action: {
+        label: "로그인",
+        onClick: () => router.push("/landing?auth=login&returnTo=%2Fcredits"),
+      },
+    })
+    return false
   }
 
-  const handleSubscribe = () => {
-    chargeCredit(2000, "프리미엄 월간 지급", "월간 구독 체험 보상")
-    toast.success("2,000 크레딧이 지급됐어요.")
+  const chargeAuthenticatedCredit = async (
+    amount: number,
+    title: string,
+    description: string,
+    successMessage: string,
+  ) => {
+    if (!requireLogin() || chargingRef.current) return false
+    chargingRef.current = true
+    setIsCharging(true)
+    try {
+      const charged = await chargeCredit(amount, title, description)
+      if (!charged) {
+        toast.error("크레딧을 충전하지 못했어요. 잠시 후 다시 시도해 주세요.")
+        return false
+      }
+      toast.success(successMessage)
+      return true
+    } finally {
+      chargingRef.current = false
+      setIsCharging(false)
+    }
+  }
+
+  const handlePurchase = async (product: typeof products[number]) => {
+    const total = product.amount + (product.bonus ?? 0)
+    await chargeAuthenticatedCredit(
+      total,
+      "크레딧 충전",
+      `${product.price} 상품${product.bonus ? ` · 보너스 ${product.bonus} 포함` : ""}`,
+      `${total.toLocaleString()} 크레딧이 충전됐어요.`,
+    )
+  }
+
+  const handleSubscribe = async () => {
+    await chargeAuthenticatedCredit(
+      2000,
+      "프리미엄 월간 지급",
+      "월간 구독 체험 보상",
+      "2,000 크레딧이 지급됐어요.",
+    )
   }
 
   const formatHistoryDate = (value: string) => {
@@ -84,7 +137,8 @@ export default function CreditsPage() {
     return [item.description, formatHistoryDate(item.createdAt)].filter(Boolean).join(" · ")
   }
 
-  const handleAttendanceReward = () => {
+  const handleAttendanceReward = async () => {
+    if (!requireLogin() || isCharging) return
     const todayKey = new Date().toISOString().slice(0, 10)
     const storageKey = "storychat_credit_attendance_date"
     if (typeof window !== "undefined" && window.localStorage.getItem(storageKey) === todayKey) {
@@ -92,11 +146,15 @@ export default function CreditsPage() {
       return
     }
 
-    if (typeof window !== "undefined") {
+    const charged = await chargeAuthenticatedCredit(
+      10,
+      "출석 체크",
+      "일일 출석 보상",
+      "출석 보상 10 크레딧을 받았어요.",
+    )
+    if (charged && typeof window !== "undefined") {
       window.localStorage.setItem(storageKey, todayKey)
     }
-    chargeCredit(10, "출석 체크", "일일 출석 보상")
-    toast.success("출석 보상 10 크레딧을 받았어요.")
   }
 
   const emptyHistoryText = historyTab === "earned"
@@ -176,6 +234,7 @@ export default function CreditsPage() {
         <button
           type="button"
           onClick={handleAttendanceReward}
+          disabled={isSessionLoading || isCharging}
           className="mb-6 flex items-center justify-between rounded-2xl border border-neutral-200 p-4 text-left dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
         >
           <div className="flex items-center gap-3">
@@ -208,6 +267,7 @@ export default function CreditsPage() {
                 key={p.amount}
                 type="button"
                 onClick={() => handlePurchase(p)}
+                disabled={isSessionLoading || isCharging}
                 className={`relative flex items-center justify-between rounded-2xl p-4 text-left transition-colors ${
                   isBest
                     ? "border-2 border-blue-500 bg-blue-50/50 dark:bg-blue-950/30"
@@ -253,6 +313,7 @@ export default function CreditsPage() {
         <button
           type="button"
           onClick={handleSubscribe}
+          disabled={isSessionLoading || isCharging}
           className="rounded-2xl border border-neutral-200 p-4 text-left hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-900 transition-colors"
         >
           <div className="mb-3 flex items-center justify-between">

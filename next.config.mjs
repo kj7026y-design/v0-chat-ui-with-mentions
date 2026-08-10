@@ -9,6 +9,7 @@ const nextConfig = {
     "192.168.1.179",
     "192.168.1.110",
     "192.168.1.49",
+    "172.28.144.1",
   ],
   typescript: {
     ignoreBuildErrors: true,
