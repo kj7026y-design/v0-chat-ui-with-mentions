@@ -43,6 +43,15 @@ import {
   normalizeInternalNavigationTarget,
   withReturnTo,
 } from "@/lib/safe-navigation"
+import { useAccountSession } from "@/hooks/use-account-session"
+import { canEditStoryWork, getStoryWorkAuthor } from "@/lib/work-permissions"
+import {
+  createStoryWorkInDatabase,
+  deleteStoryWorkFromDatabase,
+  requireStoryWorkBundle,
+  syncStoryWorksFromDatabase,
+} from "@/lib/story-work-client"
+import { mergeStoryWorkBundles } from "@/lib/story-work-bundle"
 
 type TabId = "completed" | "characters" | "scenarios" | "personas"
 type DetailTarget =
@@ -74,6 +83,7 @@ export default function MyWorksPage() {
 function MyWorksContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { session, isLoading: isSessionLoading } = useAccountSession()
   const [activeTab, setActiveTab] = useState<TabId>("completed")
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
@@ -120,6 +130,9 @@ function MyWorksContent() {
   useEffect(() => {
     const syncLibrary = () => setLibrary(getStoryChatLibrary())
     syncLibrary()
+    void syncStoryWorksFromDatabase()
+      .then(setLibrary)
+      .catch((error) => console.warn("[story works sync failed]", error))
     window.addEventListener("storage", syncLibrary)
     window.addEventListener("storychat-library-updated", syncLibrary)
     return () => {
@@ -132,6 +145,9 @@ function MyWorksContent() {
     setLibrary(nextLibrary)
     saveStoryChatLibrary(nextLibrary)
   }
+
+  const canManageWork = (work?: StoryWork | null) =>
+    !isSessionLoading && canEditStoryWork(work, session)
 
   const openDetail = (nextDetail: DetailTarget) => {
     setEditingWorldId(null)
@@ -174,6 +190,11 @@ function MyWorksContent() {
       return
     }
     if (target.type === "completed") {
+      const work = library.works.find((item) => item.id === target.id)
+      if (!canManageWork(work)) {
+        toast.error("작품 수정 권한이 없습니다.")
+        return
+      }
       router.push(withReturnTo(`/my-works/${target.id}/edit`, getCurrentAppPath()))
       return
     }
@@ -185,6 +206,13 @@ function MyWorksContent() {
   }
 
   const handleDelete = (target: DetailTarget) => {
+    if (target.type === "completed") {
+      const work = library.works.find((item) => item.id === target.id)
+      if (!canManageWork(work)) {
+        toast.error("작품 삭제 권한이 없습니다.")
+        return
+      }
+    }
     setDeleteTarget(target)
   }
 
@@ -215,8 +243,26 @@ function MyWorksContent() {
     toast("자아를 수정했어요.")
   }
 
-  const handleCopy = (target: DetailTarget) => {
-    persistLibrary(copyTarget(library, target))
+  const handleCopy = async (target: DetailTarget) => {
+    const author = getStoryWorkAuthor(session)
+    if (target.type === "completed" && !author) {
+      toast.error("로그인한 사용자만 작품을 복사할 수 있습니다.")
+      return
+    }
+    let nextLibrary = copyTarget(library, target, author ?? undefined)
+    if (target.type === "completed") {
+      const copiedWork = nextLibrary.works[0]
+      try {
+        const savedBundle = await createStoryWorkInDatabase(
+          requireStoryWorkBundle(nextLibrary, copiedWork.id),
+        )
+        nextLibrary = mergeStoryWorkBundles(nextLibrary, [savedBundle])
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "작품을 DB에 저장하지 못했어요.")
+        return
+      }
+    }
+    persistLibrary(nextLibrary)
     toast("복사했어요.")
   }
 
@@ -332,7 +378,8 @@ function MyWorksContent() {
                 openMenuId={openMenuId}
                 onToggleMenu={(id) => setOpenMenuId((current) => (current === id ? null : id))}
                 onOpenDetail={(id) => openDetail({ type: "completed", id })}
-                onEdit={(id) => router.push(`/my-works/${id}/edit`)}
+                canManageWork={canManageWork}
+                onEdit={(id) => handleEdit({ type: "completed", id })}
                 onDelete={(id) => handleDelete({ type: "completed", id })}
               />
             )}
@@ -394,8 +441,42 @@ function MyWorksContent() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!deleteTarget) return
+          if (deleteTarget.type === "completed") {
+            const work = library.works.find((item) => item.id === deleteTarget.id)
+            if (!canManageWork(work)) {
+              setDeleteTarget(null)
+              toast.error("작품 삭제 권한이 없습니다.")
+              return
+            }
+            if (!defaultLibrary.works.some((item) => item.id === work?.id)) {
+              try {
+                await deleteStoryWorkFromDatabase(deleteTarget.id)
+              } catch (error) {
+                setDeleteTarget(null)
+                toast.error(error instanceof Error ? error.message : "작품을 DB에서 삭제하지 못했어요.")
+                return
+              }
+            }
+          } else {
+            const relatedWorks = getRelatedWorks(library, deleteTarget)
+            const databaseWorks = relatedWorks.filter((work) =>
+              !defaultLibrary.works.some((defaultWork) => defaultWork.id === work.id),
+            )
+            if (databaseWorks.some((work) => !canManageWork(work))) {
+              setDeleteTarget(null)
+              toast.error("수정 권한이 없는 작품에서 사용 중이라 삭제할 수 없습니다.")
+              return
+            }
+            try {
+              await Promise.all(databaseWorks.map((work) => deleteStoryWorkFromDatabase(work.id)))
+            } catch (error) {
+              setDeleteTarget(null)
+              toast.error(error instanceof Error ? error.message : "연결 작품을 DB에서 삭제하지 못했어요.")
+              return
+            }
+          }
           persistLibrary(deleteTargetItem(library, deleteTarget))
           setDetail((current) => (current?.type === deleteTarget.type && current.id === deleteTarget.id ? null : current))
           if (deleteTarget.type === "scenarios") setEditingWorldId(null)
@@ -1060,7 +1141,26 @@ function deleteTargetItem(library: StoryChatLibrary, target: DetailTarget): Stor
   }
 }
 
-function copyTarget(library: StoryChatLibrary, target: DetailTarget): StoryChatLibrary {
+function getRelatedWorks(library: StoryChatLibrary, target: DetailTarget) {
+  if (target.type === "characters") {
+    return library.works.filter((work) =>
+      work.characterId === target.id || work.defaultCharacterId === target.id,
+    )
+  }
+  if (target.type === "scenarios") {
+    return library.works.filter((work) => work.worldId === target.id)
+  }
+  if (target.type === "personas") {
+    return library.works.filter((work) => work.personaId === target.id)
+  }
+  return []
+}
+
+function copyTarget(
+  library: StoryChatLibrary,
+  target: DetailTarget,
+  author?: Pick<StoryWork, "authorId" | "authorName">,
+): StoryChatLibrary {
   const suffix = " 복사본"
   if (target.type === "scenarios") {
     const item = library.worlds.find((world) => world.id === target.id)
@@ -1090,7 +1190,7 @@ function copyTarget(library: StoryChatLibrary, target: DetailTarget): StoryChatL
   if (!item) return library
   return {
     ...library,
-    works: [{ ...item, id: createId("work"), title: `${item.title}${suffix}`, createdAt: new Date().toISOString(), updatedAt: "오늘" }, ...library.works],
+    works: [{ ...item, ...author, id: createId("work"), title: `${item.title}${suffix}`, createdAt: new Date().toISOString(), updatedAt: "오늘" }, ...library.works],
   }
 }
 
@@ -1156,6 +1256,7 @@ function CompletedTab({
   openMenuId,
   onToggleMenu,
   onOpenDetail,
+  canManageWork,
   onEdit,
   onDelete,
 }: {
@@ -1164,6 +1265,7 @@ function CompletedTab({
   openMenuId: string | null
   onToggleMenu: (id: string) => void
   onOpenDetail: (id: string) => void
+  canManageWork: (work: StoryWork) => boolean
   onEdit: (id: string) => void
   onDelete: (id: string) => void
 }) {
@@ -1198,6 +1300,7 @@ function CompletedTab({
             item={item}
             onOpenDetail={() => onOpenDetail(w.id)}
             onContinueChat={() => router.push(`/chat/${w.id}`)}
+            canManage={canManageWork(w)}
             menuOpen={openMenuId === w.id}
             onToggleMenu={() => onToggleMenu(w.id)}
             onEdit={() => onEdit(w.id)}
@@ -1324,6 +1427,7 @@ function WorkCard({
   item,
   onOpenDetail,
   onContinueChat,
+  canManage,
   menuOpen,
   onToggleMenu,
   onEdit,
@@ -1340,6 +1444,7 @@ function WorkCard({
   }
   onOpenDetail?: () => void
   onContinueChat: () => void
+  canManage: boolean
   menuOpen: boolean
   onToggleMenu: () => void
   onEdit: () => void
@@ -1364,7 +1469,7 @@ function WorkCard({
             {item.description}
           </p>
         </div>
-        <div className="relative">
+        {canManage && <div className="relative">
           <button
             type="button"
             aria-label="더보기"
@@ -1404,7 +1509,7 @@ function WorkCard({
               </button>
             </div>
           )}
-        </div>
+        </div>}
       </div>
       <div className="my-3 h-px bg-neutral-100 dark:bg-neutral-800" />
       <div className="flex items-center justify-between">

@@ -88,6 +88,14 @@ import {
 import { cn } from "@/lib/utils"
 import { useSafeBack } from "@/hooks/use-safe-back"
 import { getChatList, saveChatList } from "@/lib/chat-list-storage"
+import { useAccountSession } from "@/hooks/use-account-session"
+import { getStoryWorkAuthor } from "@/lib/work-permissions"
+import {
+  createStoryWorkInDatabase,
+  requireStoryWorkBundle,
+  syncStoryWorksFromDatabase,
+} from "@/lib/story-work-client"
+import { mergeStoryWorkBundles } from "@/lib/story-work-bundle"
 
 type EntryMode = "menu" | "advanced" | "work" | "character" | "world" | "persona"
 
@@ -259,6 +267,7 @@ const emptyWorkDraft = (): WorkDraft => ({
 export default function CreatePage() {
   const router = useRouter()
   const goToPreviousPage = useSafeBack("/")
+  const { session, isLoading: isSessionLoading } = useAccountSession()
   const [mode, setMode] = useState<EntryMode>("menu")
   const [enteredModeDirectly, setEnteredModeDirectly] = useState(false)
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary)
@@ -275,6 +284,9 @@ export default function CreatePage() {
   useEffect(() => {
     const currentLibrary = getStoryChatLibrary()
     setLibrary(currentLibrary)
+    void syncStoryWorksFromDatabase()
+      .then(setLibrary)
+      .catch((error) => console.warn("[story works sync failed]", error))
     loadDrafts()
     const params = new URLSearchParams(window.location.search)
     const rawMode = params.get("mode") || params.get("type") || params.get("tab")
@@ -406,6 +418,18 @@ export default function CreatePage() {
     saveStoryChatLibrary(nextLibrary)
   }
 
+  const requireWorkAuthor = () => {
+    const author = getStoryWorkAuthor(session)
+    if (author) return author
+
+    toast.error(
+      isSessionLoading
+        ? "로그인 정보를 확인하고 있습니다. 잠시 후 다시 시도해 주세요."
+        : "로그인한 사용자만 작품을 저장할 수 있습니다.",
+    )
+    return null
+  }
+
   const saveWorkDraft = () => {
     const nextDraft = { ...workDraft, savedAt: new Date().toISOString() }
     setWorkDraft(nextDraft)
@@ -467,14 +491,17 @@ export default function CreatePage() {
     setMode("menu")
   }
 
-  const completeWork = (goChat: boolean) => {
+  const completeWork = async (goChat: boolean) => {
     const character = resolveWorkCharacter()
     const world = resolveWorkWorld()
     if (!character || !world || !workDraft.title) return
+    const author = requireWorkAuthor()
+    if (!author) return
 
     const now = new Date().toISOString()
     const work: StoryWork = {
       id: createId("work"),
+      ...author,
       title: workDraft.title,
       characterId: character.id,
       worldId: world.id,
@@ -507,7 +534,13 @@ export default function CreatePage() {
       works: [work, ...library.works],
     }
 
-    setLibraryAndPersist(nextLibrary)
+    try {
+      const savedBundle = await createStoryWorkInDatabase(requireStoryWorkBundle(nextLibrary, work.id))
+      setLibraryAndPersist(mergeStoryWorkBundles(nextLibrary, [savedBundle]))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "작품을 DB에 저장하지 못했어요.")
+      return
+    }
     window.localStorage.removeItem(WORK_DRAFT_KEY)
     toast(goChat ? "작품을 저장하고 채팅을 시작해요." : "완성작 아카이브에 저장했어요.")
     setWorkDraft(emptyWorkDraft())
@@ -515,7 +548,10 @@ export default function CreatePage() {
     else setMode("menu")
   }
 
-  const completeQuickWork = (data: QuickCreateData) => {
+  const completeQuickWork = async (data: QuickCreateData) => {
+    const author = requireWorkAuthor()
+    if (!author) return
+
     const gender = (value: string): StoryCharacterGender =>
       value === "여성" ? "female" : value === "남성" ? "male" : value === "논바이너리" ? "nonbinary" : "unknown"
     const character = data.character === "default" && library.characters[0]
@@ -560,6 +596,7 @@ export default function CreatePage() {
     const now = new Date().toISOString()
     const work: StoryWork = {
       id: createId("work"),
+      ...author,
       title: data.title.trim(),
       characterId: character.id,
       worldId: world.id,
@@ -583,12 +620,19 @@ export default function CreatePage() {
       updatedAt: "오늘",
     }
 
-    setLibraryAndPersist({
+    const nextLibrary = {
       characters: upsertById(library.characters, character),
       worlds: upsertById(library.worlds, world),
       personas: upsertById(library.personas, persona),
       works: [work, ...library.works],
-    })
+    }
+    try {
+      const savedBundle = await createStoryWorkInDatabase(requireStoryWorkBundle(nextLibrary, work.id))
+      setLibraryAndPersist(mergeStoryWorkBundles(nextLibrary, [savedBundle]))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "작품을 DB에 저장하지 못했어요.")
+      return
+    }
     saveChatList([
       {
         id: work.id,
@@ -703,10 +747,13 @@ export default function CreatePage() {
             const character = library.characters.find((c) => c.id === values.characterId) || library.characters[0]
             const world = library.worlds.find((w) => w.id === values.worldId) || library.worlds[0]
             if (!character || !world || !values.title) return
+            const author = requireWorkAuthor()
+            if (!author) return
 
             const now = new Date().toISOString()
             const work: StoryWork = {
               id: createId("work"),
+              ...author,
               title: values.title,
               characterId: character.id,
               worldId: world.id,
@@ -736,7 +783,13 @@ export default function CreatePage() {
               works: [work, ...library.works],
             }
 
-            setLibraryAndPersist(nextLibrary)
+            try {
+              const savedBundle = await createStoryWorkInDatabase(requireStoryWorkBundle(nextLibrary, work.id))
+              setLibraryAndPersist(mergeStoryWorkBundles(nextLibrary, [savedBundle]))
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "작품을 DB에 저장하지 못했어요.")
+              return
+            }
             window.localStorage.removeItem(WORK_DRAFT_KEY)
             toast("작품을 저장하고 채팅을 시작해요.")
             router.push(`/chat/${work.id}`)

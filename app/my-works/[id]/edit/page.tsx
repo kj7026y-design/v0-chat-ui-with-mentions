@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { WorkForm, type WorkFormValues } from "@/components/my-works/work-form"
 import {
+  defaultLibrary,
   getStoryChatLibrary,
   normalizeIntroScenarios,
   saveStoryChatLibrary,
@@ -15,15 +16,29 @@ import {
   type StoryWorld,
 } from "@/lib/storychat-storage"
 import { useSafeBack } from "@/hooks/use-safe-back"
+import { useAccountSession } from "@/hooks/use-account-session"
+import { canEditStoryWork } from "@/lib/work-permissions"
+import {
+  requireStoryWorkBundle,
+  syncStoryWorksFromDatabase,
+  updateStoryWorkInDatabase,
+} from "@/lib/story-work-client"
+import { mergeStoryWorkBundles } from "@/lib/story-work-bundle"
 
 export default function EditWorkPage() {
   const params = useParams()
   const workId = params.id as string
   const goBack = useSafeBack(`/my-works?tab=completed&detailType=completed&detailId=${workId}`)
+  const { session, isLoading: isSessionLoading } = useAccountSession()
   const [library, setLibrary] = useState<StoryChatLibrary | null>(null)
+  const [isDatabaseLoading, setIsDatabaseLoading] = useState(true)
 
   useEffect(() => {
     setLibrary(getStoryChatLibrary())
+    void syncStoryWorksFromDatabase()
+      .then(setLibrary)
+      .catch((error) => console.warn("[story works sync failed]", error))
+      .finally(() => setIsDatabaseLoading(false))
   }, [])
 
   const work = useMemo(
@@ -35,7 +50,7 @@ export default function EditWorkPage() {
     [library, work],
   )
 
-  if (!library) return null
+  if (!library || isSessionLoading || isDatabaseLoading) return null
 
   if (!work || !world) {
     return (
@@ -52,9 +67,33 @@ export default function EditWorkPage() {
     )
   }
 
+  const canEdit = canEditStoryWork(work, session)
+
+  if (!canEdit) {
+    return (
+      <div className="min-h-full bg-background p-5 text-foreground">
+        <Button variant="ghost" onClick={goBack}>
+          <ArrowLeft className="h-4 w-4" />
+          돌아가기
+        </Button>
+        <div className="mt-8 rounded-xl border border-border bg-card p-5">
+          <h1 className="text-lg font-bold">작품 수정 권한이 없습니다.</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            작품 생성자와 관리자, 개발자, 테스터만 수정할 수 있습니다.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const initialValues = toWorkFormValues(work, world)
 
-  const handleSubmit = (values: WorkFormValues) => {
+  const handleSubmit = async (values: WorkFormValues) => {
+    if (!canEditStoryWork(work, session)) {
+      toast.error("작품 수정 권한이 없습니다.")
+      return
+    }
+
     const now = "오늘"
     const nextWork: StoryWork = {
       ...work,
@@ -94,11 +133,25 @@ export default function EditWorkPage() {
       coverImageUrl: values.coverImageUrl.trim(),
     }
 
-    saveStoryChatLibrary({
+    let nextLibrary: StoryChatLibrary = {
       ...library,
       works: library.works.map((item) => item.id === work.id ? nextWork : item),
       worlds: library.worlds.map((item) => item.id === world.id ? nextWorld : item),
-    })
+    }
+
+    if (!defaultLibrary.works.some((item) => item.id === work.id)) {
+      try {
+        const savedBundle = await updateStoryWorkInDatabase(
+          requireStoryWorkBundle(nextLibrary, work.id),
+        )
+        nextLibrary = mergeStoryWorkBundles(nextLibrary, [savedBundle])
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "작품을 DB에 저장하지 못했어요.")
+        return
+      }
+    }
+
+    saveStoryChatLibrary(nextLibrary)
     toast("작품을 수정했어요.")
     goBack()
   }

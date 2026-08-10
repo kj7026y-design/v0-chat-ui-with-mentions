@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { useAppStore, type SavedEvent } from "@/lib/store"
 import { defaultLibrary, getStoryChatLibrary, type StoryChatLibrary } from "@/lib/storychat-storage"
+import { syncStoryWorksFromDatabase } from "@/lib/story-work-client"
 import {
   getCurrentUserId,
   getGeneratedMediaByUser,
@@ -116,6 +117,9 @@ export default function MyPage() {
   useEffect(() => {
     setMounted(true)
     setLibrary(getStoryChatLibrary())
+    void syncStoryWorksFromDatabase()
+      .then(setLibrary)
+      .catch((error) => console.warn("[story works sync failed]", error))
     setGeneratedMedia(getGeneratedMediaByUser(getCurrentUserId()))
 
     const syncLocalChatRoomNames = () => {
@@ -986,4 +990,3 @@ function NavItem({
     </div>
   )
 }
-

@@ -9,6 +9,7 @@ import {
   saveStoryChatLibrary,
   type StoryChatLibrary,
 } from "@/lib/storychat-storage"
+import { syncStoryWorksFromDatabase } from "@/lib/story-work-client"
 
 export default function WorkPublicPage() {
   const params = useParams()
@@ -17,6 +18,9 @@ export default function WorkPublicPage() {
 
   useEffect(() => {
     setLibrary(getStoryChatLibrary())
+    void syncStoryWorksFromDatabase()
+      .then(setLibrary)
+      .catch((error) => console.warn("[story works sync failed]", error))
   }, [])
 
   const work = useMemo(() => library.works.find((item) => item.id === workId), [library, workId])

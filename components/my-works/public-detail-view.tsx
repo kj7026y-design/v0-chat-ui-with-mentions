@@ -34,6 +34,8 @@ import { getIntroPreviewText, normalizeIntroScenarios } from "@/lib/storychat-st
 import { WorkComments } from "@/components/work/work-comments"
 import { cn } from "@/lib/utils"
 import { getCurrentAppPath, withReturnTo } from "@/lib/safe-navigation"
+import { useAccountSession } from "@/hooks/use-account-session"
+import { canEditStoryWork } from "@/lib/work-permissions"
 
 type DetailTarget =
   | { type: "scenarios"; id: string }
@@ -157,6 +159,7 @@ export function WorkLandingPage({
   onLikeCountChange?: (count: number) => void
 }) {
   const router = useRouter()
+  const { session, isLoading: isSessionLoading } = useAccountSession()
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(work.likeCount ?? 0)
   const [selectedScene, setSelectedScene] = useState<string | null>(null)
@@ -165,6 +168,7 @@ export function WorkLandingPage({
   const places = normalizeLocations(work.majorLocations ?? world.places, world.locationImages)
   const previewText = buildWorkPreview(work, world, places, highlights)
   const intros = normalizeIntroScenarios(work)
+  const canEdit = !isSessionLoading && canEditStoryWork(work, session)
 
   const title = work.title || "작품 제목"
   const tagline = work.tagline || world.tagline || work.coreSetting || world.coreSetting || "천년의 잠에서 깨어난 왕국의 마지막 이야기"
@@ -229,13 +233,15 @@ export function WorkLandingPage({
               {title}
             </h1>
           </div>
-          <Link
-            href={`/my-works/${work.id}/edit`}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
-          >
-            <Pencil size={12} />
-            수정하기
-          </Link>
+          {canEdit && (
+            <Link
+              href={`/my-works/${work.id}/edit`}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-3 py-1.5 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+            >
+              <Pencil size={12} />
+              수정하기
+            </Link>
+          )}
         </div>
 
         {/* 히어로 */}

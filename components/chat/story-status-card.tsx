@@ -28,6 +28,7 @@ interface StoryStatusCardProps {
   status: StoryStatus
   workId?: string
   onEditWork?: () => void
+  canEditWork?: boolean
   compactPanel?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -37,6 +38,7 @@ export function StoryStatusCard({
   status,
   workId,
   onEditWork,
+  canEditWork = false,
   compactPanel = false,
   open,
   onOpenChange,
@@ -112,7 +114,7 @@ export function StoryStatusCard({
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <p className="min-w-0 truncate text-xs font-semibold text-foreground">진행상황</p>
           <div className="flex items-center gap-1">
-            {(workId || onEditWork) && (
+            {canEditWork && (workId || onEditWork) && (
               <button
                 type="button"
                 onClick={handleEdit}

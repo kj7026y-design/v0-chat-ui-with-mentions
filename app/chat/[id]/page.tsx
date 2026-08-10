@@ -102,11 +102,14 @@ import {
   normalizeIntroScenarios,
   type StoryChatLibrary,
 } from "@/lib/storychat-storage";
+import { syncStoryWorksFromDatabase } from "@/lib/story-work-client";
 import {
   findChatSearchResultIds,
   normalizeChatSearchQuery,
 } from "@/lib/chat-search";
 import { withReturnTo } from "@/lib/safe-navigation";
+import { useAccountSession } from "@/hooks/use-account-session";
+import { canEditStoryWork } from "@/lib/work-permissions";
 
 type ChatThemeId = "system" | "light" | "dark" | "message" | "messenger";
 
@@ -428,6 +431,8 @@ export default function ChatPage() {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const chatId = params.id as string;
+  const { session: accountSession, isLoading: isAccountSessionLoading } =
+    useAccountSession();
 
   const credits = useAppStore((s) => s.credits);
   const spendCredit = useAppStore((s) => s.spendCredit);
@@ -523,6 +528,8 @@ export default function ChatPage() {
       );
       return character?.name === characterName;
     });
+  const canEditCurrentWork =
+    !isAccountSessionLoading && canEditStoryWork(currentWork, accountSession);
 
   useEffect(() => {
     const getHistoryModal = (state: unknown): ChatUtilityModalType | null => {
@@ -1305,6 +1312,9 @@ export default function ChatPage() {
       setLibrary(getStoryChatLibrary());
     };
     syncChatMeta();
+    void syncStoryWorksFromDatabase()
+      .then(setLibrary)
+      .catch((error) => console.warn("[story works sync failed]", error));
     window.addEventListener("storage", syncChatMeta);
     window.addEventListener("storychat-chats-updated", syncChatMeta);
     window.addEventListener("storychat-library-updated", syncChatMeta);
@@ -2647,6 +2657,7 @@ export default function ChatPage() {
         <StoryStatusCard
           status={chatStoryStatus}
           workId={chatId}
+          canEditWork={canEditCurrentWork}
           compactPanel
           open={isStatusPanelOpen}
           onOpenChange={setIsStatusPanelOpen}

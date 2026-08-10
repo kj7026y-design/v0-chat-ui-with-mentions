@@ -12,6 +12,7 @@ import {
   type StoryWork,
   type StoryWorld,
 } from "@/lib/storychat-storage"
+import { syncStoryWorksFromDatabase } from "@/lib/story-work-client"
 
 type SortId = "popular" | "latest" | "updated" | "name"
 
@@ -42,6 +43,12 @@ export default function ExplorePage() {
       setMounted(true)
     }
     syncLibrary()
+    void syncStoryWorksFromDatabase()
+      .then((nextLibrary) => {
+        setLibrary(nextLibrary)
+        setMounted(true)
+      })
+      .catch((error) => console.warn("[story works sync failed]", error))
     window.addEventListener("storage", syncLibrary)
     window.addEventListener("storychat-library-updated", syncLibrary)
     return () => {

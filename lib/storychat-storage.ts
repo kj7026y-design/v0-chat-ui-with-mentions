@@ -698,6 +698,8 @@ export const defaultLibrary: StoryChatLibrary = {
       storyProgressSettings: defaultStoryProgressSettings(),
       statusBarEnabled: true,
       statusBarText: "무너진 왕성 · 밤\n왕국 몰락의 원인을 찾는 중",
+      authorId: "storychat",
+      authorName: "StoryChat",
       createdAt: "2024.03.15",
       updatedAt: "오늘",
     },
@@ -712,6 +714,8 @@ export const defaultLibrary: StoryChatLibrary = {
       storyProgressSettings: defaultStoryProgressSettings(),
       statusBarEnabled: false,
       statusBarText: "",
+      authorId: "storychat",
+      authorName: "StoryChat",
       createdAt: "2024.03.10",
       updatedAt: "어제",
     },
@@ -746,6 +750,8 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "2024년 늦가을 밤",
       statusBarEnabled: false,
       statusBarText: "",
+      authorId: "storychat",
+      authorName: "StoryChat",
       createdAt: "2024.03.18",
       updatedAt: "오늘",
     },
@@ -780,6 +786,8 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "2024년 초여름 밤",
       statusBarEnabled: false,
       statusBarText: "",
+      authorId: "storychat",
+      authorName: "StoryChat",
       createdAt: "2024.03.12",
       updatedAt: "오늘",
     },
@@ -814,6 +822,8 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "2024년 늦봄 새벽",
       statusBarEnabled: false,
       statusBarText: "",
+      authorId: "storychat",
+      authorName: "StoryChat",
       createdAt: "2024.03.20",
       updatedAt: "오늘",
     },
@@ -1058,6 +1068,8 @@ function normalizeStoredWork(work: StoryWork): StoryWork {
 
   return {
     ...work,
+    authorId: work.authorId || defaultWork?.authorId,
+    authorName: work.authorName || defaultWork?.authorName,
     introScenarios: shouldRestoreDefaultIntros ? defaultWork.introScenarios : normalizedIntroScenarios,
     storyProgressSettings: work.storyProgressSettings
       ? normalizeProgressSettings(work.storyProgressSettings)
