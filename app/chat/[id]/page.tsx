@@ -98,7 +98,9 @@ import {
 } from "@/lib/generated-media-storage";
 import {
   defaultLibrary,
+  getChatPersonaId,
   getStoryChatLibrary,
+  saveChatPersonaId,
   saveStoryChatLibrary,
   normalizeIntroScenarios,
   type StoryChatLibrary,
@@ -490,6 +492,7 @@ export default function ChatPage() {
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [library, setLibrary] = useState<StoryChatLibrary>(defaultLibrary);
+  const [selectedChatPersonaId, setSelectedChatPersonaId] = useState("");
   const [chatMeta, setChatMeta] = useState<ChatListItemData | null>(
     defaultChats.find((chat) => chat.id === chatId) ?? null,
   );
@@ -572,26 +575,32 @@ export default function ChatPage() {
       )
     : library.characters.find((character) => character.name === characterName);
   const currentPersona = currentWork
-    ? library.personas.find((persona) => persona.id === currentWork.personaId)
+    ? library.personas.find((persona) => persona.id === selectedChatPersonaId)
     : undefined;
 
   useEffect(() => {
-    if (currentWork && !currentPersona) {
-      setIsPersonaModalOpen(true);
-    }
-  }, [currentWork, currentPersona]);
-
-  const handlePersonaSelectedInChat = (personaId: string) => {
     if (!currentWork) return;
-    const updatedWork = { ...currentWork, personaId };
-    const updatedLibrary = {
-      ...library,
-      works: library.works.map((item) =>
-        item.id === currentWork.id ? updatedWork : item,
-      ),
-    };
-    saveStoryChatLibrary(updatedLibrary);
-    setLibrary(updatedLibrary);
+
+    const persistedPersonaId = getChatPersonaId(chatId);
+    setSelectedChatPersonaId(persistedPersonaId);
+    if (
+      !persistedPersonaId ||
+      !library.personas.some((persona) => persona.id === persistedPersonaId)
+    ) {
+      setIsPersonaModalOpen(true);
+    } else {
+      setIsPersonaModalOpen(false);
+    }
+  }, [chatId, currentWork, library.personas]);
+
+  const handlePersonaSelectedInChat = (
+    personaId: string,
+    nextLibrary: StoryChatLibrary,
+  ) => {
+    if (!currentWork) return;
+    saveChatPersonaId(chatId, personaId);
+    setSelectedChatPersonaId(personaId);
+    setLibrary(nextLibrary);
     setIsPersonaModalOpen(false);
     toast.success("대화 자아가 설정되었습니다.");
   };

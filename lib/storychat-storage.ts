@@ -1,6 +1,7 @@
 import type { Category } from "@/lib/store"
 
 export const STORYCHAT_LIBRARY_KEY = "storychat_library"
+export const STORYCHAT_CHAT_PERSONAS_KEY = "storychat_chat_personas"
 
 export type StoryCharacterGender = "male" | "female" | "nonbinary" | "unknown" | "custom"
 
@@ -1212,6 +1213,35 @@ export function getStoryChatLibrary(): StoryChatLibrary {
 export function saveStoryChatLibrary(library: StoryChatLibrary) {
   window.localStorage.setItem(STORYCHAT_LIBRARY_KEY, JSON.stringify(library))
   window.dispatchEvent(new Event("storychat-library-updated"))
+}
+
+export function getChatPersonaId(chatId: string) {
+  if (typeof window === "undefined") return ""
+
+  try {
+    const raw = window.localStorage.getItem(STORYCHAT_CHAT_PERSONAS_KEY)
+    if (!raw) return ""
+    const selections = JSON.parse(raw) as Record<string, unknown>
+    return typeof selections[chatId] === "string" ? selections[chatId] : ""
+  } catch {
+    return ""
+  }
+}
+
+export function saveChatPersonaId(chatId: string, personaId: string) {
+  if (typeof window === "undefined") return
+
+  let selections: Record<string, string> = {}
+  try {
+    const raw = window.localStorage.getItem(STORYCHAT_CHAT_PERSONAS_KEY)
+    if (raw) selections = JSON.parse(raw) as Record<string, string>
+  } catch {
+    selections = {}
+  }
+
+  selections[chatId] = personaId
+  window.localStorage.setItem(STORYCHAT_CHAT_PERSONAS_KEY, JSON.stringify(selections))
+  window.dispatchEvent(new Event("storychat-chat-persona-updated"))
 }
 
 export function createId(prefix: string) {

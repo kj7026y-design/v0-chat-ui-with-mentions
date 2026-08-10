@@ -210,6 +210,7 @@ interface WorkDraft {
   characterSource: SourceMode
   worldSource: SourceMode
   selectedCharacterId: string
+  selectedPersonaId: string
   selectedWorldId: string
   character: StoryCharacter
   world: StoryWorld
@@ -243,6 +244,7 @@ const emptyWorkDraft = (): WorkDraft => ({
   characterSource: "select",
   worldSource: "select",
   selectedCharacterId: "",
+  selectedPersonaId: "",
   selectedWorldId: "",
   character: emptyCharacter(),
   world: emptyWorld(),
@@ -513,7 +515,7 @@ export default function CreatePage() {
       title: workDraft.title,
       characterId: character.id,
       worldId: world.id,
-      personaId: "",
+      personaId: workDraft.selectedPersonaId,
       startScenario: workDraft.startScenario || character.defaultStartScenario,
       introScenarios: cleanIntroScenarios(workDraft.introScenarios),
       storyProgressSettings: world.storyProgressSettings,
@@ -729,6 +731,7 @@ export default function CreatePage() {
       title: workDraft.title,
       authorNote: workDraft.authorNote || "",
       characterId: workDraft.selectedCharacterId || library.characters[0]?.id || "",
+      personaId: workDraft.selectedPersonaId,
       worldId: workDraft.selectedWorldId || library.worlds[0]?.id || "",
       relationship: workDraft.startScenario || "",
       openingScene: workDraft.introScenarios[0]?.scene || "",
@@ -768,7 +771,7 @@ export default function CreatePage() {
               title: values.title,
               characterId: character.id,
               worldId: world.id,
-              personaId: "",
+              personaId: values.personaId,
               authorNote: values.authorNote,
               startScenario: values.relationship || values.openingScene || character.defaultStartScenario,
               introScenarios: values.introScenarios,

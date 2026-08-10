@@ -8,6 +8,7 @@ import {
   Globe,
   Heart,
   IdCard,
+  CircleUserRound,
   PenLine,
   Plus,
   Save,
@@ -31,6 +32,7 @@ export interface WorkFormValues {
   title: string
   authorNote: string
   characterId: string
+  personaId: string
   worldId: string
   relationship: string
   openingScene: string
@@ -175,7 +177,9 @@ export function WorkForm({
   }
 
   const characters = library?.characters || []
+  const personas = library?.personas || []
   const worlds = library?.worlds || []
+  const selectedPersona = personas.find((persona) => persona.id === values.personaId)
 
   return (
     <div className="mx-auto max-w-md pb-24">
@@ -344,6 +348,74 @@ export function WorkForm({
                 </button>
               )
             })
+          )}
+        </div>
+      </Section>
+
+      <Section
+        id="persona"
+        icon={CircleUserRound}
+        title="작가 설정 자아"
+        badge={selectedPersona?.name || "선택"}
+        openId={openId}
+        setOpenId={setOpenId}
+      >
+        <p className="text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+          작품에 어울리는 자아를 지정하면 채팅 시작 시 이 자아를 사용할지 선택할 수 있습니다.
+        </p>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setField("personaId", "")}
+            className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition-colors ${
+              !values.personaId
+                ? "border-blue-500 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/30"
+                : "border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800/50"
+            }`}
+          >
+            <div>
+              <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                설정하지 않음
+              </p>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                채팅 시작 시 사용자가 자아를 선택합니다.
+              </p>
+            </div>
+            {!values.personaId && <Check size={16} className="shrink-0 text-blue-500" />}
+          </button>
+
+          {personas.map((persona) => {
+            const isSelected = values.personaId === persona.id
+            return (
+              <button
+                key={persona.id}
+                type="button"
+                onClick={() => setField("personaId", persona.id)}
+                className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition-colors ${
+                  isSelected
+                    ? "border-blue-500 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/30"
+                    : "border-neutral-200 bg-white hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800/50"
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                    {persona.name}
+                  </p>
+                  <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
+                    {[persona.age && `${persona.age}세`, persona.role || persona.summary]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                </div>
+                {isSelected && <Check size={16} className="shrink-0 text-blue-500" />}
+              </button>
+            )
+          })}
+
+          {personas.length === 0 && (
+            <p className="py-3 text-center text-xs text-neutral-400 dark:text-neutral-500">
+              만들어 둔 자아가 없습니다.
+            </p>
           )}
         </div>
       </Section>
