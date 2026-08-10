@@ -175,9 +175,10 @@ export function WorkLandingPage({
   const genre = work.genre || world.genre || "판타지"
   const mood = work.mood || world.mood || "장엄하고 쓸쓸함"
 
-  const currentChapterTitle = work.currentChapter || world.currentChapter || "1장: 잠에서 깨어난 성"
-  const currentChapterDesc = work.startScenario || world.coreSetting || "안개 낀 산길에서 이무기와 마주친다."
-  const currentChapterGoal = work.currentGoal || world.currentGoal || "왕국 몰락의 원인을 찾는다"
+  const hasCurrentChapter = Boolean(work.currentChapter?.trim() || world.currentChapter?.trim())
+  const currentChapterTitle = work.currentChapter?.trim() || world.currentChapter?.trim() || ""
+  const currentChapterDesc = work.startScenario?.trim() || world.coreSetting?.trim() || ""
+  const currentChapterGoal = work.currentGoal?.trim() || world.currentGoal?.trim() || ""
 
   const cast: CastMember[] = [
     ...characters.map((c) => ({
@@ -369,23 +370,27 @@ export function WorkLandingPage({
         )}
 
         {/* 현재 장면 */}
-        <div className="mb-6 rounded-2xl bg-gradient-to-br from-neutral-700 to-neutral-900 p-4">
-          <span className="mb-2 inline-block rounded-full bg-amber-400/90 px-2 py-0.5 text-[11px] font-medium text-neutral-900">
-            현재 장면
-          </span>
-          <p className="mb-1 text-[15px] font-medium text-white">
-            {currentChapterTitle}
-          </p>
-          <p className="mb-3 text-sm text-neutral-300">
-            {currentChapterDesc}
-          </p>
-          {currentChapterGoal && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs text-neutral-100">
-              <Target size={13} className="shrink-0 text-amber-300" />
-              {currentChapterGoal}
-            </div>
-          )}
-        </div>
+        {hasCurrentChapter && (
+          <div className="mb-6 rounded-2xl bg-gradient-to-br from-neutral-700 to-neutral-900 p-4">
+            <span className="mb-2 inline-block rounded-full bg-amber-400/90 px-2 py-0.5 text-[11px] font-medium text-neutral-900">
+              현재 장면
+            </span>
+            <p className="mb-1 text-[15px] font-medium text-white">
+              {currentChapterTitle}
+            </p>
+            {currentChapterDesc && (
+              <p className="mb-3 text-sm text-neutral-300">
+                {currentChapterDesc}
+              </p>
+            )}
+            {currentChapterGoal && (
+              <div className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-xs text-neutral-100">
+                <Target size={13} className="shrink-0 text-amber-300" />
+                {currentChapterGoal}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 시작 장면 */}
         <p className="mb-1 flex items-center gap-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-100">
