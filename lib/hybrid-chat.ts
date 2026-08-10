@@ -324,11 +324,11 @@ function buildFalImageRequestBody(
     : usesFluxDevSchema || usesFluxLoraSchema
       ? {
           num_inference_steps: 28,
-          guidance_scale: 4.5,
+          guidance_scale: 3.2,
         }
       : {
           num_inference_steps: 25,
-          guidance_scale: 3.5,
+          guidance_scale: 3.2,
         };
 
   const loraEntries =
@@ -336,14 +336,12 @@ function buildFalImageRequestBody(
 
   return {
     prompt,
+    negative_prompt: IMAGE_TEXT_NEGATIVE_PROMPT,
     image_size: "portrait_4_3",
     num_images: 1,
     ...tuning,
     ...loraEntries,
     enable_safety_checker: enableSafetyChecker,
-    ...(usesFastSdxlSchema
-      ? { negative_prompt: IMAGE_TEXT_NEGATIVE_PROMPT }
-      : {}),
     ...(usesFastSdxlSchema ? { format: "jpeg" } : { output_format: "jpeg" }),
   };
 }
@@ -576,7 +574,7 @@ export async function generateFalImageFromPrompt(
   const loraPath = env.FAL_LORA_PATH?.trim();
   const loraScale = Number(env.FAL_LORA_SCALE);
   const loras: FalLoraEntry[] = loraPath
-    ? [{ path: loraPath, scale: Number.isFinite(loraScale) ? loraScale : 1.0 }]
+    ? [{ path: loraPath, scale: Number.isFinite(loraScale) ? loraScale : 0.7 }]
     : [];
 
   const mainOptions: FalImageRequestOptions = {

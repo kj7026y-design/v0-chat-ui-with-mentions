@@ -76,6 +76,7 @@ import {
 } from "@/lib/chat-settings-storage";
 import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser";
 import {
+  CHAT_MODELS,
   DEFAULT_CHAT_MODEL_ID,
   getChatModelConfig,
   getChatModelId,
@@ -488,6 +489,8 @@ export default function ChatPage() {
   const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
   const [isHistoryPersistenceEnabled, setIsHistoryPersistenceEnabled] =
     useState(false);
+  const [isRestoredGenerationPending, setIsRestoredGenerationPending] =
+    useState(false);
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [hasOlderHistory, setHasOlderHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -509,9 +512,6 @@ export default function ChatPage() {
     activeSearchResultIndex >= 0
       ? searchResultIds[activeSearchResultIndex]
       : undefined;
-  const hasPendingGeneration = messages.some(
-    (message) => message.type === "ai" && message.status === "streaming",
-  );
   const characterName = chatMeta?.characterName ?? CHARACTER_NAME;
   const roomName = chatMeta ? getChatDisplayName(chatMeta) : characterName;
   const characterEmoji = chatMeta?.characterEmoji ?? CHARACTER_EMOJI;
@@ -866,6 +866,7 @@ export default function ChatPage() {
     setIsHistoryLoading(true);
     setIsLoadingOlderHistory(false);
     setIsHistoryPersistenceEnabled(false);
+    setIsRestoredGenerationPending(false);
     setHistoryCursor(null);
     setHasOlderHistory(false);
     isLoadingOlderHistoryRef.current = false;
@@ -900,6 +901,7 @@ export default function ChatPage() {
         const restoredPendingGeneration = page.messages.some(
           (message) => message.type === "ai" && message.status === "streaming",
         );
+        setIsRestoredGenerationPending(restoredPendingGeneration);
         setIsTyping(restoredPendingGeneration);
         if (restoredPendingGeneration) {
           setTypingLabel("답변을 생성하는 중...");
@@ -922,7 +924,7 @@ export default function ChatPage() {
   }, [characterName, chatId]);
 
   useEffect(() => {
-    if (isHistoryLoading || !hasPendingGeneration) return;
+    if (isHistoryLoading || !isRestoredGenerationPending) return;
     let cancelled = false;
     let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -947,6 +949,7 @@ export default function ChatPage() {
         setMessages(page.messages);
         setHistoryCursor(page.nextCursor);
         setHasOlderHistory(page.hasMore);
+        setIsRestoredGenerationPending(false);
         setIsTyping(false);
         setTypingLabel(undefined);
         setTypingVariant("text");
@@ -964,7 +967,12 @@ export default function ChatPage() {
       cancelled = true;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [characterName, chatId, hasPendingGeneration, isHistoryLoading]);
+  }, [
+    characterName,
+    chatId,
+    isHistoryLoading,
+    isRestoredGenerationPending,
+  ]);
 
   useEffect(() => {
     if (!isHistoryPersistenceEnabled || isHistoryLoading) return;
@@ -1258,14 +1266,35 @@ export default function ChatPage() {
   };
 
   const showModelCreditShortage = () => {
+    const lowestCostModel = CHAT_MODELS.reduce((lowest, model) =>
+      model.creditCostPerReply < lowest.creditCostPerReply ? model : lowest,
+    );
+    const canSwitchToLowerCostModel =
+      selectedModel.id !== lowestCostModel.id &&
+      credits >= lowestCostModel.creditCostPerReply;
+
     toast.error(
       `크레딧이 부족해 ${selectedModel.label} 모델을 사용할 수 없어요.`,
       {
-        description: "Gemini 2.5 Flash로 전환하거나 크레딧을 충전해 주세요.",
-        action: {
-          label: "Gemini 2.5 Flash로 전환",
-          onClick: () => handleModelChange("free"),
-        },
+        description: canSwitchToLowerCostModel
+          ? `${lowestCostModel.label} 모델로 전환하거나 크레딧을 충전해 주세요.`
+          : "크레딧을 충전해 주세요.",
+        action: canSwitchToLowerCostModel
+          ? {
+              label: `${lowestCostModel.label}로 전환`,
+              onClick: () => handleModelChange(lowestCostModel.id),
+            }
+          : {
+              label: "충전하기",
+              onClick: () => {
+                router.push(
+                  withReturnTo(
+                    "/credits",
+                    `/chat/${encodeURIComponent(chatId)}`,
+                  ),
+                );
+              },
+            },
       },
     );
   };
@@ -1332,24 +1361,9 @@ export default function ChatPage() {
       return;
     }
 
-    const replyCreditCost =
-      CREDIT_COSTS.message + selectedModel.creditCostPerReply;
+    const replyCreditCost = selectedModel.creditCostPerReply;
     if (credits < replyCreditCost) {
-      if (selectedModel.creditCostPerReply > 0) {
-        showModelCreditShortage();
-        return;
-      }
-      toast.error("크레딧이 부족해요.", {
-        description: "크레딧을 충전하면 계속 대화할 수 있어요.",
-        action: {
-          label: "충전하기",
-          onClick: () => {
-            router.push(
-              withReturnTo("/credits", `/chat/${encodeURIComponent(chatId)}`),
-            );
-          },
-        },
-      });
+      showModelCreditShortage();
       return;
     }
 
@@ -1554,9 +1568,7 @@ export default function ChatPage() {
         !spendCredit(
           replyCreditCost,
           "채팅 답변 생성",
-          selectedModel.creditCostPerReply > 0
-            ? `${selectedModel.label} 모델 답변`
-            : "기본 답변",
+          `${selectedModel.label} 모델 답변`,
         )
       ) {
         throw new Error("Insufficient reply credits");

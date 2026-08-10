@@ -30,7 +30,11 @@ test("adult fiction prompt uses a semantic style instruction instead of a vocabu
 
   assert.match(prompt, /친밀한 스킨십, 밀착, 감정적·신체적 고조 상황/)
   assert.match(prompt, /강렬한 구어체 대사/)
+  assert.match(prompt, /현재 장면의 핵심 흐름을 미세한 단계로 잘라 여러 턴 동안 끌지 않는다/u)
+  assert.match(prompt, /자연스러운 결과, 직후의 변화 또는 다음 상황으로 넘어간다/u)
   assert.doesNotMatch(prompt, /같은 직설적인 성적 표현을 사용할 수 있다/)
+  assert.doesNotMatch(prompt, /직전 장면 상태에서 정확히 한 단계만 전진한다/u)
+  assert.doesNotMatch(prompt, /사용자를 기다리는 긴장 구도를 만든다/u)
 })
 
 test("every RP model uses the common dialogue cadence and requests a longer speech after short turns", () => {
@@ -84,8 +88,45 @@ test("every RP model uses the common dialogue cadence and requests a longer spee
     assert.match(prompt, /최근 두 턴의 대사가 계속 짧았다/u)
     assert.match(prompt, /2~4문장, 약 60~140자의 긴 대사 블록을 하나 포함한다/u)
     assert.match(prompt, /하나의 이어진 발화를 대사 개수에 맞추려고 여러 개의 짧은 따옴표 블록으로 쪼개지 않는다/u)
+    assert.match(prompt, /현재 턴의 핵심 질문·행동·결정에는 구체적인 결과를 낸 뒤 끝낸다/u)
+    assert.match(prompt, /매 답변에 억지 훅을 붙이지 않는다/u)
+    assert.match(prompt, /먼저 진행 중인 질문·결정·행동을 답, 실행, 완료 또는 포기로 매듭지은 뒤/u)
     assert.doesNotMatch(prompt, /짧고 직접적인 대사와 행동으로 쓴다/u)
+    assert.doesNotMatch(prompt, /씬을 완전히 닫아버리지 않는다/u)
   }
+})
+
+test("an explicitly requested contract ending is allowed to reach a conclusion", () => {
+  const endingContext = compileRoleplayContext(
+    {
+      characterName: "강태현",
+      userName: "김여자",
+      background: "두 사람은 계약 관계다.",
+    },
+    [{ role: "user", content: "이 계약은 여기서 끝내자." }],
+    undefined,
+    { minChars: 100, maxChars: 600 },
+  )
+  const keepOpenContext = compileRoleplayContext(
+    {
+      characterName: "강태현",
+      userName: "김여자",
+      background: "두 사람은 계약 관계다.",
+    },
+    [{ role: "user", content: "이 계약 끝내지 마." }],
+    undefined,
+    { minChars: 100, maxChars: 600 },
+  )
+  const concludedResponse = '강태현은 계약서를 접어 내려놓았다.\n\n"그래. 계약은 여기서 끝이야."'
+
+  assert.equal(
+    validateRoleplayOutput(concludedResponse, endingContext, openaiRpProfile).contractClosureBias,
+    false,
+  )
+  assert.equal(
+    validateRoleplayOutput(concludedResponse, keepOpenContext, openaiRpProfile).contractClosureBias,
+    true,
+  )
 })
 
 test("OpenAI RP profiles allow a cross-provider fallback after a provider refusal", () => {

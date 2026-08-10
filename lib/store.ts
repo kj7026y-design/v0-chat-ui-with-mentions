@@ -8,6 +8,7 @@ import {
   saveStoredCredits,
   syncCreditActionToServer,
 } from "@/lib/credit-storage"
+import { MIN_REPLY_CREDIT_COST } from "@/lib/chat-models"
 
 export type Category = "회사" | "학교" | "판타지" | "고대 서양" | "고대 아시아"
 
@@ -99,9 +100,8 @@ export interface Branch {
   createdAt: Date
 }
 
-// 더미 크레딧 차감 규칙
 export const CREDIT_COSTS = {
-  message: 1,
+  message: MIN_REPLY_CREDIT_COST,
   branch: 3,
   image: 1,
 } as const

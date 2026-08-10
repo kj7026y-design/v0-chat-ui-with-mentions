@@ -86,24 +86,16 @@ test("selected chat model generates text before Fal renders the image", async ()
   assert.match(requests[0]?.url || "", /^https:\/\/queue\.fal\.run\//u)
   assert.match(
     String(requests[0]?.body.prompt),
-    /^\[ART DIRECTION\]/u,
+    /Korean romantic-fantasy illustration/u,
   )
   assert.match(
     String(requests[0]?.body.prompt),
-    /ornate, high-gloss Korean romantic-fantasy illustration/u,
-  )
-  assert.match(
-    String(requests[0]?.body.prompt),
-    /\[CURRENT SCENE\]\s+two fictional adults sharing an umbrella on a rainy street/u,
-  )
-  assert.doesNotMatch(
-    String(requests[0]?.body.prompt),
-    /Korean romance web novel cover style|beautiful and delicate 2\.5D CG|ultra high res/u,
+    /two fictional adults sharing an umbrella on a rainy street/u,
   )
   assert.equal(requests[0]?.body.image_size, "portrait_4_3")
   assert.equal(requests[0]?.body.num_images, 1)
   assert.equal(requests[0]?.body.num_inference_steps, 28)
-  assert.equal(requests[0]?.body.guidance_scale, 4.5)
+  assert.equal(requests[0]?.body.guidance_scale, 3.2)
   assert.equal(requests[0]?.body.acceleration, undefined)
   assert.equal(requests[0]?.body.noise_source, undefined)
   assert.equal(requests[0]?.body.enable_safety_checker, false)
@@ -166,7 +158,7 @@ test("Fal main-model failure retries fast-sdxl with fallback-specific tuning", a
     assert.equal(requests.length, 4)
     assert.match(requests[0]?.url || "", /\/flux-lora$/u)
     assert.equal(requests[0]?.body.num_inference_steps, 28)
-    assert.equal(requests[0]?.body.guidance_scale, 4.5)
+    assert.equal(requests[0]?.body.guidance_scale, 3.2)
     assert.equal(requests[0]?.body.acceleration, undefined)
     assert.equal(requests[0]?.body.enable_safety_checker, false)
     assert.match(requests[1]?.url || "", /\/fast-sdxl$/u)

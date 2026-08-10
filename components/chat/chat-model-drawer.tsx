@@ -87,7 +87,7 @@ export function ChatModelDrawer({
                   </div>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{model.description}</p>
                   <p className="mt-1 text-[11px] font-medium text-muted-foreground">
-                    답변당 추가 크레딧 {model.creditCostPerReply.toLocaleString()}
+                    답변당 {model.creditCostPerReply.toLocaleString()} 크레딧
                   </p>
                 </div>
                 {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
@@ -95,11 +95,9 @@ export function ChatModelDrawer({
             )
           })}
 
-          {CHAT_MODELS.find((model) => model.id === selectedModelId)?.creditCostPerReply ? (
-            <p className="px-1 pt-1 text-[11px] leading-relaxed text-muted-foreground">
-              유료 모델은 답변 생성 성공 시 추가 크레딧을 사용합니다.
-            </p>
-          ) : null}
+          <p className="px-1 pt-1 text-[11px] leading-relaxed text-muted-foreground">
+            답변 생성에 성공하면 선택한 모델의 크레딧이 사용됩니다.
+          </p>
         </div>
       </DrawerContent>
     </Drawer>

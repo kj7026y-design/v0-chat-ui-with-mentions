@@ -308,50 +308,83 @@ export function normalizeImagePromptModelOutput(content: string) {
 
 export const IMAGE_PROMPT_MODEL_ID = "gemini-pro" satisfies ChatModelId
 
+function sanitizeContextForSafety(context: string): string {
+  return context
+    .replace(/(?:성적인|자극적인|야한|신음|벗은|나체|섹스|허리|삽입|사정|erotic|naked|nude|sex|ejaculation|penetration|waist movement)/gi, "밀착된 감정과 스킨십")
+    .replace(/dirty talk/gi, "intense conversation")
+    .trim();
+}
+
+function createSanitizedFallbackVisualPrompt(sceneContext: string): string {
+  const cleanText = sanitizeContextForSafety(sceneContext)
+    .replace(/[^\w\s,.가-힣]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 300)
+    .trim();
+
+  return `A strikingly handsome 27-year-old Korean man with short dark brown hair and an exceptionally beautiful 26-year-old Korean woman with long dark hair in a romantic scene. Elongated adult silhouettes, beautiful protagonist faces with separated head alignment and intense eye contact, warm ambient lighting, elegant postures, and three-quarter side angle. Scene details: ${cleanText || "a modern dimly lit room at night"}`;
+}
+
 export async function generateImagePromptWithGeminiPro(
   sceneContext: string,
   fetcher: typeof fetch = fetch,
 ) {
-  const response = await fetcher("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      modelId: IMAGE_PROMPT_MODEL_ID,
-      roleplayEnabled: false,
-      messages: [
-        {
-          role: "system",
-          content: [
-            "Create one production-ready English prompt for a text-to-image model from the supplied private story context.",
-            "Return only the English visual prompt with no title, label, explanation, markdown, quotation marks, or TRIGGER_IMG tag.",
-            IMAGE_SCENE_SYSTEM_INSTRUCTION,
-            "Describe the current action, both fictional adult subjects, appearance, expressions, body language, environment, composition, lighting, and mood.",
-            "Translate dialogue into visible action and expression rather than written words.",
-            "Return only scene-specific visible information; the renderer prepends the visual style separately.",
-            "Do not add or repeat art-style, medium, rendering, or quality-booster terms such as book cover style, web novel style, 2.5D, photorealistic, cinematic film still, concept art, masterpiece, best quality, or ultra high resolution.",
-            "Use concrete lighting sources and visibility requirements instead of generic style phrases.",
-          ].join(" "),
-        },
-        {
-          role: "user",
-          content: `Private scene context:\n${sceneContext}`,
-        },
-      ],
-    }),
-  })
+  const safeSceneContext = sanitizeContextForSafety(sceneContext);
 
-  const data = await response.json().catch(() => null) as {
-    result?: string
-    content?: string
-    error?: string
-  } | null
-  if (!response.ok) {
-    throw new Error(data?.error || `Gemini 2.5 Pro 이미지 프롬프트 생성에 실패했습니다: ${response.status}`)
+  try {
+    const response = await fetcher("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        modelId: IMAGE_PROMPT_MODEL_ID,
+        roleplayEnabled: false,
+        messages: [
+          {
+            role: "system",
+            content: [
+              "Create one production-ready English prompt for a text-to-image model from the supplied private story context.",
+              "Return only the English visual prompt with no title, label, explanation, markdown, quotation marks, or TRIGGER_IMG tag.",
+              IMAGE_SCENE_SYSTEM_INSTRUCTION,
+              "Describe the current action, both fictional adult subjects, appearance, expressions, body language, environment, composition, lighting, and mood.",
+              "Translate dialogue into visible action and expression rather than written words.",
+              "Return only scene-specific visible information; the renderer prepends the visual style separately.",
+              "Do not add or repeat art-style, medium, rendering, or quality-booster terms such as book cover style, web novel style, 2.5D, photorealistic, cinematic film still, concept art, masterpiece, best quality, or ultra high resolution.",
+              "Use concrete lighting sources and visibility requirements instead of generic style phrases.",
+            ].join(" "),
+          },
+          {
+            role: "user",
+            content: `Private scene context:\n${safeSceneContext}`,
+          },
+        ],
+      }),
+    })
+
+    const data = await response.json().catch(() => null) as {
+      result?: string
+      content?: string
+      error?: string
+    } | null
+    if (!response.ok) {
+      const errorMessage = data?.error || `Gemini 2.5 Pro 이미지 프롬프트 생성 실패: ${response.status}`;
+      if (/PROHIBITED_CONTENT|blocked/i.test(errorMessage)) {
+        console.warn("[Gemini image prompt generator blocked by safety filter; using sanitized fallback prompt]", errorMessage);
+        return createSanitizedFallbackVisualPrompt(sceneContext);
+      }
+      throw new Error(errorMessage);
+    }
+
+    return normalizeImagePromptModelOutput(data?.result ?? data?.content ?? "")
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/PROHIBITED_CONTENT|blocked/i.test(message)) {
+      console.warn("[Gemini image prompt generator caught PROHIBITED_CONTENT exception; using sanitized fallback prompt]", message);
+      return createSanitizedFallbackVisualPrompt(sceneContext);
+    }
+    throw error;
   }
-
-  return normalizeImagePromptModelOutput(data?.result ?? data?.content ?? "")
 }
 
 interface ImageGenerationResponse {

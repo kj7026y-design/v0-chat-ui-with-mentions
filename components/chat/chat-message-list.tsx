@@ -335,12 +335,14 @@ function getSpeakerProfile(
   message: ChatMessage,
   characters: ChatMessageCharacterProfile[],
 ) {
-  return characters.find((character) => {
+  const matched = characters.find((character) => {
     if (message.speakerId && character.id === message.speakerId) return true;
     if (message.speakerName && character.name === message.speakerName)
       return true;
     return false;
   });
+  if (matched) return matched;
+  return characters[0];
 }
 
 function MessageAvatar({
@@ -1125,6 +1127,7 @@ function BubbleMessageBubble({
           extraMessages={extraMessages}
           regeneratingMessageId={regeneratingMessageId}
           typingLabel={typingLabel}
+          defaultSpeakerName={speakerProfile?.name}
           avatarUrl={speakerProfile?.avatarUrl}
           avatarFallback={speakerProfile?.emoji}
           latestEditableMessageId={latestEditableMessageId}
@@ -1407,6 +1410,7 @@ function AssistantSegmentedMessage({
   extraMessages,
   regeneratingMessageId,
   typingLabel,
+  defaultSpeakerName,
   avatarUrl,
   avatarFallback,
   mentionNames,
@@ -1433,6 +1437,7 @@ function AssistantSegmentedMessage({
   extraMessages: ChatMessage[];
   regeneratingMessageId?: string | null;
   typingLabel?: string;
+  defaultSpeakerName?: string;
   avatarUrl?: string;
   avatarFallback?: string;
   mentionNames: string[];
@@ -1458,7 +1463,8 @@ function AssistantSegmentedMessage({
     (segment): segment is Extract<MessageSegment, { type: "dialogue" }> =>
       segment.type === "dialogue",
   );
-  const speakerName = message.speakerName ?? firstDialogue?.speakerName;
+  const speakerName =
+    message.speakerName ?? firstDialogue?.speakerName ?? defaultSpeakerName ?? "AI";
   const avatarLabel = speakerName?.slice(0, 1) ?? "AI";
   const themeTextPalette = getChatThemeTextPalette(themeConfig.preview.bg);
 
