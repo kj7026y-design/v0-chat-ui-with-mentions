@@ -67,6 +67,7 @@ function makeContext({
   minChars = 100,
   maxChars = 800,
   regenerationAvoidContent = "",
+  redZoneEnabled = true,
 }: {
   messages?: Array<{ role: "user" | "assistant"; content: string }>
   background?: string
@@ -74,6 +75,7 @@ function makeContext({
   minChars?: number
   maxChars?: number
   regenerationAvoidContent?: string
+  redZoneEnabled?: boolean
 } = {}) {
   return compileRoleplayContext(
     {
@@ -89,6 +91,10 @@ function makeContext({
     undefined,
     { minChars, maxChars },
     regenerationAvoidContent,
+    "",
+    false,
+    "",
+    redZoneEnabled,
   )
 }
 
@@ -311,6 +317,10 @@ test("rule-based validators detect every locally deterministic failure", () => {
     overPhysical: {
       output: `${CLEAN_OUTPUT}\n\n강태현은 김여자를 품으로 끌어안았다.`,
       context: makeContext(),
+    },
+    redZoneViolation: {
+      output: `${CLEAN_OUTPUT}\n\n강태현은 노골적인 성행위를 요구했다.`,
+      context: makeContext({ redZoneEnabled: false }),
     },
     tooShort: {
       output: "짧다.",

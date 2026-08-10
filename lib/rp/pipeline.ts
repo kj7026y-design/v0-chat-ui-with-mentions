@@ -14,11 +14,13 @@ import {
   type ChatModelId,
 } from "@/lib/chat-models"
 import { buildModelBackground } from "@/lib/model-background"
+import { buildPinnedStateBlock } from "@/lib/context-window"
 import type { GenerationProviderOutcome, GenerationTimeoutStage } from "@/lib/generation-runs"
 import { areAssistantResponsesSubstantiallyDuplicate } from "@/lib/response-similarity"
 import { parseRoleplayInputParts } from "@/lib/rp-input-parser"
 import { getRoleplayModelProfile, type RoleplayModelProfile } from "@/lib/rp/model-profiles"
-import { buildAdultFictionInstruction } from "@/lib/rp/prompt/adult-fiction"
+import { containsExplicitAdultContent } from "@/lib/rp/content-rating"
+import { buildAdultFictionInstruction, buildStandardFictionInstruction } from "@/lib/rp/prompt/adult-fiction"
 import {
   buildCommonDialogueCadenceInstructions,
   COMMON_ROLEPLAY_DIALOGUE_COUNTS,
@@ -45,6 +47,7 @@ export interface ChatRequestBody {
   mode?: ChatModelMode
   modelId?: ChatModelId
   roleplayEnabled?: boolean
+  redZoneEnabled?: boolean
   responseMimeType?: "application/json"
   stream?: boolean
   roomId?: string
@@ -330,6 +333,7 @@ export interface CompiledRoleplayContext {
   regenerationAvoidContent: string
   previousAssistantContent: string
   mentionTargets: string[]
+  redZoneEnabled: boolean
 }
 
 let nextAllowedPollinationsAt = 0
@@ -1223,13 +1227,13 @@ function compileTurnPolicy(
   }
 }
 
-function buildToneRules(background = "", characterSetting = "") {
+function buildToneRules(background = "", characterSetting = "", redZoneEnabled = false) {
   const source = `${background}\n${characterSetting}`
   const rules = [
     "- 사용자 작품 설정은 톤과 관계성을 정한다. 하지만 매 턴의 실제 행동 허용 범위는 이번 턴 입력과 장면 상태가 결정한다.",
   ]
 
-  if (/성인|선정|노골|플러팅|유혹|로맨스|밀당/u.test(source)) {
+  if (redZoneEnabled && /성인|선정|노골|플러팅|유혹|로맨스|밀당/u.test(source)) {
     rules.push(
       "- 성인 로맨스 톤은 허용한다.",
       "- 긴장감은 현재 장면의 수위에 맞는 명확한 대사와 구체적인 행동으로 표현한다.",
@@ -1545,6 +1549,7 @@ export function compileRoleplayContext(
   previousAssistantContentOverride = "",
   autoAdvanceOverride = false,
   autoAdvanceDirectiveOverride = "",
+  redZoneEnabled = true,
 ): CompiledRoleplayContext {
   const characterName = promptContext.characterName || "캐릭터"
   const userName = promptContext.userName || "사용자"
@@ -1623,11 +1628,15 @@ export function compileRoleplayContext(
     recentSceneSources.flatMap(extractQuotedLines),
   )
   const recentSceneContinuity = buildRecentSceneContinuity(recentSceneSources)
-  const establishedSceneState = inferEstablishedSceneState(recentSceneSources.join("\n\n"))
+  const inferredSceneState = inferEstablishedSceneState(recentSceneSources.join("\n\n"))
+  const establishedSceneState = redZoneEnabled
+    ? inferredSceneState
+    : inferredSceneState.filter((state) => !/(?:성인|결합|의복|엉덩이|하체|다리\s*사이|침대)/u.test(state))
   const establishedPhysicalState = establishedSceneState.some((state) =>
     /몸|허리|엉덩이|얼굴|귀|가슴|하체|목덜미|쇄골|입술|입을\s*맞|무릎|다리\s*사이|의복|성인\s*접촉|침대|손목/u.test(state),
   )
-  const continuesExistingPhysicalContact = !latestInputEndsPhysicalContact(latestInput) && (
+  const continuesExistingPhysicalContact = !latestInputEndsPhysicalContact(latestInput) &&
+    (redZoneEnabled || !containsExplicitAdultContent(previousAssistantContent)) && (
     establishedPhysicalState ||
     /(?:밀착|끌어당|감싸\s*안|껴안|움켜쥐|입맞|키스|깨물|몸이\s*닿)/u.test(previousAssistantContent)
   )
@@ -1660,7 +1669,7 @@ export function compileRoleplayContext(
       serviceRequestBlocked,
       establishedSceneState,
     ),
-    toneRules: buildToneRules(promptContext.background, promptContext.characterSetting),
+    toneRules: buildToneRules(promptContext.background, promptContext.characterSetting, redZoneEnabled),
     bannedThisTurn,
     serviceRequestBlocked,
     autoAdvanceContinuityState: establishedSceneState,
@@ -1672,6 +1681,7 @@ export function compileRoleplayContext(
     regenerationAvoidContent: sanitizedRegenerationAvoidContent,
     previousAssistantContent,
     mentionTargets,
+    redZoneEnabled,
   }
 }
 
@@ -1731,6 +1741,7 @@ export function normalizeBody(body: ChatRequestBody | null) {
     autoAdvanceDirective:
       body?.autoAdvanceDirective?.trim().slice(0, MAX_REGENERATION_AVOID_CHARS) || "",
     autoAdvanceSource,
+    redZoneEnabled: body?.redZoneEnabled === true,
     answerLength: {
       minChars,
       maxChars,
@@ -2783,6 +2794,7 @@ export function validateRoleplayOutput(text: string, ctx: CompiledRoleplayContex
     tooFewDialogues: dialogueCount < minDialogues,
     tooManyDialogues: dialogueCount > maxDialogues,
     overPhysical: !ctx.turnPolicy.allowPhysicalContact && detectsPhysicalEscalation(text, ctx.userName),
+    redZoneViolation: !ctx.redZoneEnabled && containsExplicitAdultContent(text),
     internalTokenLeak: hasInternalTokenLeak(text),
     foreignScriptLeak: isLatinWordSaladOutput(text) || hasForeignScriptLeak(knownScriptReplaced),
     metaLeak: hasMetaLeak(text),
@@ -3045,6 +3057,7 @@ const HARD_FAIL_KEYS = [
   "controlsUser",
   "internalTokenLeak",
   "overPhysical",
+  "redZoneViolation",
   "foreignScriptLeak",
   "metaLeak",
   "providerRefusal",
@@ -3283,6 +3296,7 @@ export function buildRepairPrompt(errors: ReturnType<typeof validateRoleplayOutp
     futureClosure: "미래 전개나 장면 결말을 지문으로 확정함",
     internalTokenLeak: "내부 변수명 또는 영문 토큰이 한국어 문장에 섞임",
     overPhysical: "이번 턴에 허용되지 않은 신체 접촉으로 급진행함",
+    redZoneViolation: "레드존 비활성 작품에서 성인 대화 또는 노골적인 성적 묘사를 생성함",
     tooShort: `분량이 최소 ${ctx.turnPolicy.minChars}자에 미달함`,
     tooLong: "분량이 이번 턴 허용 범위를 초과함",
     foreignScriptLeak: "한국어 외 문자 또는 깨진 표현이 섞임",
@@ -3313,6 +3327,9 @@ ${errors.metaLeak ? `방금 답변은 시스템 메타 설명이 본문에 섞�
 ${errors.providerRefusal || errors.degenerateOutput ? `방금 결과는 역할극 답변이 아니라 사과·거절 또는 사용할 수 없는 초단문이라서 폐기됐다.
 그 문장을 수정하거나 이어 쓰지 말고, 시스템 프롬프트의 허용 범위와 직전 확정 장면 안에서 완전한 새 역할극 본문을 작성하라.
 사과, 거절, 정책 설명, 작성 불가 안내를 출력하지 마라.` : ""}
+${errors.redZoneViolation ? `방금 답변은 이 작품에서 허용되지 않는 성인 대화 또는 노골적인 성적 묘사를 포함해 폐기됐다.
+성적 농담·요구, 노출, 성적 신체 접촉과 성행위 묘사를 모두 제거하고, 캐릭터의 말투를 유지한 비성적인 행동과 대사로 장면을 다시 구성하라.
+레드존, 콘텐츠 등급, 필터나 정책을 본문에 언급하지 마라.` : ""}
 ${errors.objectiveUserStateAssertion || errors.userControlByNarration || errors.controlsUser ? `방금 답변은 ${ctx.userName}의 상태나 행동을 객관 사실처럼 확정해서 실패했다.
 ${ctx.characterName}이 그렇게 읽거나 의심하거나 오해하는 방식은 가능하지만, 서술자가 ${ctx.userName}의 감정/욕망/의도/행동을 확정하지 마라.` : ""}
 ${errors.objectiveUserStateAssertion || errors.userControlByNarration || errors.controlsUser ? `${ctx.characterName} 자신의 감정, 긴장, 욕망, 판단은 사용자 상태 확정이 아니므로 억지로 지우지 마라. 단, 지문은 ${ctx.characterName} 또는 그/그녀를 주어로 한 3인칭 소설체로 쓴다.
@@ -3370,6 +3387,7 @@ ${requiresFreshResponse ? `복사본을 문장만 고치는 방식으로 보존�
 "${ctx.userName}"의 새 행동/대사/감정을 쓰지 마라.
 지문은 항상 ${ctx.characterName} 또는 그/그녀 중심의 3인칭 소설체로 쓰고, 속마음도 3인칭 간접 서술로 표현한다.
 제공된 "${ctx.userName}"의 행동과 대사에만 반응하라.
+${ctx.redZoneEnabled ? "" : "이 작품은 레드존 비활성 상태다. 성인 대화, 노골적인 성적 농담·요구, 노출, 성적 신체 접촉과 성행위 묘사를 생성하지 마라."}
 작품 전체의 미래 결말을 작가 해설로 예고하거나 ${ctx.userName}의 다음 선택을 확정하지 마라. 다만 이번 턴에서 진행 중인 질문·결정·행동의 결과는 미루지 말고 자연스럽게 완료할 수 있다.
 ${buildCommonDialogueCadenceInstructions(ctx.preferExtendedDialogue)}
 대사는 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개를 사용하고, 가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞춰라.
@@ -3988,9 +4006,10 @@ export function generateDynamicPrompt({
   const maxDialogues = profile?.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues
   const compiledSection = buildCompiledRoleplaySection(compiledContext)
   const profileInstructions = buildProfilePromptInstructions(profile)
-  const adultFictionInstruction = adultFictionMode
+  const redZoneEnabled = compiledContext?.redZoneEnabled ?? adultFictionMode
+  const contentRatingInstruction = redZoneEnabled
     ? buildAdultFictionInstruction(characterName)
-    : ""
+    : buildStandardFictionInstruction(characterName)
   const guidedAutoAdvance =
     compiledContext?.turnPolicy.guidedAutoAdvance === true
   const dialogueCadenceInstructions = buildCommonDialogueCadenceInstructions(
@@ -4020,7 +4039,7 @@ ${guidedAutoAdvance
 
 ${SERVICE_INFO_PROTECTION_PROMPT}
 
-${adultFictionInstruction ? `${adultFictionInstruction}\n` : ""}
+${contentRatingInstruction}
 
 [출력 형식]
 - 한국어로만 쓴다.
@@ -4086,9 +4105,11 @@ ${compiledContext?.turnPolicy.guidedAutoAdvance ? `- 이번 요청은 사용자�
 - 최신 사용자 입력의 명시적 행동과 대사가 가장 우선한다.
 - 현재 장면의 확정 상태, 캐릭터 설정, 사용자 설정, 세계관 설정에 적힌 사실은 정식 설정으로 유지한다.
 - 일반적인 문체 규칙 때문에 캐릭터의 고유한 말투, 성격, 직업상 판단, 세계관의 자연스러운 관습을 지우지 않는다.
-- 캐릭터 설정의 "적극적", "먼저 유혹", "주도적", "직설적", "노골적인 농담"은 선택 가능한 분위기가 아니라 반드시 반영할 행동·말투 규칙이다.
+- 캐릭터 설정의 "적극적", "먼저 유혹", "주도적", "직설적"은 선택 가능한 분위기가 아니라 반드시 반영할 행동·말투 규칙이다. ${redZoneEnabled ? "노골적인 성인 농담도 현재 장면의 맥락에 맞게 반영할 수 있다." : "성인 농담 설정은 비성적인 직설화법과 대담한 태도로만 변환한다."}
 - 적극적인 캐릭터를 근거 없이 가만히 기다리게 하거나, 상대가 먼저 말하게 만들기 위해 일부러 반응을 보류하는 수동적 인물로 바꾸지 않는다.
-- 사용자가 이미 합의된 성인 접촉을 구체적으로 시작했다면 플러팅 이전 단계, 거리 확인, 일반적인 조건 제시로 되돌아가지 말고 현재 장면의 강도에 맞춰 반응한다.
+${redZoneEnabled
+    ? "- 사용자가 이미 합의된 성인 접촉을 구체적으로 시작했다면 플러팅 이전 단계, 거리 확인, 일반적인 조건 제시로 되돌아가지 말고 현재 장면의 강도에 맞춰 반응한다."
+    : "- 작품 설정이나 이전 대화에 성인 장면이 있어도 이를 재현하거나 이어가지 않고, 비성적인 관계 전개와 행동으로 전환한다."}
 - 캐릭터는 대사에서 자신감 있게 추측하거나 놀리거나 단정적으로 말할 수 있다. 이것은 서술자의 객관적 사실 확정이 아니다.
 - 장면에 자연스럽고 설정과 충돌하지 않는 가벼운 관찰이나 일상적 세부는 대사와 캐릭터 관찰로 보완할 수 있다.
 - 설정과 대화에 근거가 없는 범죄, 위해 의도, 고정된 취향, 비밀 지식, 과거 약속처럼 장면을 뒤집는 중대한 사실은 새로 확정하지 않는다.
@@ -4601,9 +4622,8 @@ async function callGeminiRoleplay(
     {
       role: "user" as const,
       content: `방금 Gemini 응답이 비었거나 safety finish로 중단됐다.
-허용 가능한 성인 창작 RP 범위 안에서만 작성하라.
-미성년자 성적 내용, 비동의/강압 미화, 착취/불법 성적 내용, 실존 인물 성적화, 자해/위험행위 조장은 쓰지 않는다.
-합의된 성인 장면은 캐릭터 설정과 현재 수위를 유지하고, 최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 ${profile.targetChars.min}~${profile.targetChars.max}자로 다시 작성하라.
+시스템 프롬프트에 지정된 작품 콘텐츠 등급을 그대로 지켜라.
+최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 ${profile.targetChars.min}~${profile.targetChars.max}자로 다시 작성하라.
 출력 한도에 닿기 전에 마지막 행동과 대사를 완결하고 반드시 온전한 문장으로 끝내라.`,
     },
   ]
@@ -4835,6 +4855,7 @@ async function handleRoleplayChatFromNormalized(
     normalizedBody.previousAssistantContent,
     normalizedBody.autoAdvance,
     normalizedBody.autoAdvanceDirective,
+    normalizedBody.redZoneEnabled,
   )
   if (process.env.NODE_ENV !== "production") {
     console.debug("[RP input resolution]", {
@@ -4869,7 +4890,7 @@ async function handleRoleplayChatFromNormalized(
       : undefined,
     currentScene: currentSceneForPrompt,
   })
-  const systemPromptText = generateDynamicPrompt({
+  const rawSystemPromptText = generateDynamicPrompt({
     characterName,
     userName,
     modelBackground,
@@ -4878,8 +4899,13 @@ async function handleRoleplayChatFromNormalized(
     currentScene: currentSceneForPrompt,
     compiledContext,
     profile,
-    adultFictionMode: model.provider === "openai" || model.id === "gemini-pro" || model.id === "gemini-3-flash-rp" || model.id === "cohere/command-r-plus-08-2024",
+    adultFictionMode: normalizedBody.redZoneEnabled,
   })
+  // 상태 메타데이터 고정(2번 기법): sceneState가 있으면 시스템 프롬프트 최하단에 주입
+  const pinnedStateBlock = buildPinnedStateBlock(promptContext.sceneState)
+  const systemPromptText = pinnedStateBlock
+    ? `${rawSystemPromptText}\n\n${pinnedStateBlock}`
+    : rawSystemPromptText
   const finalMessages = buildRoleplayMessages(
     messages,
     systemPromptText,
@@ -5453,6 +5479,7 @@ async function handleOpenRouterNsfwChat(
     autoAdvance: false,
     autoAdvanceDirective: "",
     autoAdvanceSource: "none",
+    redZoneEnabled: false,
     answerLength: {
       minChars: DEFAULT_MIN_ANSWER_CHARS,
       maxChars: DEFAULT_MAX_ANSWER_CHARS,
@@ -5835,6 +5862,7 @@ async function streamGeminiRoleplay({
     normalizedBody.previousAssistantContent,
     normalizedBody.autoAdvance,
     normalizedBody.autoAdvanceDirective,
+    normalizedBody.redZoneEnabled,
   )
   if (process.env.NODE_ENV !== "production") {
     console.debug("[RP input resolution]", {
@@ -5878,7 +5906,7 @@ async function streamGeminiRoleplay({
     currentScene: currentSceneForPrompt,
     compiledContext,
     profile,
-    adultFictionMode: model.id === "gemini-pro" || model.id === "gemini-3-flash-rp" || model.id === "cohere/command-r-plus-08-2024",
+    adultFictionMode: normalizedBody.redZoneEnabled,
   })
   const finalMessages = buildRoleplayMessages(messages, systemPromptText, userName, compiledContext)
   const { systemPrompt, contents } = splitGeminiRoleplayMessages(finalMessages)
@@ -6513,9 +6541,10 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
         : hasEmptyVisibleOutput
           ? "방금 Gemini 모델은 API 오류 없이 STOP으로 종료됐지만 표시 가능한 본문을 생성하지 않았다. 사용자 입력은 비어 있지 않으며 자동 진행 지시가 전달된 상태다."
           : "방금 Gemini 응답이 후보 없이 종료됐다."}
-허용 가능한 성인 창작 RP 범위 안에서만 작성하라.
-미성년자 성적 내용, 비동의/강압 미화, 착취/불법 성적 내용, 실존 인물 성적화, 자해/위험행위 조장은 쓰지 않는다.
-합의된 성인 장면은 캐릭터 설정과 현재 수위를 유지하고, 최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 다시 작성하라.
+${compiledContext.redZoneEnabled
+  ? "레드존 활성 작품의 허용 가능한 성인 창작 범위와 현재 장면 수위를 유지하라."
+  : "레드존 비활성 작품이다. 성인 대화와 노골적인 성적 묘사는 생성하지 마라."}
+최신 사용자 행동에 대한 구체적인 반응과 캐릭터다운 대사를 중심으로 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자로 다시 작성하라.
 완결된 대사는 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개를 사용하고, 가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개로 맞춰라.
 출력 한도에 닿기 전에 마지막 행동과 대사를 완결하고 반드시 온전한 문장으로 끝내라.
 
@@ -6894,7 +6923,9 @@ ${savedContent}`
           role: "user" as const,
           content: `이전 모델 응답은 최종 출력 검증을 통과하지 못했다. 이전 초안을 복사하지 말고 같은 최신 입력에 새로 답하라.
 캐릭터 설정의 성격, 적극성, 주도성, 말투, 농담 방식을 반드시 반영하라.
-이미 합의된 성인 장면이 진행 중이면 현재 수위와 접촉을 유지하고 일반적인 플러팅이나 거리 확인으로 후퇴하지 마라.
+${compiledContext.redZoneEnabled
+  ? "이미 합의된 성인 장면이 진행 중이면 현재 수위와 접촉을 유지하고 일반적인 플러팅이나 거리 확인으로 후퇴하지 마라."
+  : "성인 대화나 노골적인 성적 묘사는 생성하지 말고 캐릭터다운 비성적 전개로 이어가라."}
 ${userName}의 새 행동, 감정, 대사, 반응은 만들지 말고 ${characterName}의 반응만 완성하라.
 최종 본문은 반드시 ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자, 완결된 대사 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues}~${COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues}개(가능하면 ${COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues}개)로 작성하라.`,
         },

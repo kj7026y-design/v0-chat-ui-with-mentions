@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { StoryWorkBundle } from "@/lib/story-work-bundle"
+import { normalizeKoreaIsoTimestamp } from "@/lib/korea-time"
 import { getNeonSql } from "@/lib/server/neon-database"
 import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
 
@@ -18,6 +19,25 @@ export interface StoredStoryWorkRecord {
 }
 
 let schemaReady: Promise<void> | null = null
+
+function normalizeBundleTimestamps(bundle: StoryWorkBundle): StoryWorkBundle {
+  const normalizeCreatedAt = <T extends { createdAt: string }>(item: T): T => ({
+    ...item,
+    createdAt: normalizeKoreaIsoTimestamp(item.createdAt) ?? item.createdAt,
+  })
+
+  return {
+    ...bundle,
+    work: {
+      ...normalizeCreatedAt(bundle.work),
+      updatedAt: normalizeKoreaIsoTimestamp(bundle.work.updatedAt) ?? bundle.work.updatedAt,
+      statusBarUpdatedAt: normalizeKoreaIsoTimestamp(bundle.work.statusBarUpdatedAt),
+    },
+    characters: bundle.characters.map(normalizeCreatedAt),
+    world: normalizeCreatedAt(bundle.world),
+    persona: bundle.persona ? normalizeCreatedAt(bundle.persona) : undefined,
+  }
+}
 
 export async function ensureStoryWorkSchema() {
   if (schemaReady) return schemaReady
@@ -53,7 +73,8 @@ export async function ensureStoryWorkSchema() {
 }
 
 function parseBundle(value: StoryWorkRow["bundle_data"]): StoryWorkBundle {
-  return typeof value === "string" ? JSON.parse(value) as StoryWorkBundle : value
+  const bundle = typeof value === "string" ? JSON.parse(value) as StoryWorkBundle : value
+  return normalizeBundleTimestamps(bundle)
 }
 
 function parseRecord(row: StoryWorkRow): StoredStoryWorkRecord {
@@ -92,12 +113,13 @@ export async function getStoredStoryWork(workId: string) {
 export async function createStoredStoryWork(accountId: string, bundle: StoryWorkBundle) {
   await ensureStoryWorkSchema()
   const sql = getNeonSql()
+  const normalizedBundle = normalizeBundleTimestamps(bundle)
 
   try {
     await sql.query(
       `INSERT INTO storychat_works (work_id, account_id, bundle_data, is_public)
        VALUES ($1, $2, $3::jsonb, $4)`,
-      [bundle.work.id, accountId, JSON.stringify(bundle), bundle.work.isPublic !== false],
+      [normalizedBundle.work.id, accountId, JSON.stringify(normalizedBundle), normalizedBundle.work.isPublic !== false],
     )
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && error.code === "23505") {
@@ -110,12 +132,13 @@ export async function createStoredStoryWork(accountId: string, bundle: StoryWork
 export async function updateStoredStoryWork(bundle: StoryWorkBundle) {
   await ensureStoryWorkSchema()
   const sql = getNeonSql()
+  const normalizedBundle = normalizeBundleTimestamps(bundle)
   const rows = await sql.query(
     `UPDATE storychat_works
      SET bundle_data = $2::jsonb, is_public = $3, updated_at = NOW()
      WHERE work_id = $1
      RETURNING work_id`,
-    [bundle.work.id, JSON.stringify(bundle), bundle.work.isPublic !== false],
+    [normalizedBundle.work.id, JSON.stringify(normalizedBundle), normalizedBundle.work.isPublic !== false],
   ) as unknown as Array<{ work_id: string }>
   return rows.length > 0
 }

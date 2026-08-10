@@ -2221,6 +2221,7 @@ export default function ChatPage() {
         buildImageCommandContext(rewriteHistory),
         selectedModelId,
         {
+          roomId: chatId,
           bypassRoleplayRules: readingSettings.testBypassRoleplayRules,
           debugRawRoleplayStream: readingSettings.testRawRoleplayStream,
           onStreamEvent: handleRewriteStreamEvent,

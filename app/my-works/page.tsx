@@ -977,6 +977,7 @@ function WorkDetail({ work, library }: { work: StoryWork; library: StoryChatLibr
       <DetailRow label="캐릭터" value={character?.name ?? "없음"} />
       <DetailRow label="세계관" value={world?.name ?? "없음"} />
       <DetailRow label="자아" value={persona?.name ?? "없음"} />
+      <DetailRow label="레드존" value={work.redZoneEnabled ? "활성" : "비활성"} />
       <DetailRow label="첫 시작 설정" value={work.startScenario} />
       <DetailRow label="생성일" value={work.createdAt} />
       <DetailRow label="수정일" value={work.updatedAt} />

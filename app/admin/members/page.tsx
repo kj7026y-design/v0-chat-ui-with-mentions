@@ -285,22 +285,22 @@ export default function MemberAdminPage() {
                 variant="outline"
                 size="sm"
                 disabled={selectedIds.size === 0 || isMutating}
-                onClick={() => runSelectedAction({ action: "set_unsafe", enabled: true }, "Unsafe 권한을 허용했습니다.")}
+                onClick={() => runSelectedAction({ action: "set_unsafe", enabled: true }, "레드존 권한을 허용했습니다.")}
                 className="gap-1.5"
               >
                 <ShieldCheck className="h-4 w-4" />
-                Unsafe 허용
+                레드존 허용
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 disabled={selectedIds.size === 0 || isMutating}
-                onClick={() => runSelectedAction({ action: "set_unsafe", enabled: false }, "Unsafe 권한을 해제했습니다.")}
+                onClick={() => runSelectedAction({ action: "set_unsafe", enabled: false }, "레드존 권한을 해제했습니다.")}
                 className="gap-1.5"
               >
                 <ShieldOff className="h-4 w-4" />
-                Unsafe 해제
+                레드존 해제
               </Button>
             </div>
           </div>
@@ -412,7 +412,7 @@ export default function MemberAdminPage() {
                   <th className="px-3 py-3 font-medium">회원 등급</th>
                   <th className="px-3 py-3 text-right font-medium">크레딧</th>
                   <th className="px-3 py-3 font-medium">접근</th>
-                  <th className="px-3 py-3 font-medium">Unsafe</th>
+                  <th className="px-3 py-3 font-medium">레드존</th>
                   <th className="px-3 py-3 font-medium">권한</th>
                   <th className="w-14 px-3 py-3 relative"><span className="sr-only">수정</span></th>
                 </tr>

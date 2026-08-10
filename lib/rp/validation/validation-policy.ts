@@ -6,6 +6,7 @@ export const DEFAULT_VALIDATION_SEVERITY: Record<ValidationFailureKey, Validatio
   tooManyDialogues: "repairable",
   internalTokenLeak: "hard",
   overPhysical: "hard",
+  redZoneViolation: "hard",
   foreignScriptLeak: "hard",
   metaLeak: "hard",
   providerRefusal: "hard",

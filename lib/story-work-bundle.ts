@@ -1,9 +1,10 @@
-import type {
-  StoryCharacter,
-  StoryChatLibrary,
-  StoryPersona,
-  StoryWork,
-  StoryWorld,
+import {
+  isStoryWorkRedZoneEnabled,
+  type StoryCharacter,
+  type StoryChatLibrary,
+  type StoryPersona,
+  type StoryWork,
+  type StoryWorld,
 } from "@/lib/storychat-storage"
 
 export interface StoryWorkBundle {
@@ -53,6 +54,12 @@ export function mergeStoryWorkBundles(
       library.personas,
       bundles.flatMap((bundle) => bundle.persona ? [bundle.persona] : []),
     ),
-    works: mergeById(library.works, bundles.map((bundle) => bundle.work)),
+    works: mergeById(
+      library.works,
+      bundles.map((bundle) => ({
+        ...bundle.work,
+        redZoneEnabled: isStoryWorkRedZoneEnabled(bundle.work),
+      })),
+    ),
   }
 }

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getChatModelConfig } from "@/lib/chat-models"
 import { getAdminSession } from "@/lib/server/admin-auth"
 import { upsertChatMessages, type StoredChatMessage } from "@/lib/server/chat-message-store"
+import { getStoredStoryWork } from "@/lib/server/story-work-store"
+import { isStoryWorkRedZoneEnabled } from "@/lib/storychat-storage"
 import {
   HybridChatError,
   hasHybridChatRequestShape,
@@ -19,6 +21,14 @@ import {
 
 export const maxDuration = 180
 
+async function resolveWorkRedZoneEnabled(workId: string | undefined) {
+  const normalizedWorkId = workId?.trim()
+  if (!normalizedWorkId) return false
+
+  const storedWork = await getStoredStoryWork(normalizedWorkId).catch(() => null)
+  return isStoryWorkRedZoneEnabled(storedWork?.bundle.work ?? { id: normalizedWorkId })
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.json().catch(() => null) as unknown
 
@@ -32,7 +42,12 @@ export async function POST(request: Request) {
     }
   }
 
-  const body = rawBody as ChatRequestBody | null
+  const requestedBody = rawBody as ChatRequestBody | null
+  const roleplayEnabled = isRoleplayRequest(requestedBody)
+  const redZoneEnabled = roleplayEnabled
+    ? await resolveWorkRedZoneEnabled(requestedBody?.roomId)
+    : false
+  const body = requestedBody ? { ...requestedBody, redZoneEnabled } : null
   const normalizedBody = normalizeBody(body)
   const { modelId, messages, fallbackPrompt } = normalizedBody
 
@@ -41,8 +56,6 @@ export async function POST(request: Request) {
   }
 
   const model = getChatModelConfig(modelId)
-  const roleplayEnabled = isRoleplayRequest(body)
-
   try {
     if (body?.stream) {
       const session = await getAdminSession().catch(() => null)

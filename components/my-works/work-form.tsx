@@ -11,6 +11,7 @@ import {
   PenLine,
   Plus,
   Save,
+  ShieldAlert,
   User,
   Sparkles,
 } from "lucide-react"
@@ -22,6 +23,7 @@ import {
 } from "@/lib/storychat-storage"
 import { ImageUploadField } from "@/components/create/image-upload-field"
 import { GenreSelectWithCustomInput } from "@/components/create/genre-select-with-custom-input"
+import { Switch } from "@/components/ui/switch"
 
 export type WorkFormMode = "simple" | "advanced"
 
@@ -44,6 +46,7 @@ export interface WorkFormValues {
   worldDate: string
   statusBarEnabled: boolean
   statusBarText: string
+  redZoneEnabled: boolean
   introScenarios: IntroScenario[]
 }
 
@@ -249,6 +252,31 @@ export function WorkForm({
             onChange={(e) => setField("tagline", e.target.value)}
             placeholder="예: 천년의 잠에서 깨어난 왕국의 마지막 이야기"
             className="w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-sm text-neutral-900 outline-none focus:border-blue-500 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
+          />
+        </div>
+      </Section>
+
+      <Section
+        id="redZone"
+        icon={ShieldAlert}
+        title="레드존"
+        badge={values.redZoneEnabled ? "활성" : "비활성"}
+        openId={openId}
+        setOpenId={setOpenId}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+              성인 대화 허용
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+              활성화한 작품에서만 성인 대화를 생성합니다.
+            </p>
+          </div>
+          <Switch
+            checked={values.redZoneEnabled}
+            onCheckedChange={(checked) => setField("redZoneEnabled", checked)}
+            aria-label="레드존 활성화"
           />
         </div>
       </Section>

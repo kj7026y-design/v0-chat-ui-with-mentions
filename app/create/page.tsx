@@ -229,6 +229,7 @@ interface WorkDraft {
   introScenarios: IntroScenario[]
   statusBarEnabled: boolean
   statusBarText: string
+  redZoneEnabled: boolean
   savedAt: string
 }
 
@@ -261,6 +262,7 @@ const emptyWorkDraft = (): WorkDraft => ({
   introScenarios: [],
   statusBarEnabled: false,
   statusBarText: "",
+  redZoneEnabled: false,
   savedAt: "",
 })
 
@@ -335,6 +337,7 @@ export default function CreatePage() {
             coverImageUrl: found.coverImageUrl || "",
             statusBarEnabled: Boolean(found.statusBarEnabled),
             statusBarText: found.statusBarText || "",
+            redZoneEnabled: Boolean(found.redZoneEnabled),
           })
         }
       }
@@ -528,6 +531,7 @@ export default function CreatePage() {
       statusBarEnabled: workDraft.statusBarEnabled,
       statusBarText: workDraft.statusBarText,
       statusBarUpdatedAt: workDraft.statusBarEnabled ? new Date().toISOString() : undefined,
+      redZoneEnabled: workDraft.redZoneEnabled,
       createdAt: now,
       updatedAt: "오늘",
     }
@@ -621,6 +625,7 @@ export default function CreatePage() {
       coverImageUrl: world.coverImageUrl,
       statusBarEnabled: false,
       statusBarText: "",
+      redZoneEnabled: false,
       createdAt: now,
       updatedAt: "오늘",
     }
@@ -739,6 +744,7 @@ export default function CreatePage() {
       worldDate: workDraft.worldDate,
       statusBarEnabled: workDraft.statusBarEnabled,
       statusBarText: workDraft.statusBarText,
+      redZoneEnabled: workDraft.redZoneEnabled,
       introScenarios: workDraft.introScenarios,
     }
 
@@ -779,6 +785,7 @@ export default function CreatePage() {
               coverImageUrl: values.coverImageUrl || world.coverImageUrl,
               statusBarEnabled: values.statusBarEnabled,
               statusBarText: values.statusBarText,
+              redZoneEnabled: values.redZoneEnabled,
               createdAt: now,
               updatedAt: "오늘",
             }
@@ -1467,6 +1474,14 @@ function ReviewStep({
               text={draft.statusBarText}
               onEnabledChange={(statusBarEnabled) => update("statusBarEnabled", statusBarEnabled)}
               onTextChange={(statusBarText) => update("statusBarText", statusBarText)}
+            />
+          </AdvancedCreateSection>
+
+          <AdvancedCreateSection title="레드존">
+            <ToggleRow
+              label="성인 대화 허용"
+              checked={draft.redZoneEnabled}
+              onCheckedChange={(redZoneEnabled) => update("redZoneEnabled", redZoneEnabled)}
             />
           </AdvancedCreateSection>
 

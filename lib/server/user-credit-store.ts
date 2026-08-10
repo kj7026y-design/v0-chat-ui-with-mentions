@@ -1,5 +1,6 @@
 import "server-only"
 
+import { toKoreaIsoString } from "@/lib/korea-time"
 import { getNeonSql } from "@/lib/server/neon-database"
 import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
 
@@ -87,7 +88,7 @@ export async function getUserCreditData(accountId: string): Promise<UserCreditDa
     title: row.title,
     amount: Number(row.amount),
     description: row.description ?? undefined,
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString(),
+    createdAt: toKoreaIsoString(row.created_at),
   }))
 
   return { credits, history }

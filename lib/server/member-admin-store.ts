@@ -7,6 +7,7 @@ import {
   type ManagedWriterTier,
   type MemberPermissionKey,
 } from "@/lib/member-admin-types"
+import { toKoreaIsoString } from "@/lib/korea-time"
 import { getNeonSql } from "@/lib/server/neon-database"
 import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
 
@@ -50,7 +51,7 @@ function toDateOnly(value: string | Date) {
 }
 
 function toIsoString(value: string | Date) {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString()
+  return toKoreaIsoString(value)
 }
 
 function mapMember(row: ManagedMemberRow): ManagedMember {

@@ -1,5 +1,6 @@
 import "server-only"
 
+import { toKoreaIsoString } from "@/lib/korea-time"
 import { getNeonSql } from "@/lib/server/neon-database"
 import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
 
@@ -91,7 +92,7 @@ function parseRow(row: GeneratedMediaRow, accountId: string): StoredGeneratedMed
     userId: accountId,
     messageId: row.message_id || undefined,
     title: row.title || undefined,
-    createdAt: new Date(row.created_at).toISOString(),
+    createdAt: toKoreaIsoString(row.created_at),
     isPublic: row.is_public,
     source: row.source,
   }
@@ -137,7 +138,7 @@ export async function upsertGeneratedMedia(accountId: string, items: StoredGener
     [
       accountId, item.id, item.imageUrl, item.prompt, item.provider || null,
       item.workId || null, item.chatId || null, item.characterId || null,
-      item.messageId || null, item.title || null, item.createdAt,
+      item.messageId || null, item.title || null, toKoreaIsoString(item.createdAt),
       item.isPublic === true, item.source || "generated",
     ],
   )))

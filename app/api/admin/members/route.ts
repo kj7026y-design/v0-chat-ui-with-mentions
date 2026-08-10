@@ -151,7 +151,7 @@ export async function PATCH(request: Request) {
       await setMemberAccess({ actorAccountId: auth.session.accountId, memberIds, allowed: body.allowed })
     } else if (body.action === "set_unsafe") {
       if (typeof body.enabled !== "boolean") {
-        return NextResponse.json({ error: "unsafe 허용 여부가 필요합니다." }, { status: 400 })
+        return NextResponse.json({ error: "레드존 허용 여부가 필요합니다." }, { status: 400 })
       }
       await setMemberUnsafe({ actorAccountId: auth.session.accountId, memberIds, enabled: body.enabled })
     } else if (body.action === "adjust_credit") {

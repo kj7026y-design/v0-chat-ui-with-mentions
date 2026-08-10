@@ -1,5 +1,11 @@
 import type { ChatMessage } from "@/lib/chat-types"
 import {
+  optimizeConversationHistory,
+  buildInjectorReminder,
+  buildPinnedStateBlock,
+  type SceneStateSnapshot,
+} from "@/lib/context-window"
+import {
   DEFAULT_CHAT_MODEL_ID,
   DEFAULT_MAX_ANSWER_CHARS,
   DEFAULT_MIN_ANSWER_CHARS,
@@ -118,6 +124,7 @@ export type GenerateAssistantReplyOptions = {
   debugRawRoleplayStream?: boolean
   answerLength?: AssistantReplyLengthBudget
   onStreamEvent?: (event: ChatStreamEvent) => void
+  sceneState?: SceneStateSnapshot
 }
 
 interface DynamicPromptContext {
@@ -790,33 +797,67 @@ function buildDynamicPromptContext(
   }
 }
 
+// 롤링 요약 기법에서 사용하는 최근 원문 유지 턴 수
+const CONTEXT_RECENT_TURN_LIMIT = 10
+
 function buildAssistantMessages(
   history: ChatMessage[],
   userContent: string,
   introContext?: ChatIntroContext | null,
   context?: AssistantReplyContext,
   modelId: ChatModelId = DEFAULT_CHAT_MODEL_ID,
+  sceneState?: SceneStateSnapshot,
 ) {
-  const recentHistory = history.slice(-12)
+  // 1. 롤링 요약: 전체 히스토리를 원문(최근 N개) + 압축 요약(오래된 것)으로 분리
+  const conversationHistory = history.flatMap((message) => {
+    if (!message.content.trim() && message.imageUrl) return []
+    if (message.type !== "user" && message.type !== "ai") return []
+    return [{
+      role: message.type === "user" ? "user" as const : "assistant" as const,
+      content: formatMessageForAIContext(message),
+    }]
+  })
+
+  const { summaryText, recentMessages } = optimizeConversationHistory(
+    conversationHistory,
+    CONTEXT_RECENT_TURN_LIMIT,
+  )
+
+  // 2. 상태 고정 블록을 시스템 프롬프트 최하단에 추가
+  const baseSystemPrompt = buildAssistantSystemPrompt(context, modelId, introContext)
+  const pinnedStateBlock = buildPinnedStateBlock(sceneState)
+  const systemPromptText = pinnedStateBlock
+    ? `${baseSystemPrompt}\n\n${pinnedStateBlock}`
+    : baseSystemPrompt
+
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: buildAssistantSystemPrompt(context, modelId, introContext) },
+    { role: "system", content: systemPromptText },
   ]
 
-  const hasAssistantReply = recentHistory.some((message) => message.type === "ai")
+  // 롤링 요약이 있으면 시스템 메시지로 삽입
+  if (summaryText) {
+    messages.push({ role: "system", content: summaryText })
+  }
+
+  const hasAssistantReply = recentMessages.some((message) => message.role === "assistant")
   const introText = hasAssistantReply ? "" : formatIntroForAIContext(introContext)
   if (introText) {
     messages.push({ role: "system", content: introText })
   }
 
-  recentHistory.forEach((message) => {
-    if (!message.content.trim() && message.imageUrl) return
-    if (message.type !== "user" && message.type !== "ai") return
-    messages.push({
-      role: message.type === "user" ? "user" as const : "assistant" as const,
-      content: formatMessageForAIContext(message),
-    })
+  // 최신 N개 원문 메시지 추가
+  recentMessages.forEach((message) => {
+    messages.push(message)
   })
 
+  // 3. 프롬프트 주사기: 마지막 유저 메시지 직전에 리마인드 삽입
+  const characterName = context?.character?.name || context?.status?.characterName
+  if (characterName || sceneState) {
+    const reminder = buildInjectorReminder(characterName, sceneState)
+    messages.push({ role: "system", content: reminder })
+  }
+
+  const recentHistory = history.slice(-CONTEXT_RECENT_TURN_LIMIT)
   if (shouldAppendLatestUserInput(recentHistory, userContent)) {
     messages.push({ role: "user", content: userContent })
   }
@@ -1079,7 +1120,7 @@ async function generatePollinationsReply(
   const model = getChatModelConfig(modelId)
   const modelMaxAnswerChars = model.maxAnswerChars ?? DEFAULT_MAX_ANSWER_CHARS
   const maxAnswerChars = Math.min(modelMaxAnswerChars, options.answerLength?.maxChars ?? modelMaxAnswerChars)
-  const messages = cleanChatHistory(buildAssistantMessages(history, userContent, introContext, context, modelId))
+  const messages = cleanChatHistory(buildAssistantMessages(history, userContent, introContext, context, modelId, options.sceneState))
   const bypassRoleplayRules = process.env.NODE_ENV !== "production" && options.bypassRoleplayRules === true
   const debugRawRoleplayStream = process.env.NODE_ENV !== "production" && options.debugRawRoleplayStream === true
   const outboundMessages = model.provider === "openrouter" && !bypassRoleplayRules

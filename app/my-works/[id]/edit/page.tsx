@@ -115,6 +115,7 @@ export default function EditWorkPage() {
       statusBarEnabled: values.statusBarEnabled,
       statusBarText: values.statusBarText,
       statusBarUpdatedAt: values.statusBarEnabled ? new Date().toISOString() : undefined,
+      redZoneEnabled: values.redZoneEnabled,
       introScenarios: values.introScenarios,
       updatedAt: now,
     }
@@ -194,6 +195,7 @@ function toWorkFormValues(work: StoryWork, world: StoryWorld): WorkFormValues {
     worldDate: work.worldDate || world.worldDate || world.era || "",
     statusBarEnabled: Boolean(work.statusBarEnabled),
     statusBarText: work.statusBarText || "",
+    redZoneEnabled: Boolean(work.redZoneEnabled),
     introScenarios: normalizeIntroScenarios(work),
   }
 }

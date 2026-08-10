@@ -249,6 +249,11 @@ export function WorkLandingPage({
           <p className="mb-1.5 text-lg font-semibold text-white">{title}</p>
           <p className="mb-3.5 text-sm text-neutral-300">{tagline}</p>
           <div className="mb-4 flex gap-1.5">
+            {work.redZoneEnabled && (
+              <span className="rounded-full border border-red-300/30 bg-red-500/25 px-2.5 py-1 text-xs font-medium text-red-100">
+                레드존
+              </span>
+            )}
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-neutral-100">
               {genre}
             </span>

@@ -1,5 +1,6 @@
 import "server-only"
 
+import { toKoreaIsoString } from "@/lib/korea-time"
 import { getNeonSql } from "@/lib/server/neon-database"
 import { ensureUserAccountSchema } from "@/lib/server/user-account-store"
 
@@ -186,13 +187,13 @@ function parseChatRoom(row: ChatRoomRow): StoredChatRoom {
     roomId: row.room_key ?? "",
     roomName: row.room_name || row.character_name || UNKNOWN_CHARACTER_NAME,
     characterName: row.character_name || UNKNOWN_CHARACTER_NAME,
-    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? toKoreaIsoString(row.updated_at) : toKoreaIsoString(),
     lastMessage: row.last_message_status === "streaming"
       ? "답변 생성 중..."
       : row.last_message_status === "failed"
         ? "답변 생성에 실패했어요."
         : row.last_message || undefined,
-    lastMessageAt: row.last_message_at ? new Date(row.last_message_at).toISOString() : undefined,
+    lastMessageAt: row.last_message_at ? toKoreaIsoString(row.last_message_at) : undefined,
     isGenerating: row.last_message_status === "streaming",
   }
 }
@@ -295,7 +296,7 @@ function parseMessageData(row: MessageRow): StoredChatMessage {
     id: row.message_id,
     type: row.message_type,
     content: row.content,
-    timestamp: new Date(row.client_timestamp).toISOString(),
+    timestamp: toKoreaIsoString(row.client_timestamp),
   }
 }
 
@@ -380,7 +381,7 @@ export async function upsertChatMessages({
       message.type,
       message.content,
       serializeMessageMetadata(message),
-      message.timestamp,
+      toKoreaIsoString(message.timestamp),
     ],
   ))
 

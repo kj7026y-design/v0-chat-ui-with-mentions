@@ -1,6 +1,7 @@
 import "server-only"
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless"
+import { withKoreaTimeZoneDatabaseUrl } from "@/lib/korea-time"
 
 export class DatabaseNotConfiguredError extends Error {
   constructor() {
@@ -25,6 +26,6 @@ export function getNeonSql() {
   if (sqlClient) return sqlClient
   const databaseUrl = getDatabaseUrl()
   if (!databaseUrl) throw new DatabaseNotConfiguredError()
-  sqlClient = neon(databaseUrl)
+  sqlClient = neon(withKoreaTimeZoneDatabaseUrl(databaseUrl))
   return sqlClient
 }

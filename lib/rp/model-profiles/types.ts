@@ -17,6 +17,7 @@ export const ROLEPLAY_VALIDATION_FAILURE_KEYS = [
   "futureClosure",
   "internalTokenLeak",
   "overPhysical",
+  "redZoneViolation",
   "tooShort",
   "tooLong",
   "foreignScriptLeak",

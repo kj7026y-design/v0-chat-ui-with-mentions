@@ -764,7 +764,6 @@ export const defaultLibrary: StoryChatLibrary = {
       storyProgressSettings: defaultStoryProgressSettings(),
       statusBarEnabled: false,
       statusBarText: "",
-      redZoneEnabled: true,
       authorId: "storychat",
       authorName: "StoryChat",
       createdAt: "2024.03.10",
@@ -801,7 +800,6 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "2024년 늦가을 밤",
       statusBarEnabled: false,
       statusBarText: "",
-      redZoneEnabled: true,
       authorId: "storychat",
       authorName: "StoryChat",
       createdAt: "2024.03.18",
@@ -838,7 +836,6 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "2024년 초여름 밤",
       statusBarEnabled: false,
       statusBarText: "",
-      redZoneEnabled: true,
       authorId: "storychat",
       authorName: "StoryChat",
       createdAt: "2024.03.12",
@@ -925,6 +922,7 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "2024년 4월 1일 새벽 2시",
       statusBarEnabled: false,
       statusBarText: "",
+      redZoneEnabled: true,
       authorId: "storychat",
       authorName: "StoryChat",
       isPublic: true,
@@ -980,6 +978,7 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "현재, 자정 무렵",
       statusBarEnabled: false,
       statusBarText: "",
+      redZoneEnabled: true,
       authorId: "storychat",
       authorName: "StoryChat",
       isPublic: true,
@@ -1035,6 +1034,7 @@ export const defaultLibrary: StoryChatLibrary = {
       worldDate: "현재, 늦은 밤",
       statusBarEnabled: false,
       statusBarText: "",
+      redZoneEnabled: true,
       authorId: "storychat",
       authorName: "StoryChat",
       isPublic: true,
@@ -1085,6 +1085,12 @@ export const defaultLibrary: StoryChatLibrary = {
       updatedAt: "방금",
     },
   ],
+}
+
+export function isStoryWorkRedZoneEnabled(work: Partial<StoryWork> | undefined | null) {
+  if (!work) return false
+  if (typeof work.redZoneEnabled === "boolean") return work.redZoneEnabled
+  return defaultLibrary.works.find((item) => item.id === work.id)?.redZoneEnabled === true
 }
 
 export function getStoryChatLibrary(): StoryChatLibrary {
@@ -1163,7 +1169,7 @@ function normalizeStoredWork(work: StoryWork): StoryWork {
     ...work,
     authorId: work.authorId || defaultWork?.authorId,
     authorName: work.authorName || defaultWork?.authorName,
-    redZoneEnabled: work.redZoneEnabled ?? defaultWork?.redZoneEnabled ?? false,
+    redZoneEnabled: isStoryWorkRedZoneEnabled(work),
     introScenarios: shouldRestoreDefaultIntros ? defaultWork.introScenarios : normalizedIntroScenarios,
     storyProgressSettings: work.storyProgressSettings
       ? normalizeProgressSettings(work.storyProgressSettings)

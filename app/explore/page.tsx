@@ -345,6 +345,11 @@ function ExploreHero({ item }: { item: ExploreWork }) {
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/65 to-black/15" />
       <div className="relative z-10 flex h-full min-h-[280px] flex-col justify-end">
         <div className="mb-3 flex flex-wrap gap-2">
+          {work.redZoneEnabled && (
+            <span className="rounded-full border border-red-300/40 bg-red-500/20 px-2.5 py-1 text-[11px] font-medium text-red-100 backdrop-blur">
+              레드존
+            </span>
+          )}
           {[genre, mood, world?.worldDate].filter(Boolean).map((meta) => (
             <span key={String(meta)} className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] text-white/80 backdrop-blur">
               {String(meta)}
@@ -466,6 +471,11 @@ function WorkPosterCard({ item, compact }: { item: ExploreWork; compact?: boolea
           style={work.coverImageUrl ? { backgroundImage: `url(${work.coverImageUrl})` } : undefined}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent" />
+          {work.redZoneEnabled && (
+            <span className="absolute right-2.5 top-2.5 rounded-full border border-red-200/30 bg-red-600/85 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">
+              레드존
+            </span>
+          )}
           <div className="absolute bottom-3 left-3 right-3">
             <p className="line-clamp-2 text-base font-bold leading-tight text-white">{work.title}</p>
             <p className="mt-1 text-[11px] text-white/60">{String(genre || "스토리")}</p>
