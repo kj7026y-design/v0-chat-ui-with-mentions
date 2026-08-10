@@ -99,9 +99,11 @@ import {
 import {
   defaultLibrary,
   getStoryChatLibrary,
+  saveStoryChatLibrary,
   normalizeIntroScenarios,
   type StoryChatLibrary,
 } from "@/lib/storychat-storage";
+import { PersonaSelectModal } from "@/components/my-works/persona-select-modal";
 import { syncStoryWorksFromDatabase } from "@/lib/story-work-client";
 import {
   findChatSearchResultIds,
@@ -471,6 +473,7 @@ export default function ChatPage() {
   );
   const [branchTargetId, setBranchTargetId] = useState<string | null>(null);
   const [isIntroOpen, setIsIntroOpen] = useState(false);
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [isImageLimitModalOpen, setIsImageLimitModalOpen] = useState(false);
   const [runtimeStoryStatus, setRuntimeStoryStatus] = useState<
@@ -571,6 +574,27 @@ export default function ChatPage() {
   const currentPersona = currentWork
     ? library.personas.find((persona) => persona.id === currentWork.personaId)
     : undefined;
+
+  useEffect(() => {
+    if (currentWork && !currentPersona) {
+      setIsPersonaModalOpen(true);
+    }
+  }, [currentWork, currentPersona]);
+
+  const handlePersonaSelectedInChat = (personaId: string) => {
+    if (!currentWork) return;
+    const updatedWork = { ...currentWork, personaId };
+    const updatedLibrary = {
+      ...library,
+      works: library.works.map((item) =>
+        item.id === currentWork.id ? updatedWork : item,
+      ),
+    };
+    saveStoryChatLibrary(updatedLibrary);
+    setLibrary(updatedLibrary);
+    setIsPersonaModalOpen(false);
+    toast.success("대화 자아가 설정되었습니다.");
+  };
   const workCharacters = currentWorld
     ? library.works
         .filter((work) => work.worldId === currentWorld.id)
@@ -2920,6 +2944,15 @@ export default function ChatPage() {
             insertTextRequest={insertTextRequest}
           />
         </div>
+      )}
+      {currentWork && (
+        <PersonaSelectModal
+          isOpen={isPersonaModalOpen}
+          onClose={() => setIsPersonaModalOpen(false)}
+          work={currentWork}
+          library={library}
+          onPersonaSelect={handlePersonaSelectedInChat}
+        />
       )}
     </div>
   );

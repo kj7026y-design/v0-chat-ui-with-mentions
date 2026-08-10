@@ -30,7 +30,13 @@ import type {
   StoryWork,
   StoryWorld,
 } from "@/lib/storychat-storage"
-import { getIntroPreviewText, normalizeIntroScenarios } from "@/lib/storychat-storage"
+import {
+  getIntroPreviewText,
+  normalizeIntroScenarios,
+  getStoryChatLibrary,
+  saveStoryChatLibrary,
+} from "@/lib/storychat-storage"
+import { PersonaSelectModal } from "@/components/my-works/persona-select-modal"
 import { WorkComments } from "@/components/work/work-comments"
 import { cn } from "@/lib/utils"
 import { getCurrentAppPath, withReturnTo } from "@/lib/safe-navigation"
@@ -163,6 +169,30 @@ export function WorkLandingPage({
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(work.likeCount ?? 0)
   const [selectedScene, setSelectedScene] = useState<string | null>(null)
+  const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false)
+  const [currentLibrary, setCurrentLibrary] = useState<StoryChatLibrary>(() => getStoryChatLibrary())
+
+  const hasPersona = Boolean(
+    work.personaId && (personas.length > 0 || currentLibrary.personas.some((p) => p.id === work.personaId))
+  )
+
+  const handlePersonaSelected = (personaId: string) => {
+    const updatedWork = { ...work, personaId }
+    const updatedLibrary = {
+      ...currentLibrary,
+      works: currentLibrary.works.map((item) => (item.id === work.id ? updatedWork : item)),
+    }
+    saveStoryChatLibrary(updatedLibrary)
+    setCurrentLibrary(updatedLibrary)
+    setIsPersonaModalOpen(false)
+
+    const targetScene = selectedScene
+    if (targetScene) {
+      router.push(`/chat/${work.id}?scene=${encodeURIComponent(targetScene)}`)
+    } else {
+      router.push(`/chat/${work.id}`)
+    }
+  }
 
   const highlights = normalizeList(work.majorEvents ?? world.events)
   const places = normalizeLocations(work.majorLocations ?? world.places, world.locationImages)
@@ -208,6 +238,10 @@ export function WorkLandingPage({
   }
 
   const handleStartChat = (sceneId?: string) => {
+    if (!hasPersona) {
+      setIsPersonaModalOpen(true)
+      return
+    }
     const targetScene = sceneId || selectedScene
     if (targetScene) {
       router.push(`/chat/${work.id}?scene=${encodeURIComponent(targetScene)}`)
@@ -471,6 +505,14 @@ export function WorkLandingPage({
             채팅 시작하기
           </button>
         </div>
+
+        <PersonaSelectModal
+          isOpen={isPersonaModalOpen}
+          onClose={() => setIsPersonaModalOpen(false)}
+          work={work}
+          library={currentLibrary}
+          onPersonaSelect={handlePersonaSelected}
+        />
       </div>
     </div>
   )
