@@ -16,7 +16,7 @@ import {
 import type { ChatMessage } from "@/lib/chat-types";
 import { cn } from "@/lib/utils";
 import { BookOpen, Check } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 function normalizeCandidateContent(content: string) {
   return content
@@ -44,6 +44,14 @@ export function MessageCandidateControls({
   const [expandedCandidateId, setExpandedCandidateId] = useState("");
   const candidates = message.messageCandidates ?? [];
   const alternativeCount = Math.max(0, candidates.length - 1);
+  const selectedCandidateId =
+    message.selectedCandidateId ?? candidates[0]?.id ?? "";
+
+  useEffect(() => {
+    if (open && selectedCandidateId) {
+      setExpandedCandidateId(selectedCandidateId);
+    }
+  }, [open, selectedCandidateId]);
 
   if (alternativeCount === 0) return null;
 
@@ -51,7 +59,10 @@ export function MessageCandidateControls({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setExpandedCandidateId(selectedCandidateId);
+          setOpen(true);
+        }}
         disabled={disabled}
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--chat-theme-panel-border)] bg-[var(--chat-theme-panel-bg)] px-2.5 text-xs font-semibold text-[var(--chat-theme-text)] transition-colors hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-white/10"
         aria-label={`다른 전개 ${alternativeCount}개 보기`}
@@ -64,7 +75,7 @@ export function MessageCandidateControls({
         open={open}
         onOpenChange={(nextOpen) => {
           setOpen(nextOpen);
-          if (!nextOpen) setExpandedCandidateId("");
+          setExpandedCandidateId(nextOpen ? selectedCandidateId : "");
         }}
       >
         <DrawerContent className="mx-auto max-h-[82dvh] max-w-md border-border bg-card">

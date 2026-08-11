@@ -134,6 +134,7 @@ interface DynamicPromptContext {
   characterSetting?: string
   userSetting?: string
   currentScene?: string
+  comedicPacing?: boolean
 }
 
 function normalizeList(value?: string | string[] | null): string[] {
@@ -786,6 +787,8 @@ function buildDynamicPromptContext(
     status?.currentChapterTitle ? `현재 장면: ${status.currentChapterTitle}` : "",
     status?.currentMission || currentGoalForModel ? `현재 갈등: ${status?.currentMission || currentGoalForModel}` : "",
   ].filter(Boolean).slice(0, 3).join(" / ")
+  const comedicPacing = character?.genre === "유머" ||
+    (character?.tags?.some((tag) => ["드립", "개그", "코미디"].includes(tag)) ?? false)
 
   return {
     characterName,
@@ -794,6 +797,7 @@ function buildDynamicPromptContext(
     characterSetting,
     userSetting,
     currentScene: currentScene || "",
+    comedicPacing,
   }
 }
 

@@ -6,16 +6,18 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { ConfirmModal, PromptModal } from "@/components/ui/app-modal"
 import { cn } from "@/lib/utils"
-import { clearChatHistory } from "@/lib/chat-history-client"
 import {
   createChatId,
   defaultChats,
   getChatDisplayName,
   getChatList,
+  reconcileChatListWithStoryWorks,
   saveChatList,
+  upsertChatListItem,
   type ChatListItemData,
 } from "@/lib/chat-list-storage"
-import { getChatRooms, renameChatRoom } from "@/lib/chat-room-client"
+import { deleteChatRoom, getChatRooms, renameChatRoom } from "@/lib/chat-room-client"
+import { getStoryChatLibrary, resolveChatWorkId } from "@/lib/storychat-storage"
 
 export default function ChatsPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -23,29 +25,63 @@ export default function ChatsPage() {
   const [chats, setChats] = useState<ChatListItemData[]>(defaultChats)
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+  const deletedChatIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
     let cancelled = false
     let pollTimer: ReturnType<typeof setTimeout> | null = null
-    const syncChats = () => setChats(getChatList())
+    const syncChats = () => {
+      const storedChats = getChatList()
+      const nextChats = reconcileChatListWithStoryWorks(
+        storedChats,
+        getStoryChatLibrary(),
+      )
+      setChats(nextChats)
+      if (nextChats !== storedChats) saveChatList(nextChats)
+    }
     const syncRemoteChats = async () => {
       try {
         const rooms = await getChatRooms()
         if (cancelled) return
         if (rooms.length === 0) return
-        const roomMetadata = new Map(rooms.map((room) => [room.roomId, room]))
-        const nextChats = getChatList()
-          .map((chat) => {
-            const room = roomMetadata.get(chat.id)
-            return {
-              ...chat,
-              roomName: room?.roomName || getChatDisplayName(chat),
-              lastMessage: room?.lastMessage || chat.lastMessage,
-              timestamp: room?.lastMessageAt ? new Date(room.lastMessageAt) : chat.timestamp,
-              isGenerating: room?.isGenerating === true,
-            }
+        const library = getStoryChatLibrary()
+        const knownCharacterNames = new Set(
+          library.characters.map((character) => character.name),
+        )
+        let nextChats = getChatList()
+        for (const room of rooms) {
+          if (deletedChatIdsRef.current.has(room.roomId)) continue
+          const workId = resolveChatWorkId(room.roomId)
+          const work = library.works.find((item) => item.id === workId)
+          const character = work
+            ? library.characters.find((item) => item.id === work.characterId)
+            : undefined
+          const existing = nextChats.find((chat) => chat.id === room.roomId)
+          const characterName =
+            character?.name || room.characterName || existing?.characterName || "캐릭터"
+          const isAutomaticRoomName =
+            existing?.roomNameCustomized !== true &&
+            (room.roomName === room.characterName || knownCharacterNames.has(room.roomName))
+          const roomName = isAutomaticRoomName ? characterName : room.roomName
+          const parsedTimestamp = room.lastMessageAt
+            ? new Date(room.lastMessageAt)
+            : undefined
+
+          nextChats = upsertChatListItem(nextChats, {
+            id: room.roomId,
+            characterName,
+            characterEmoji: character?.emoji || existing?.characterEmoji || "💬",
+            roomName,
+            roomNameCustomized: existing?.roomNameCustomized,
+            lastMessage: room.lastMessage,
+            timestamp:
+              parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime())
+                ? parsedTimestamp
+                : undefined,
+            isGenerating: room.isGenerating === true,
           })
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+        }
+        nextChats = reconcileChatListWithStoryWorks(nextChats, library)
         setChats(nextChats)
         saveChatList(nextChats)
         if (rooms.some((room) => room.isGenerating)) {
@@ -87,6 +123,7 @@ export default function ChatsPage() {
         ...chat,
         id: createChatId(),
         roomName: `${getChatDisplayName(chat)} 복제본`,
+        roomNameCustomized: true,
         timestamp: new Date(),
         unreadCount: 0,
       },
@@ -168,7 +205,9 @@ export default function ChatsPage() {
           const target = chats.find((item) => item.id === renameTargetId)
           if (!target) return
           const previousChats = chats
-          persistChats(chats.map((item) => item.id === renameTargetId ? { ...item, roomName: nextName } : item))
+          persistChats(chats.map((item) => item.id === renameTargetId
+            ? { ...item, roomName: nextName, roomNameCustomized: true }
+            : item))
           setRenameTargetId(null)
           void renameChatRoom(renameTargetId, nextName, target.characterName)
             .then(() => toast("이름을 바꿨어요."))
@@ -189,10 +228,18 @@ export default function ChatsPage() {
         }}
         onConfirm={() => {
           if (!deleteTargetId) return
-          void clearChatHistory(deleteTargetId).catch(() => undefined)
-          persistChats(chats.filter((chat) => chat.id !== deleteTargetId))
+          const targetId = deleteTargetId
+          const previousChats = chats
+          deletedChatIdsRef.current.add(targetId)
+          persistChats(chats.filter((chat) => chat.id !== targetId))
           setDeleteTargetId(null)
-          toast("채팅방을 삭제했어요.")
+          void deleteChatRoom(targetId)
+            .then(() => toast("채팅방을 삭제했어요."))
+            .catch((error) => {
+              deletedChatIdsRef.current.delete(targetId)
+              persistChats(previousChats)
+              toast.error(error instanceof Error ? error.message : "채팅방을 삭제하지 못했습니다.")
+            })
         }}
       />
     </div>

@@ -421,3 +421,15 @@ export async function clearChatMessages({ accountId, roomId }: { accountId: stri
     [chatRoomId],
   )
 }
+
+export async function deleteChatRoom({ accountId, roomId }: { accountId: string; roomId: string }) {
+  await ensureSchema()
+  const sql = getNeonSql()
+  const rows = await sql.query(
+    `DELETE FROM storychat_chat_rooms
+     WHERE account_id = $1 AND room_key = $2
+     RETURNING chat_room_id`,
+    [accountId, roomId],
+  ) as unknown as Array<{ chat_room_id: string | number }>
+  return rows.length > 0
+}

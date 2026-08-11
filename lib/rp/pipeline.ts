@@ -82,6 +82,7 @@ export interface ChatRequestBody {
   userSetting?: string
   currentScene?: string
   latestUserIntent?: string
+  comedicPacing?: boolean
   sceneState?: {
     location?: string
     time?: string
@@ -157,7 +158,7 @@ const GEMINI_RP_SAFETY_SETTINGS = [
 
 type DynamicPromptContext = Pick<
   ChatRequestBody,
-  "characterName" | "userName" | "background" | "characterSetting" | "userSetting" | "currentScene" | "latestUserIntent" | "sceneState"
+  "characterName" | "userName" | "background" | "characterSetting" | "userSetting" | "currentScene" | "latestUserIntent" | "comedicPacing" | "sceneState"
 >
 
 type RoleplayValidationStatus = "passed" | "accepted_with_warnings" | "repaired" | "fallback" | "failed"
@@ -307,6 +308,7 @@ interface TurnPolicy {
   minChars: number
   maxChars: number
   paragraphCount: string
+  comedicPacing: boolean
   allowedActions: string[]
   bannedActions: string[]
 }
@@ -1176,6 +1178,7 @@ function compileTurnPolicy(
   autoAdvance = false,
   continuesExistingPhysicalContact = false,
   guidedAutoAdvance = false,
+  comedicPacing = false,
 ): TurnPolicy {
   const allowPhysicalContact = input.physicalContactRequested || input.physicalContactPermitted || continuesExistingPhysicalContact
   const allowedActions = guidedAutoAdvance
@@ -1193,7 +1196,9 @@ function compileTurnPolicy(
       : ["사용자가 만든 접촉에 대한 캐릭터다운 적극적 반응", "이미 시작된 접촉이 실제 결과에 도달하도록 이어가는 행동", "현재 긴장도에 맞는 자연스러운 대사", "표정과 신체 반응", "기존 소품 사용"]
     : input.proximityRequested
       ? ["캐릭터다운 자연스러운 대사", "표정 변화", "거리 유지 또는 아주 작은 거리 변화", "조건 제시", "기존 소품 사용"]
-      : ["캐릭터다운 자연스러운 대사", "표정 변화", "심리적 압박", "조건 제시", "침묵", "기존 소품 사용"]
+      : comedicPacing
+        ? ["드립으로 받아치기", "캐릭터 고유 톤을 유지한 리액션", "자화자찬 개그", "말장난·용어 비틀기", "티키타카로 되받아치기"]
+        : ["캐릭터다운 자연스러운 대사", "표정 변화", "심리적 압박", "조건 제시", "침묵", "기존 소품 사용"]
   const bannedActions = guidedAutoAdvance
     ? [
         "전개 참고 소스를 등장인물의 대사로 출력",
@@ -1209,6 +1214,7 @@ function compileTurnPolicy(
         "새 소품 발명",
         "같은 의미 반복",
         ...(allowPhysicalContact ? [] : ["갑작스러운 신체 접촉", "물리적으로 붙잡기", "키스나 밀착으로 급진행"]),
+        ...(comedicPacing ? ["지나치게 진지하거나 위협적인 심리 묘사", "계산적이고 음흉한 뉘앙스의 표정·시선 묘사", "드라마틱한 은유나 문학적 수사"] : []),
       ]
 
   return {
@@ -1221,7 +1227,10 @@ function compileTurnPolicy(
     allowNewProps: false,
     minChars: answerLength.minChars,
     maxChars: answerLength.maxChars,
-    paragraphCount: answerLength.maxChars < 800 ? "2~4문단" : "3~5문단",
+    paragraphCount: comedicPacing
+      ? "서로 다른 개그·전개 비트 4~6개를 대사 중심으로 빠르게 이어붙인 구성 (비트 하나당 1~3문장, 하나의 상황을 길게 늘어놓지 않는다)"
+      : answerLength.maxChars < 800 ? "2~4문단" : "3~5문단",
+    comedicPacing,
     allowedActions,
     bannedActions,
   }
@@ -1646,6 +1655,7 @@ export function compileRoleplayContext(
     autoAdvance,
     continuesExistingPhysicalContact,
     guidedAutoAdvance,
+    promptContext.comedicPacing ?? false,
   )
   const allowedProps = buildAllowedProps(promptContext, messages, latestInput)
   const sanitizedRegenerationAvoidContent = regenerationAvoidContent.trim().slice(0, MAX_REGENERATION_AVOID_CHARS)
@@ -1758,6 +1768,7 @@ export function normalizeBody(body: ChatRequestBody | null) {
       userSetting: body?.userSetting?.trim(),
       currentScene: buildCurrentSceneForModel(body?.currentScene),
       latestUserIntent: body?.latestUserIntent?.trim(),
+      comedicPacing: body?.comedicPacing === true,
       sceneState: body?.sceneState,
     },
   }
@@ -3401,6 +3412,84 @@ ${ctx.turnPolicy.minChars}~${ctx.turnPolicy.maxChars}자.
 이번 응답 목표: ${ctx.responseGoal}`
 }
 
+function buildComedyRepairPrompt(errors: ReturnType<typeof validateRoleplayOutput>, ctx: CompiledRoleplayContext) {
+  const repairTargetMinChars = Math.min(ctx.turnPolicy.maxChars, ctx.turnPolicy.minChars + 100)
+  const repairTargetMaxChars = Math.max(repairTargetMinChars, ctx.turnPolicy.maxChars - 100)
+  const labels: Record<keyof typeof errors, string> = {
+    brokenDialogueQuotes: "대사 따옴표가 깨졌거나 닫히지 않음",
+    tooFewDialogues: "이번 턴에 대사가 너무 적음",
+    tooManyDialogues: "이번 턴에 대사가 너무 많음",
+    objectiveUserStateAssertion: `${ctx.userName}의 감정/욕망/의도/심리를 객관 사실처럼 확정함`,
+    responseMissedUserIntent: "최신 사용자 입력 또는 의도를 놓침",
+    lowContentDensity: "구체적인 반응 없이 내용이 비어 있음",
+    excessiveAbstractMood: "추상적인 분위기/관계 해설이 과함",
+    characterVoiceWeak: `${ctx.characterName}의 캐릭터 반응이 약하거나 일반적임`,
+    userControlByNarration: `${ctx.userName}의 새 행동/대사/감정/결정을 서술함`,
+    controlsUser: `${ctx.userName}의 실제 행동/시선/침묵/대답을 대신 확정함`,
+    contractClosureBias: "관계나 전개의 끝을 과하게 확정함",
+    futureClosure: "미래 전개나 장면 결말을 지문으로 확정함",
+    internalTokenLeak: "내부 변수명 또는 영문 토큰이 한국어 문장에 섞임",
+    overPhysical: "이 캐릭터에게 맞지 않는 신체 접촉으로 급진행함",
+    redZoneViolation: "이 작품에서 허용되지 않는 성인 대화 또는 노골적인 성적 묘사를 생성함",
+    tooShort: `분량이 최소 ${ctx.turnPolicy.minChars}자에 미달함`,
+    tooLong: "분량이 이번 턴 허용 범위를 초과함",
+    foreignScriptLeak: "한국어 외 문자 또는 깨진 표현이 섞임",
+    metaLeak: "시스템 메타 설명이 본문에 섞임",
+    providerRefusal: "모델의 사과 또는 요청 거절문만 반환됨",
+    degenerateOutput: "역할극 본문으로 사용할 수 없는 초단문이 반환됨",
+    unpromptedHandFocus: "손 묘사가 불필요하게 중심이 됨",
+    narrationStyleMismatch: "지문이 1인칭 또는 대화체 어미로 작성됨",
+    regenerationDuplicate: "재생성 결과가 폐기할 기존 답변의 드립·행동을 의미상 반복함",
+    previousResponseDuplicate: "새 답변이 직전 캐릭터 답변의 드립·행동을 의미상 반복함",
+    incompleteEnding: "마지막 문장이나 대사가 완결되지 않은 채 잘림",
+  }
+  const failedLabels = Object.entries(errors)
+    .filter(([, failed]) => failed)
+    .map(([key]) => `- ${labels[key as keyof typeof errors]}`)
+    .join("\n")
+
+  return `방금 답변은 다음 문제로 실패했다:
+${failedLabels}
+
+${errors.metaLeak ? `시스템 메타 설명이나 검수 기준 설명을 본문에 쓰지 마라. "${ctx.characterName}"이 실제로 한 말과 리액션만 써라.` : ""}
+${errors.providerRefusal || errors.degenerateOutput ? `방금 결과는 역할극 답변이 아니라 사과·거절 또는 쓸 수 없는 초단문이라서 폐기됐다. 사과나 거절 없이 "${ctx.characterName}"의 완전한 새 드립·리액션으로 다시 써라.` : ""}
+${errors.overPhysical || errors.redZoneViolation ? `방금 답변에 이 캐릭터에게 맞지 않는 신체 접촉이나 성적인 내용이 섞여 실패했다. 그런 내용을 모두 제거하고, 캐릭터다운 드립과 리액션으로만 다시 써라.` : ""}
+${errors.objectiveUserStateAssertion || errors.userControlByNarration || errors.controlsUser ? `"${ctx.userName}"의 감정, 반응, 행동을 서술자가 사실처럼 확정하지 마라. "${ctx.characterName}"의 대사와 리액션만 써라.` : ""}
+${errors.contractClosureBias || errors.futureClosure ? `앞으로의 전개나 결말을 지문으로 확정하지 마라. 지금 이 순간의 드립과 리액션만 써라.` : ""}
+${errors.responseMissedUserIntent || errors.lowContentDensity || errors.excessiveAbstractMood || errors.characterVoiceWeak ? `방금 답변은 최신 입력에 대한 캐릭터다운 반응이 약해서 실패했다.
+최신 입력이 질문이면 진지하게 답하려 하지 말고 캐릭터다운 드립으로 먼저 받아친 뒤, 필요하면 요점만 짧게 덧붙여라.
+"이건 신의 선물이다", "이스터에그다" 식의 막연한 긍정 포장으로 때우지 마라. 캐릭터의 전문 용어가 가진 중의적 의미를 실제 소재에 겹치는 말장난(예: 기술 용어를 발음이나 뜻으로 비틀어 일상 사물·상황에 적용)으로 최소 하나는 구체적으로 만들어라.` : ""}
+${errors.tooShort ? `방금 답변은 분량이 부족해서 실패했다.
+분량을 늘리려고 감각·심리·분위기 묘사를 추가하지 마라. 그런 방식은 유머 캐릭터의 리듬을 죽인다.
+새 대사 블록을 계속 추가하지 마라. 대신 기존 대사 블록 안에서 캐릭터가 같은 흐름으로 이어서 하는 말(추가 드립, 되받아치기, 예시)을 2~4문장까지 채워라. 전체 완결된 대사 블록 개수는 늘리지 않는다.
+정말 필요하면 새 비트를 최대 1개만 추가하되, 앞에서 이미 한 농담을 풀어서 설명하거나 반복하지 마라. 새 갈등·새 소품·장소 이동·"${ctx.userName}"의 새 반응은 추가하지 마라.
+최소 ${ctx.turnPolicy.minChars}자를 반드시 채우고 ${repairTargetMinChars}~${repairTargetMaxChars}자를 목표로 한다.` : ""}
+${errors.tooLong ? `분량이 허용 범위를 넘었다. 새 드립을 더 붙이지 말고 이미 있는 비트 중 뒤쪽 일부를 정리해 ${ctx.turnPolicy.minChars}~${ctx.turnPolicy.maxChars}자로 맞춰라.` : ""}
+${errors.tooManyDialogues ? `완결된 대사 블록이 너무 많다. 블록 개수를 줄이는 대신, 짧게 쪼개진 대사 블록 여러 개를 자연스럽게 하나로 묶어서 한 블록 안에 이어지는 여러 문장으로 합쳐라(내용은 그대로 유지). 지문으로 바꿔서 대사를 죽이지 마라. 완결된 대사 블록은 최대 4개로 맞춰라.` : ""}
+${errors.tooFewDialogues ? `방금 답변은 큰따옴표로 감싼 대사가 너무 적거나 없어서 실패했다.
+지문만으로 줄글을 이어 쓰지 말고, 캐릭터가 실제로 입 밖으로 하는 말은 예외 없이 큰따옴표로 감싸라. [지문 한 줄] 다음 줄에 ["대사"]가 오는 구조를 비트마다 반복해서 대사 개수를 채워라.` : ""}
+${errors.narrationStyleMismatch ? `지문을 1인칭 구어체로 쓰지 마라. "기다리고 있었어"가 아니라 "기다리고 있었다"처럼 짧고 평범한 사실 서술로 고쳐라. 반말과 밈은 큰따옴표 안 대사에서만 써라. 지문 자체를 생략하지도 마라.` : ""}
+${errors.incompleteEnding ? `마지막 문장이나 대사가 끊긴 채 끝났다. 앞부분은 그대로 두고 잘린 마지막 문장만 자연스럽게 완결하라.` : ""}
+${errors.regenerationDuplicate ? `폐기된 기존 답변과 같은 드립·행동을 반복하지 마라. 다른 소재로 완전히 새로운 답변을 써라.` : ""}
+${errors.previousResponseDuplicate ? `직전 캐릭터 답변과 같은 드립이나 표현을 반복하지 마라. 새로운 소재의 드립과 리액션으로 다시 써라.` : ""}
+${errors.brokenDialogueQuotes ? `큰따옴표가 깨졌거나 닫히지 않았다. 모든 대사를 큰따옴표로 정확히 열고 닫아라.` : ""}
+${errors.internalTokenLeak || errors.foreignScriptLeak ? `한국어 문장에 섞인 내부 변수명, 영문 토큰, 깨진 문자를 모두 제거하고 자연스러운 한국어로 다시 써라.` : ""}
+
+오직 "${ctx.characterName}"의 반응만 다시 작성하라.
+"${ctx.userName}"의 새 행동/대사/감정을 쓰지 마라.
+문학적인 은유나 감각 묘사 없이, 캐릭터의 말투(밈, 유행어, 반말, ㅋㅋㅋ 등)가 중심인 가벼운 톤을 유지하라.
+"고개가 느릿하게 기울었다", "한쪽 눈썹을 쓱 올리며", "눈을 가늘게 떴다" 같은 뜸 들이는 문학적 클리셰를 쓰지 마라.
+제공된 "${ctx.userName}"의 행동과 대사에만 반응하라.
+사용자의 말을 반복하지 말고 의미에만 반응하라.
+${ctx.turnPolicy.minChars}~${ctx.turnPolicy.maxChars}자.
+출력 한도에 닿기 전에 마지막 대사를 완결하고 반드시 온전한 문장으로 끝내라.
+이번 응답 목표: ${ctx.responseGoal}`
+}
+
+function resolveRepairPrompt(errors: ReturnType<typeof validateRoleplayOutput>, ctx: CompiledRoleplayContext) {
+  return ctx.turnPolicy.comedicPacing ? buildComedyRepairPrompt(errors, ctx) : buildRepairPrompt(errors, ctx)
+}
+
 export function buildSafeFallbackReply(ctx: CompiledRoleplayContext) {
   return normalizeGeneratedRoleplayOutput(buildContextualFallbackReply(ctx), ctx)
 }
@@ -3996,6 +4085,18 @@ export function generateDynamicPrompt({
   profile?: RoleplayModelProfile
   adultFictionMode?: boolean
 }) {
+  if (compiledContext?.turnPolicy.comedicPacing) {
+    return buildComedySystemPrompt({
+      characterName,
+      userName,
+      modelBackground,
+      characterSetting,
+      userSetting,
+      currentScene,
+      compiledContext,
+      profile,
+    })
+  }
   const responseMaxChars = compiledContext?.turnPolicy.maxChars ?? profile?.targetChars.max ?? MAX_OPENROUTER_RESPONSE_CHARS
   const responseMinChars = compiledContext?.turnPolicy.minChars ?? profile?.targetChars.min ?? DEFAULT_MIN_ANSWER_CHARS
   const preferredResponseMinChars = Math.min(responseMaxChars, responseMinChars + 100)
@@ -4197,6 +4298,117 @@ ${modelBackground}
 - 내용이 일찍 끝났다면 같은 의미를 반복하지 말고, ${characterName} 자신의 새 정보·구체적 동작·감각적 세부 중 장면에 맞는 것을 보강한다.
 - 완결된 대사는 ${minDialogues}~${maxDialogues}개, 가능하면 ${preferredDialogues}개로 맞춘 뒤 출력한다.
 - 매 답변에 억지 훅을 붙이지 않는다. 현재 장면의 중심 쟁점이나 행동이 충분히 진행됐다면 그 결과를 자연스럽게 마무리하고, 필요할 때만 다음 상황으로 이어지는 여지를 남긴다. 열린 결말은 사용자의 행동을 대신 쓰지 않는다는 뜻이지 현재 결론을 계속 보류한다는 뜻이 아니다.`
+}
+
+function buildComedySystemPrompt({
+  characterName,
+  userName,
+  modelBackground,
+  characterSetting,
+  userSetting,
+  currentScene,
+  compiledContext,
+  profile,
+}: {
+  characterName: string
+  userName: string
+  modelBackground: string
+  characterSetting: string
+  userSetting: string
+  currentScene: string
+  compiledContext: CompiledRoleplayContext
+  profile?: RoleplayModelProfile
+}) {
+  const { turnPolicy } = compiledContext
+  const responseMinChars = turnPolicy.minChars
+  const responseMaxChars = turnPolicy.maxChars
+  const preferredResponseMinChars = Math.min(responseMaxChars, responseMinChars + 100)
+  const preferredResponseMaxChars = Math.max(preferredResponseMinChars, responseMaxChars - 100)
+  const minDialogues = profile?.minDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.minDialogues
+  const preferredDialogues = profile?.preferredDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.preferredDialogues
+  const maxDialogues = profile?.maxDialogues ?? COMMON_ROLEPLAY_DIALOGUE_COUNTS.maxDialogues
+  const guidedAutoAdvance = turnPolicy.guidedAutoAdvance === true
+  const dialogueCadenceInstructions = buildCommonDialogueCadenceInstructions(compiledContext.preferExtendedDialogue === true)
+
+  return `너는 역할극 채팅에서 오직 "${characterName}" 한 명만 연기하는, 유머·드립 컨셉 전용 캐릭터 작가다.
+너는 소설가가 아니라 "${characterName}"이 실제로 하는 말과 리액션을 그대로 옮겨 적는 사람이다.
+
+[절대 규칙]
+- 너는 "${characterName}"의 말, 행동, 리액션만 쓴다.
+- "${userName}"의 새 대사, 새 행동, 새 감정을 만들지 않는다.
+- "${userName}"이 웃었다, 물러섰다, 말했다, 생각했다 같은 문장을 쓰지 않는다.
+- "${userName}"의 제공된 행동과 대사에만 반응한다.
+
+${SERVICE_INFO_PROTECTION_PROMPT}
+
+[문체 — 가장 중요한 규칙]
+- 이 캐릭터는 문학적인 웹소설체로 쓰지 않는다. 대신 캐릭터 설정("${characterSetting}")에 명시된 고유 말투를 그대로, 정확하게 따른다. 가벼운 반말/밈 말투일 수도 있고, 감정 기복 없이 해탈한 존댓말체("~합니다", "~했습니다")일 수도 있다 — 어느 쪽이든 캐릭터 설정에 적힌 어미와 톤을 임의로 순화하거나 다른 톤으로 바꾸지 않는다.
+- 지문(따옴표 밖 서술)은 짧게 쓰되, 절대 생략하지 않는다. 대사만 쭉 나열하는 메신저 채팅 텍스트로 쓰지 않는다.
+- 지문에서 은유, 직유, 시적 표현, 감각적 디테일(시선의 흐름, 공기, 향기, 온도, 리듬 있는 손가락질 등)을 쓰지 않는다.
+- 다음과 같은 문학적 클리셰를 쓰지 않는다: "고개가 느릿하게 기울었다", "한쪽 눈썹을 쓱 올리며", "눈을 가늘게 떴다", "예리한 눈빛으로 계산했다", "묘한 여운이 담겨 있었다", "공기의 흐름을 놓치지 않았다" 및 이와 비슷한 뜸 들이는 묘사.
+- 캐릭터의 내면 심리를 해설하지 않는다. "~라고 생각했다", "~하려는 눈치였다" 같은 3인칭 심리 해설 문장을 쓰지 않는다. 속마음이 있다면 대사로 직접 뱉게 한다.
+- 텍스트의 압도적인 비중은 대사(큰따옴표 안)가 차지해야 하지만, 지문 자체를 아예 없애서는 안 된다. 지문은 짧게, 대사는 반드시 큰따옴표로 감싸서 구분한다.
+
+[드립 작법 — 실제로 웃긴 드립을 쓰는 법]
+- 상황을 그냥 과장해서 "이건 신의 선물이다", "이스터에그다", "위대한 서사시의 시작이다"처럼 억지로 밀어붙이는 하이프성 긍정 포장은 진짜 드립이 아니다. 이런 식의 과장은 한 턴에 많아야 1번만 쓰고, 이것만으로 턴을 채우지 않는다.
+- 진짜 웃긴 드립은 캐릭터의 전문 용어가 가진 중의적 의미(기술적 의미 + 일상 상황에 적용했을 때 전혀 다르게 읽히는 의미)를 실제 소재(사물, 사람, 상황)에 겹쳐서 만드는 말장난이다.
+  예1: "타입에러"는 원래 프로그래밍 용어지만, 옷차림이 안 어울릴 때 "그 바지에 그 셔츠는 타입이 안 맞는데?"처럼 쓸 수 있다.
+  예2: "롤백"이라는 기술 용어를 발음이나 상황을 비틀어 전혀 다른 사물(가방 등)과 연결해 반전을 만들 수 있다.
+  (위 예시를 그대로 베끼지 말고, 매번 이번 대화의 실제 소재로 새로운 말장난을 만들어라.)
+- 자주 쓰는 드립 구조: (1) 질문이나 소재를 던진다 → (2) 상대가 예상할 법한 뻔한 답을 살짝 흘린다 → (3) 그 예상을 깨는 말장난·중의적 표현으로 반전한다 → (4) 필요하면 그 말장난이 왜 성립하는지 한 줄로 짧게 덧붙여 웃음 포인트를 확실히 한다.
+- 매 턴 대사 중 최소 하나는 이런 방식의 실제 말장난/중의적 표현 드립이어야 한다. 상황을 무조건 긍정적으로 포장하는 것만으로 때우지 않는다.
+
+[구성]
+- 완결된 대사 블록은 총 ${minDialogues}~${maxDialogues}개(가능하면 ${preferredDialogues}개)만 쓴다. "[짧은 지문] + [한 문장 대사]"를 기계적으로 반복해서 블록 개수를 늘리지 않는다.
+- 대사 한 블록 안에 캐릭터가 이어서 하는 말을 2~4문장까지 자연스럽게 담을 수 있다. 새 드립이라고 매번 지문으로 끊고 새 따옴표를 열 필요는 없다. 지문(동작)은 화제나 리액션이 실제로 바뀔 때만 새로 넣는다.
+- 형식 예시(대사의 말투는 무시하고 [지문]+["대사"] 구조와 대사 블록 안에 여러 문장을 담는 방식만 참고한다. 실제 말투는 캐릭터 설정을 따르고, 아래 문장을 그대로 베끼지 않는다):
+  픽 웃었다.
+  "야, 그 정도로 쫄면 시니어 못 해 ㅋㅋㅋ. 배포 터진 거? 그거 완전 국룰이야. 나도 하루에 한 번은 터뜨려."
+
+  팔짱을 꼈다.
+  "일단 로그부터 까봐. 로그는 거짓말 안 해."
+- 지문·대사 쌍의 길이와 모양을 매번 똑같이 반복하지 않는다("동작 한 줄 + 짧은 대사 한 줄"만 계속 찍어내지 않는다). 동작 묘사에 쓰는 동사도 매번 다르게 쓴다.
+- 하나의 드립을 풀어서 설명하거나 부연하지 않는다. 웃음 포인트를 낸 즉시 다음 비트(새 소재, 새 리액션, 새 태클)로 넘어간다.
+- 같은 농담이나 같은 의미를 표현만 바꿔 반복하지 않는다.
+
+[출력 형식]
+- 한국어로만 쓴다.
+- 최종 본문은 반드시 ${responseMinChars}~${responseMaxChars}자 범위 안에 들어야 한다.
+- 초안은 ${preferredResponseMinChars}~${preferredResponseMaxChars}자를 목표로 작성한다.
+- 완결된 대사는 ${minDialogues}~${maxDialogues}개를 쓰고, 특별한 이유가 없으면 ${preferredDialogues}개로 맞춘다.
+- 실제로 캐릭터가 입 밖으로 말하는 모든 문장은 예외 없이 큰따옴표로 감싼다. 따옴표 없이 대사를 그냥 줄글로 쓰지 않는다. 인물 이름, 지문, 강조 표현에는 큰따옴표를 쓰지 않는다.
+- 대사와 지문은 줄바꿈으로 분리한다.
+- 제목, 이름표, 구간명, 설명용 라벨을 붙이지 않는다.
+- 출력 한도에 닿기 전에 마지막 대사를 완결하고 온전한 문장으로 끝낸다.
+${dialogueCadenceInstructions}
+
+[진행]
+- 최근 사용자 메시지에서 바로 이어간다.
+${guidedAutoAdvance
+    ? `- 이번 요청은 사용자가 입력한 장면 연출 지시에 따른 자동 진행이다. 장면 지시 "${compiledContext.autoAdvanceDirective}"를 설명하지 말고 즉시 실제 리액션으로 구현한다.`
+    : turnPolicy.autoAdvance
+      ? `- 이번 요청은 자동 진행이다. 직전 assistant 답변 뒤에 새 사용자 입력이 없다. "${userName}"의 답을 기다리지 말고 "${characterName}" 혼자 할 수 있는 다음 드립이나 리액션으로 턴을 맺는다.`
+      : ""}
+- 사용자가 구체적인 질문을 하면 진지하게 설명하려 하지 말고 캐릭터다운 드립으로 먼저 받아친 뒤, 필요하면 요점만 짧게 덧붙인다.
+- 마지막을 억지로 멈춤이나 반응 확인으로 끝내지 않는다. 캐릭터다운 리액션이나 드립으로 턴을 맺는다.
+- 이 턴에서 활용할 수 있는 행동: ${turnPolicy.allowedActions.join(", ")}.
+- 이 턴에서 쓰지 않는 행동: ${turnPolicy.bannedActions.join(", ")}.
+
+[반복 금지]
+- 이전 assistant 문장이나 같은 드립을 반복하지 않는다.
+- 아래 표현은 꼭 필요할 때만 쓴다: ${OVERUSED_PHRASES.join(", ")}
+
+[현재 정보]
+${modelBackground}
+- ${characterName} 설정: ${characterSetting}
+- ${userName} 설정: ${userSetting}
+- 현재 장면: ${currentScene}
+
+[이번 응답 목표]
+완성된 채팅 본문만 작성한다.
+- 반드시 ${responseMinChars}자 이상 ${responseMaxChars}자 이하로 끝낸다.
+- 분량이 부족하면 감각 묘사나 심리 해설을 늘리지 말고, 먼저 기존 대사 블록 안에서 캐릭터가 이어서 할 말을 더 채워라. 그래도 부족할 때만 새 비트를 추가하되, 전체 대사 블록 개수가 ${maxDialogues}개를 넘지 않게 한다.
+- 완결된 대사 블록은 ${minDialogues}~${maxDialogues}개, 가능하면 ${preferredDialogues}개로 맞춘 뒤 출력한다.`
 }
 
 function buildProfilePromptInstructions(profile?: RoleplayModelProfile) {
@@ -5107,7 +5319,7 @@ ${userName}의 새 행동·대사·감정·반응을 만들지 말고 ${characte
         ...finalMessages,
         {
           role: "user" as const,
-          content: `${buildRepairPrompt(validation, compiledContext)}
+          content: `${resolveRepairPrompt(validation, compiledContext)}
 
 [수정할 원문]
 ${originalResult}
@@ -5494,6 +5706,7 @@ async function handleOpenRouterNsfwChat(
       userSetting: promptContext.userSetting,
       currentScene: promptContext.currentScene || "",
       latestUserIntent: promptContext.latestUserIntent,
+      comedicPacing: promptContext.comedicPacing ?? false,
       sceneState: promptContext.sceneState,
     },
   }, model)
@@ -6521,14 +6734,14 @@ ${compiledContext.turnPolicy.minChars}~${compiledContext.turnPolicy.maxChars}자
     sendPhase(useOpenRouterRepair ? "fallback" : "repairing", useOpenRouterRepair ? "빈 응답을 다시 생성하는 중..." : "답변을 다듬는 중...")
     const repairInstruction = initialValidation
       ? initialValidation.regenerationDuplicate || initialValidation.previousResponseDuplicate
-        ? `${buildRepairPrompt(initialValidation, compiledContext)}
+        ? `${resolveRepairPrompt(initialValidation, compiledContext)}
 
 [폐기할 중복 초안]
 ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
 
 위 초안은 기존 답변의 문장 또는 완료 행동을 의미상 반복한 중복본이다. 단어, 신체 부위, 대사만 바꾸고 같은 결과의 행동을 다시 쓰지 마라.
 중복본 이전까지 확정된 위치와 접촉 상태는 이미 성립한 배경으로만 이어받고, 캐릭터의 다음 행동과 대사를 새로운 선택으로 작성하라.`
-        : `${buildRepairPrompt(initialValidation, compiledContext)}
+        : `${resolveRepairPrompt(initialValidation, compiledContext)}
 
 [끊긴 Gemini stream 초안]
 ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
@@ -6686,7 +6899,7 @@ ${savedContent || rawGeminiContent.trim() || "(빈 응답)"}
       ...finalMessages,
       {
         role: "user" as const,
-        content: `${buildRepairPrompt(finalValidation, compiledContext)}
+        content: `${resolveRepairPrompt(finalValidation, compiledContext)}
 
 방금 답변은 Gemini가 잘려서 OpenRouter fallback으로 생성한 초안이다.
 아래 초안의 문장과 사건 순서를 기준으로 실패 항목만 최소한으로 교정하라.

@@ -15,6 +15,7 @@ async function readResponse(response: Response) {
     error?: string
     room?: ChatRoomMetadata
     rooms?: ChatRoomMetadata[]
+    deleted?: boolean
   }
   if (!response.ok) throw new Error(data.error || "채팅방 정보를 불러오지 못했습니다.")
   return data
@@ -42,4 +43,15 @@ export async function renameChatRoom(roomId: string, roomName: string, character
     body: JSON.stringify({ roomId, roomName, characterName }),
   }))
   return data.room ?? null
+}
+
+export async function deleteChatRoom(roomId: string) {
+  const response = await fetch("/api/chat-rooms", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ roomId }),
+  })
+  if (response.status === 401) return { deleted: false, localOnly: true }
+  const data = await readResponse(response)
+  return { deleted: data.deleted === true, localOnly: false }
 }

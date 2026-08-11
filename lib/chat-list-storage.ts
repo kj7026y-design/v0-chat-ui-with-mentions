@@ -1,10 +1,16 @@
 "use client"
 
+import {
+  resolveChatWorkId,
+  type StoryChatLibrary,
+} from "@/lib/storychat-storage"
+
 export const STORYCHAT_CHATS_KEY = "storychat_chats"
 
 export interface ChatListItemData {
   id: string
   roomName?: string
+  roomNameCustomized?: boolean
   characterName: string
   characterEmoji: string
   lastMessage: string
@@ -13,8 +19,87 @@ export interface ChatListItemData {
   isGenerating?: boolean
 }
 
+export interface ChatListItemUpdate {
+  id: string
+  characterName: string
+  characterEmoji: string
+  roomName?: string
+  roomNameCustomized?: boolean
+  lastMessage?: string
+  timestamp?: Date
+  unreadCount?: number
+  isGenerating?: boolean
+}
+
 export function getChatDisplayName(chat: Pick<ChatListItemData, "roomName" | "characterName">) {
   return chat.roomName?.trim() || chat.characterName
+}
+
+export function reconcileChatListWithStoryWorks(
+  chats: ChatListItemData[],
+  library: StoryChatLibrary,
+) {
+  const knownCharacterNames = new Set(
+    library.characters.map((character) => character.name.trim()).filter(Boolean),
+  )
+  let changed = false
+  const reconciled = chats.map((chat) => {
+    const workId = resolveChatWorkId(chat.id)
+    const work = library.works.find((item) => item.id === workId)
+    const character = work
+      ? library.characters.find((item) => item.id === work.characterId)
+      : undefined
+    if (!character) return chat
+
+    const storedRoomName = chat.roomName?.trim()
+    const isAutomaticRoomName =
+      chat.roomNameCustomized !== true &&
+      Boolean(
+        storedRoomName &&
+        (storedRoomName === chat.characterName || knownCharacterNames.has(storedRoomName)),
+      )
+    const roomName = isAutomaticRoomName ? character.name : chat.roomName
+    if (
+      chat.characterName === character.name &&
+      chat.characterEmoji === character.emoji &&
+      chat.roomName === roomName
+    ) {
+      return chat
+    }
+
+    changed = true
+    return {
+      ...chat,
+      characterName: character.name,
+      characterEmoji: character.emoji || chat.characterEmoji || "💬",
+      roomName,
+    }
+  })
+
+  return changed ? reconciled : chats
+}
+
+export function upsertChatListItem(
+  chats: ChatListItemData[],
+  update: ChatListItemUpdate,
+) {
+  const existing = chats.find((chat) => chat.id === update.id)
+  const nextChat: ChatListItemData = {
+    id: update.id,
+    characterName: update.characterName || existing?.characterName || "캐릭터",
+    characterEmoji: update.characterEmoji || existing?.characterEmoji || "💬",
+    roomName: update.roomName?.trim() || existing?.roomName,
+    roomNameCustomized:
+      update.roomNameCustomized ?? existing?.roomNameCustomized,
+    lastMessage: update.lastMessage || existing?.lastMessage || "대화를 시작해 보세요.",
+    timestamp: update.timestamp || existing?.timestamp || new Date(),
+    unreadCount: update.unreadCount ?? existing?.unreadCount ?? 0,
+    isGenerating: update.isGenerating ?? existing?.isGenerating,
+  }
+
+  return [nextChat, ...chats.filter((chat) => chat.id !== update.id)].sort(
+    (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+  )
 }
 
 export const defaultChats: ChatListItemData[] = [

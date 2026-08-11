@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getAdminSession } from "@/lib/server/admin-auth"
 import {
   DatabaseNotConfiguredError,
+  deleteChatRoom,
   ensureChatRoom,
   getChatRooms,
   updateChatRoomName,
@@ -93,6 +94,22 @@ export async function PATCH(request: Request) {
       characterName,
     })
     return NextResponse.json({ room })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function DELETE(request: Request) {
+  const session = await getAdminSession()
+  if (!session) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 })
+
+  const body = await request.json().catch(() => null) as { roomId?: unknown } | null
+  const roomId = getRoomId(body?.roomId)
+  if (!roomId) return NextResponse.json({ error: "올바른 채팅방 ID가 필요합니다." }, { status: 400 })
+
+  try {
+    const deleted = await deleteChatRoom({ accountId: session.accountId, roomId })
+    return NextResponse.json({ deleted })
   } catch (error) {
     return errorResponse(error)
   }

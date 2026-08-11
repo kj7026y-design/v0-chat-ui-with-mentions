@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   STORYCHAT_CHAT_PERSONAS_KEY,
   getChatPersonaId,
+  resolveChatPersonaSelection,
   saveChatPersonaId,
 } from "../lib/storychat-storage"
 
@@ -56,4 +57,30 @@ test("saving a chat persona recovers from malformed stored data", () => {
       value: originalWindow,
     })
   }
+})
+
+test("an existing chat inherits the work persona when no chat selection was stored", () => {
+  assert.deepEqual(resolveChatPersonaSelection({
+    persistedPersonaId: "",
+    workPersonaId: "author-persona",
+    defaultPersonaId: "default-persona",
+    availablePersonaIds: ["author-persona", "default-persona"],
+    hasExistingConversation: true,
+  }), {
+    personaId: "author-persona",
+    inherited: true,
+  })
+})
+
+test("a new chat without a stored selection still requests persona selection", () => {
+  assert.deepEqual(resolveChatPersonaSelection({
+    persistedPersonaId: "",
+    workPersonaId: "author-persona",
+    defaultPersonaId: "default-persona",
+    availablePersonaIds: ["author-persona", "default-persona"],
+    hasExistingConversation: false,
+  }), {
+    personaId: "",
+    inherited: false,
+  })
 })

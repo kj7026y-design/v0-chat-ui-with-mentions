@@ -65,7 +65,9 @@ import {
   defaultChats,
   getChatDisplayName,
   getChatList,
+  reconcileChatListWithStoryWorks,
   saveChatList,
+  upsertChatListItem,
   type ChatListItemData,
 } from "@/lib/chat-list-storage";
 import { ensureChatRoom } from "@/lib/chat-room-client";
@@ -100,6 +102,8 @@ import {
   defaultLibrary,
   getChatPersonaId,
   getStoryChatLibrary,
+  resolveChatWorkId,
+  resolveChatPersonaSelection,
   saveChatPersonaId,
   saveStoryChatLibrary,
   normalizeIntroScenarios,
@@ -144,7 +148,6 @@ function getTransparentChatThemeBackground(backgroundColor: string) {
 }
 
 const CHARACTER_NAME = "이무기";
-const CHARACTER_EMOJI = "🐉";
 const AUTO_IMAGE_GENERATION_CHANCE = 0;
 const AUTO_IMAGE_GENERATION_LIMIT = 3;
 const AUTO_ADVANCE_MODEL_CONTENT = `[System: 사용자가 새 행동이나 대사를 입력하지 않고 침묵하고 있습니다. 직전 장면의 확정 상태를 유지한 채 캐릭터의 행동이나 다음 대사로 스토리를 자연스럽게 한 단계 이어가세요. 사용자의 새 행동, 대사, 감정, 동의나 반응을 대신 만들지 마세요.]`;
@@ -497,6 +500,7 @@ export default function ChatPage() {
     defaultChats.find((chat) => chat.id === chatId) ?? null,
   );
   const [isHistoryLoading, setIsHistoryLoading] = useState(true);
+  const [loadedHistoryChatId, setLoadedHistoryChatId] = useState<string | null>(null);
   const [isLoadingOlderHistory, setIsLoadingOlderHistory] = useState(false);
   const [isHistoryPersistenceEnabled, setIsHistoryPersistenceEnabled] =
     useState(false);
@@ -523,17 +527,59 @@ export default function ChatPage() {
     activeSearchResultIndex >= 0
       ? searchResultIds[activeSearchResultIndex]
       : undefined;
-  const characterName = chatMeta?.characterName ?? CHARACTER_NAME;
-  const roomName = chatMeta ? getChatDisplayName(chatMeta) : characterName;
-  const characterEmoji = chatMeta?.characterEmoji ?? CHARACTER_EMOJI;
+  const storedCharacterName = chatMeta?.characterName;
+  const resolvedWorkId = resolveChatWorkId(chatId);
+  const directWork = library.works.find((work) => work.id === resolvedWorkId);
+  const isWorkChatId =
+    Boolean(directWork) ||
+    resolvedWorkId !== chatId ||
+    /^w\d+$/u.test(chatId) ||
+    chatId.startsWith("work-");
   const currentWork =
-    library.works.find((work) => work.id === chatId) ??
-    library.works.find((work) => {
-      const character = library.characters.find(
-        (item) => item.id === work.characterId,
-      );
-      return character?.name === characterName;
-    });
+    directWork ??
+    (!isWorkChatId && storedCharacterName
+      ? library.works.find((work) => {
+          const character = library.characters.find(
+            (item) => item.id === work.characterId,
+          );
+          return character?.name === (storedCharacterName ?? CHARACTER_NAME);
+        })
+      : undefined);
+  const currentCharacter = currentWork
+    ? library.characters.find(
+        (character) => character.id === currentWork.characterId,
+      )
+    : !isWorkChatId
+      ? library.characters.find(
+        (character) => character.name === (storedCharacterName ?? CHARACTER_NAME),
+      )
+      : undefined;
+  const characterName =
+    currentCharacter?.name ?? storedCharacterName ?? "캐릭터";
+  const characterEmoji =
+    currentCharacter?.emoji ?? chatMeta?.characterEmoji ?? "💬";
+  const chatLibraryIdentityKey = useMemo(
+    () =>
+      [
+        ...library.works.map((work) => `${work.id}:${work.characterId}`),
+        ...library.characters.map(
+          (character) => `${character.id}:${character.name}:${character.emoji}`,
+        ),
+      ].join("|"),
+    [library.characters, library.works],
+  );
+  const cachedRoomName = chatMeta ? getChatDisplayName(chatMeta) : "";
+  const isAutomaticCachedRoomName =
+    chatMeta?.roomNameCustomized !== true &&
+    Boolean(
+      cachedRoomName &&
+      (cachedRoomName === chatMeta?.characterName ||
+        library.characters.some((character) => character.name === cachedRoomName)),
+    );
+  const roomName =
+    currentCharacter && isAutomaticCachedRoomName
+      ? characterName
+      : cachedRoomName || characterName;
   const canEditCurrentWork =
     !isAccountSessionLoading && canEditStoryWork(currentWork, accountSession);
 
@@ -569,11 +615,6 @@ export default function ChatPage() {
   const currentWorld = currentWork
     ? library.worlds.find((world) => world.id === currentWork.worldId)
     : undefined;
-  const currentCharacter = currentWork
-    ? library.characters.find(
-        (character) => character.id === currentWork.characterId,
-      )
-    : library.characters.find((character) => character.name === characterName);
   const currentPersona = currentWork
     ? library.personas.find((persona) => persona.id === selectedChatPersonaId)
     : undefined;
@@ -582,16 +623,54 @@ export default function ChatPage() {
     if (!currentWork) return;
 
     const persistedPersonaId = getChatPersonaId(chatId);
-    setSelectedChatPersonaId(persistedPersonaId);
-    if (
-      !persistedPersonaId ||
-      !library.personas.some((persona) => persona.id === persistedPersonaId)
-    ) {
-      setIsPersonaModalOpen(true);
-    } else {
+    const availablePersonaIds = library.personas.map((persona) => persona.id);
+    const persistedSelection = resolveChatPersonaSelection({
+      persistedPersonaId,
+      workPersonaId: currentWork.personaId,
+      defaultPersonaId: defaultLibrary.personas[0]?.id,
+      availablePersonaIds,
+      hasExistingConversation: false,
+    });
+    if (persistedSelection.personaId) {
+      setSelectedChatPersonaId(persistedSelection.personaId);
       setIsPersonaModalOpen(false);
+      return;
     }
-  }, [chatId, currentWork, library.personas]);
+
+    if (loadedHistoryChatId !== chatId) {
+      setSelectedChatPersonaId("");
+      setIsPersonaModalOpen(false);
+      return;
+    }
+
+    const hasExistingConversation =
+      messages.length > 0 ||
+      Boolean(
+        chatMeta?.lastMessage &&
+        chatMeta.lastMessage !== "대화를 시작해 보세요.",
+      );
+    const resolvedSelection = resolveChatPersonaSelection({
+      persistedPersonaId,
+      workPersonaId: currentWork.personaId,
+      defaultPersonaId: defaultLibrary.personas[0]?.id,
+      availablePersonaIds,
+      hasExistingConversation,
+    });
+    setSelectedChatPersonaId(resolvedSelection.personaId);
+    if (resolvedSelection.personaId) {
+      saveChatPersonaId(chatId, resolvedSelection.personaId);
+      setIsPersonaModalOpen(false);
+    } else {
+      setIsPersonaModalOpen(true);
+    }
+  }, [
+    chatId,
+    chatMeta?.lastMessage,
+    currentWork,
+    library.personas,
+    loadedHistoryChatId,
+    messages.length,
+  ]);
 
   const handlePersonaSelectedInChat = (
     personaId: string,
@@ -904,6 +983,7 @@ export default function ChatPage() {
 
     setMessages([]);
     setIsHistoryLoading(true);
+    setLoadedHistoryChatId(null);
     setIsLoadingOlderHistory(false);
     setIsHistoryPersistenceEnabled(false);
     setIsRestoredGenerationPending(false);
@@ -953,7 +1033,10 @@ export default function ChatPage() {
       } catch (error) {
         if (!cancelled) reportHistoryError(error);
       } finally {
-        if (!cancelled) setIsHistoryLoading(false);
+        if (!cancelled) {
+          setIsHistoryLoading(false);
+          setLoadedHistoryChatId(chatId);
+        }
       }
     };
 
@@ -1359,26 +1442,102 @@ export default function ChatPage() {
   }, [chatId]);
 
   useEffect(() => {
+    const storedChats = getChatList();
+    const chats = reconcileChatListWithStoryWorks(storedChats, library);
+    const existing = chats.find((chat) => chat.id === chatId);
+    const nextChats = upsertChatListItem(chats, {
+      id: chatId,
+      characterName,
+      characterEmoji,
+    });
+    const nextChatMeta = nextChats.find((chat) => chat.id === chatId) ?? null;
+
+    setChatMeta(nextChatMeta);
+    if (
+      !existing ||
+      chats !== storedChats ||
+      existing.characterName !== characterName ||
+      existing.characterEmoji !== characterEmoji
+    ) {
+      saveChatList(nextChats);
+    }
+  }, [characterEmoji, characterName, chatId, chatLibraryIdentityKey]);
+
+  useEffect(() => {
     let cancelled = false;
 
     void ensureChatRoom(chatId, characterName)
       .then((room) => {
         if (cancelled || !room) return;
-        const chats = getChatList();
-        const nextChats = chats.map((chat) =>
-          chat.id === chatId ? { ...chat, roomName: room.roomName } : chat,
-        );
+        const chats = reconcileChatListWithStoryWorks(getChatList(), library);
+        const existing = chats.find((chat) => chat.id === chatId);
+        const resolvedRoomCharacterName =
+          currentCharacter?.name ||
+          (room.characterName && room.characterName !== "캐릭터"
+            ? room.characterName
+            : characterName);
+        const isAutomaticServerRoomName =
+          existing?.roomNameCustomized !== true &&
+          (room.roomName === room.characterName ||
+            library.characters.some((character) => character.name === room.roomName));
+        const nextChats = upsertChatListItem(chats, {
+          id: chatId,
+          characterName: resolvedRoomCharacterName,
+          characterEmoji:
+            currentCharacter?.emoji || existing?.characterEmoji || characterEmoji,
+          roomName: isAutomaticServerRoomName
+            ? resolvedRoomCharacterName
+            : room.roomName,
+          roomNameCustomized: existing?.roomNameCustomized,
+          lastMessage: room.lastMessage,
+          timestamp: room.lastMessageAt ? new Date(room.lastMessageAt) : undefined,
+          isGenerating: room.isGenerating === true,
+        });
         saveChatList(nextChats);
-        setChatMeta((current) =>
-          current ? { ...current, roomName: room.roomName } : current,
-        );
+        setChatMeta(nextChats.find((chat) => chat.id === chatId) ?? null);
       })
       .catch(() => undefined);
 
     return () => {
       cancelled = true;
     };
-  }, [characterName, chatId]);
+  }, [characterEmoji, characterName, chatId, chatLibraryIdentityKey]);
+
+  useEffect(() => {
+    if (isHistoryLoading) return;
+    const latestMessage = messages.findLast(
+      (message) =>
+        (message.type === "user" || message.type === "ai") &&
+        !message.commandId &&
+        message.status !== "pending" &&
+        message.status !== "streaming" &&
+        (Boolean(message.content.trim()) || Boolean(message.imageUrl)),
+    );
+    if (!latestMessage) return;
+
+    const preview = latestMessage.content.trim().replace(/\s+/g, " ") || "사진"
+    const timestamp = latestMessage.timestamp instanceof Date
+      ? latestMessage.timestamp
+      : new Date(latestMessage.timestamp)
+    const chats = getChatList();
+    const existing = chats.find((chat) => chat.id === chatId);
+    if (
+      existing?.lastMessage === preview &&
+      existing.timestamp.getTime() === timestamp.getTime()
+    ) {
+      return;
+    }
+
+    const nextChats = upsertChatListItem(chats, {
+      id: chatId,
+      characterName,
+      characterEmoji,
+      lastMessage: preview,
+      timestamp: Number.isNaN(timestamp.getTime()) ? new Date() : timestamp,
+    });
+    saveChatList(nextChats);
+    setChatMeta(nextChats.find((chat) => chat.id === chatId) ?? null);
+  }, [characterEmoji, characterName, chatId, isHistoryLoading, messages]);
 
   // --- Core send flow (uses chat-engine; easy to swap for real API) ---
   const handleSendMessage = async (
