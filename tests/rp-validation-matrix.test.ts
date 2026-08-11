@@ -68,6 +68,7 @@ function makeContext({
   maxChars = 800,
   regenerationAvoidContent = "",
   redZoneEnabled = true,
+  comedicPacing = false,
 }: {
   messages?: Array<{ role: "user" | "assistant"; content: string }>
   background?: string
@@ -76,6 +77,7 @@ function makeContext({
   maxChars?: number
   regenerationAvoidContent?: string
   redZoneEnabled?: boolean
+  comedicPacing?: boolean
 } = {}) {
   return compileRoleplayContext(
     {
@@ -83,6 +85,7 @@ function makeContext({
       userName: "김여자",
       background,
       characterSetting,
+      comedicPacing,
     },
     messages ?? [
       { role: "assistant", content: "강태현은 창가에서 몸을 돌렸다." },
@@ -309,6 +312,10 @@ test("rule-based validators detect every locally deterministic failure", () => {
     futureClosure: {
       output: `${CLEAN_OUTPUT}\n\n두 사람의 관계는 이것으로 끝이었다.`,
       context: makeContext(),
+    },
+    overexplainedHumor: {
+      output: `${CLEAN_OUTPUT}\n\n\"복장과 배포 성공률은 유의미한 상관관계를 보입니다. 아직 학계의 정설은 아니지만 교차 검증이 필요합니다.\"`,
+      context: makeContext({ comedicPacing: true }),
     },
     internalTokenLeak: {
       output: `${CLEAN_OUTPUT}\n\nscene_state를 확인했다.`,

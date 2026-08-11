@@ -21,6 +21,7 @@ import {
 } from "@/lib/generation-runs"
 import { buildModelBackground } from "@/lib/model-background"
 import { buildModelUserMessageFromInput } from "@/lib/rp-input-parser"
+import { isHumorCategoryContext } from "@/lib/rp/prompt/humor-style"
 import {
   buildAudienceReactionContent,
   buildAiPhoneCommandContent,
@@ -787,8 +788,12 @@ function buildDynamicPromptContext(
     status?.currentChapterTitle ? `현재 장면: ${status.currentChapterTitle}` : "",
     status?.currentMission || currentGoalForModel ? `현재 갈등: ${status?.currentMission || currentGoalForModel}` : "",
   ].filter(Boolean).slice(0, 3).join(" / ")
-  const comedicPacing = character?.genre === "유머" ||
-    (character?.tags?.some((tag) => ["드립", "개그", "코미디"].includes(tag)) ?? false)
+  const comedicPacing = isHumorCategoryContext({
+    workGenre: work?.genre,
+    worldGenre: world?.genre,
+    characterGenre: character?.genre,
+    characterTags: character?.tags,
+  })
 
   return {
     characterName,

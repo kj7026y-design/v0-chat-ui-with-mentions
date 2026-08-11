@@ -11,6 +11,7 @@ export const ROLEPLAY_VALIDATION_FAILURE_KEYS = [
   "lowContentDensity",
   "excessiveAbstractMood",
   "characterVoiceWeak",
+  "overexplainedHumor",
   "userControlByNarration",
   "controlsUser",
   "contractClosureBias",

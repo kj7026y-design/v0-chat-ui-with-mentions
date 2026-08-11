@@ -25,6 +25,7 @@ export const DEFAULT_VALIDATION_SEVERITY: Record<ValidationFailureKey, Validatio
   lowContentDensity: "repairable",
   excessiveAbstractMood: "repairable",
   characterVoiceWeak: "repairable",
+  overexplainedHumor: "repairable",
   tooShort: "repairable",
   tooLong: "repairable",
 }
