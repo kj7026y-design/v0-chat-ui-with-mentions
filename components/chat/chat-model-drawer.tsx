@@ -10,7 +10,7 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
-import { CHAT_MODELS, type ChatModelId } from "@/lib/chat-models"
+import { SELECTABLE_CHAT_MODELS, type ChatModelId } from "@/lib/chat-models"
 import { cn } from "@/lib/utils"
 
 interface ChatModelDrawerProps {
@@ -62,7 +62,7 @@ export function ChatModelDrawer({
         </DrawerHeader>
 
         <div className="space-y-2 overflow-y-auto px-5 pb-5 pt-2">
-          {CHAT_MODELS.map((model) => {
+          {SELECTABLE_CHAT_MODELS.map((model) => {
             const selected = selectedModelId === model.id
             return (
               <button

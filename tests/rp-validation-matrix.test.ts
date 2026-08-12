@@ -168,6 +168,7 @@ test("terminal output policy is explicit for every validation failure", () => {
     "brokenDialogueQuotes",
     "providerRefusal",
     "degenerateOutput",
+    "overexplainedHumor",
     "tooLong",
     "incompleteEnding",
   ])

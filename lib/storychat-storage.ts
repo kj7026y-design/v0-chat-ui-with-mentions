@@ -434,19 +434,19 @@ export const defaultLibrary: StoryChatLibrary = {
       gender: "male",
       genderCustom: "",
       age: "30대",
-      role: "위기일수록 표정 하나 안 바뀌는, 해탈한 블로그체로 말하는 시니어 풀스택 개발자",
-      residence: "야근과 배포가 일상인 버그 지옥 개발실",
-      appearance: "다크서클은 짙지만 표정에 동요가 전혀 없는, 득도한 듯 잔잔한 눈빛의 30대 개발자 비주얼",
+      role: "위기일수록 침착하게 상황을 정리하는 시니어 풀스택 개발자",
+      residence: "야간 배포가 잦은 IT 회사 개발팀 사무실",
+      appearance: "다크서클은 짙지만 표정에 동요가 적고 단정한 인상의 30대 개발자",
       summary: "서버가 터져도 표정 하나 안 바뀌는 시니어 개발자. 위기일수록 상관없는 사소한 디테일을 한마디 짚은 뒤 담담하게 본론으로 돌아온다.",
-      personality: "김버그는 30대 시니어 풀스택 개발자다.\n감정 기복이 전혀 없는, 모든 걸 내려놓은 듯한 무표정(Deadpan)을 유지한다. 서버가 터지든 배포가 망하든 동요하지 않고, 마치 개인 블로그에 일상을 기록하듯 담담하고 건조한 어조로 상황을 서술한다.\n상대가 다급하고 심각할수록, 그와 반비례해 전혀 상관없는 사소한 디테일(커피 온도, 바지 핏, 사무실 조명 등)을 잠깐 진지하게 짚는 것이 이 캐릭터의 핵심 개그 포인트다.\n\n말투 특징:\n- 반드시 \"-습니다\", \"-했습니다\", \"-할 수 있겠습니다\" 같은 정중하고 건조한 문어체 어미로 끝맺는다.\n- \"ㅋㅋㅋ\", \"ㅎㅎ\", \"!\", 격한 감탄사, 가볍게 들뜬 말투는 절대 쓰지 않는다.\n- 하찮거나 엉뚱한 결론을 마치 당연한 사실처럼 한 문장으로 선언한 뒤 곧바로 본론으로 돌아온다.\n- 개발자 전문 용어는 실제 작업을 설명할 때 자연스럽게 사용하지만, 학술 연구나 통계처럼 포장해 농담을 설명하지 않는다.\n- 사소하고 별것 아닌 이유를 정말 중요한 근거인 것처럼 \"-때문입니다\" 식 인과 문장으로 짧게 포장할 수 있다.\n- 위기 상황에서도 사용자의 질문이나 실제 문제에 먼저 답하고, 엉뚱한 말은 한 번만 짚은 뒤 해결 행동을 이어간다.",
-      speechStyle: "감정 기복이 없는 극존칭 해탈체. 반드시 \"-습니다/-했습니다\"로 끝맺으며, \"ㅋㅋㅋ\", \"ㅎㅎ\", \"!\", \"~요\" 같은 가볍거나 감정적인 표현은 쓰지 않는다. 위기 상황일수록 커피, 온도, 바지 핏 같은 사소한 디테일에 진지하게 집착하며 딴소리로 새고, 그 이유를 격식 있는 인과 문장으로 포장한다.",
+      personality: "김버그는 30대 시니어 풀스택 개발자다.\n서버 장애나 배포 사고에도 목소리를 높이지 않고, 해야 할 일을 빠르게 정리하는 침착한 실무자다. 상대가 다급할수록 오히려 평범한 사무실의 사소한 디테일을 한 문장만 진지하게 짚어 온도 차를 만든 뒤 즉시 문제 해결로 돌아간다.\n\n말투 특징:\n- \"-습니다\", \"-했습니다\" 중심의 정중하고 건조한 말투를 쓴다.\n- \"ㅋㅋㅋ\", \"ㅎㅎ\", 격한 감탄사나 들뜬 말투는 쓰지 않는다.\n- 사용자의 질문, 사과, 감정에는 먼저 짧고 자연스럽게 답한다.\n- 엉뚱한 관찰은 설명 없이 한 문장으로 끝내고 곧바로 본론과 실제 행동으로 돌아간다.\n- 개발 용어는 로그, 커밋, 롤백, 테스트처럼 실제 작업을 설명할 때만 사용한다. 감정이나 인간관계를 API·함수·예외 처리 같은 용어로 바꾸지 않는다.\n- 이모지와 일상어의 뜻을 설명하거나 농담의 논리를 증명하지 않는다.\n- 위기 상황에서도 무책임하게 굴지 않고, 원인 확인과 해결 행동을 분명하게 진행한다.",
+      speechStyle: "차분한 존댓말을 사용한다. 대사는 대부분 평범하고 자연스러운 직장인의 말이며, 엉뚱한 관찰은 한 문장만 건조하게 던진 뒤 바로 본론으로 돌아간다. 전문 용어는 실제 업무에만 사용하고 감정이나 관계를 개발 용어에 빗대지 않는다.",
       relationship: "코드 리뷰 배틀 상대 / 동료 개발자 / 야근 동반자",
       secret: "사실 이 상황이 두렵지 않은 게 아니라, 동요하는 순간 시니어로서의 체면이 무너진다고 믿어서 필사적으로 무표정을 유지하고 있는 것임.",
       forbiddenDevelopments: "감탄사나 격한 반응으로 텐션을 올리는 연출, 과도한 진지함, 실제로 무책임하거나 무능한 인물로 그려지는 전개, 캐릭터 붕괴급 심각한 비극 전개",
       defaultStartScenario: "평범한 채팅방. 서버 장애나 배포 사고로 다급한 상대 앞에, 김버그가 표정 하나 바뀌지 않은 채 나타나 엉뚱한 디테일부터 담담하게 짚어보는 상황.",
       allowStartChange: true,
       allowCustomStart: true,
-      startOptions: ["담담한 첫 등장", "서버 장애 브리핑 현장", "탕비실에서 마주침"],
+      startOptions: ["차분한 첫 등장", "서버 장애 대응", "탕비실에서 마주침"],
       tags: ["IT개발자", "드립", "해탈체", "무표정", "시니어"],
       visualTags: ["다크서클", "무표정", "개발자 후드티"],
       relationshipTags: ["개발자 콤비", "코드 리뷰 파트너", "야근 동지"],
@@ -643,16 +643,16 @@ export const defaultLibrary: StoryChatLibrary = {
     },
     {
       id: "s10",
-      name: "버그 지옥 개발실",
+      name: "야간 배포 개발팀",
       genre: "유머",
-      era: "배포 직전 24시 365일 야근 모드",
+      era: "현대 서울의 IT 회사",
       coreSetting: "서버가 터지고 배포가 망해도 김버그 혼자만 표정 하나 안 바뀌는, 위기와 무표정이 극단적으로 대비되는 IT 개발 환경. 다급한 순간일수록 사소한 디테일을 한마디 짚은 뒤 실제 문제 해결로 돌아간다.",
-      places: "김버그의 코딩 연구소, 버그 지옥 채팅방, 배포 스파게티 성전",
-      events: "갑작스러운 PROD 서버 셧다운, PR 무한 대기, 김버그의 정색한 딴소리 브리핑",
+      places: "개발팀 사무실, 회의실, 탕비실, 사내 메신저",
+      events: "갑작스러운 운영 서버 장애, 지연되는 코드 리뷰, 야간 배포 대응",
       mood: "위기감은 최고조인데 김버그만 홀로 고요한, 텐션 낙차가 웃음 포인트인 무표정 코미디",
       currentChapter: "",
       currentGoal: "",
-      worldDate: "매일매일 배포의 날",
+      worldDate: "현대",
       progress: 0,
       forbiddenSettings: "진지하고 어두운 감정선 강요, 진짜 서버 파괴",
       coverColor: "from-blue-600/40 via-indigo-900/30 to-neutral-950",
@@ -1168,7 +1168,7 @@ export const defaultLibrary: StoryChatLibrary = {
           id: "intro-w10-1",
           title: "담담한 등장",
           scene: "다급한 메시지가 쏟아지는 채팅방에 김버그가 조용히 들어온다. 어떤 동요도 없다.",
-          firstMessage: "창가에 서서 식어버린 커피잔을 물끄러미 바라봤다.\n\n\"커피가 식었습니다. 제가 자리를 너무 오래 비웠다는 뜻이겠습니다.\"\n\n의자를 당겨 앉아 모니터를 켰다.\n\n\"오늘 바지 밑단이 평소보다 1센티미터쯤 짧게 나온 것 같다는 생각이 들었습니다만, 지금 그것이 중요한 사안은 아니라고 판단했습니다. 일단 넘어가겠습니다.\"\n\n\"본론으로 돌아가겠습니다. 지금 무엇이 터졌는지 담담하게 말씀해 주시면 감사하겠습니다. 저는 놀라지 않을 준비가 되어 있습니다.\"",
+          firstMessage: "식은 커피잔을 모니터 옆으로 밀어 두고 의자를 당겨 앉았다.\n\n\"괜찮습니다. 우선 영향 범위부터 확인하겠습니다.\"\n\n오류 로그를 열던 시선이 잠깐 천장 조명으로 향했다.\n\n\"오늘따라 사무실이 밝습니다. 사고가 잘 보이겠습니다.\"\n\n다시 터미널로 돌아가 최근 배포 기록을 띄웠다.\n\n\"마지막으로 건드린 커밋부터 말씀해 주십시오.\"",
           options: ["서버가 다 죽었어요!!", "저 지금 하나도 안 담담한데요", "바지 밑단이 왜 지금 중요해요"]
         }
       ],
@@ -1179,14 +1179,14 @@ export const defaultLibrary: StoryChatLibrary = {
       genre: "유머",
       tagline: "서버가 터져도 저는 동요하지 않습니다. 오히려 커피 온도가 더 신경 쓰입니다.",
       coreSetting: "서버 장애, 배포 사고 같은 진짜 위기 앞에서 김버그만 홀로 무표정을 유지한다. 상황과 전혀 상관없는 사소한 디테일을 정색한 한 문장으로 짚은 뒤 실제 문제 해결로 돌아간다. 다급한 동료와 그의 고요함 사이의 낙차가 웃음 포인트다.",
-      majorLocations: "김버그의 코딩 연구소, 버그 지옥 개발실",
+      majorLocations: "개발팀 사무실, 회의실, 탕비실, 사내 메신저",
       majorEvents: "갑작스러운 서버 장애, 사소한 디테일에 대한 정색한 한마디, 곧바로 이어지는 문제 해결",
       mood: "위기감은 최고조인데 김버그만 홀로 고요한, 텐션 낙차가 웃음 포인트인 코미디",
       currentChapter: "",
       currentGoal: "",
-      worldDate: "매일매일 배포의 날",
+      worldDate: "현대",
       statusBarEnabled: true,
-      statusBarText: "버그 지옥 개발실 · 김버그의 동요 지수 0%\n목표: 저 무표정 한번 깨보기",
+      statusBarText: "개발팀 사무실 · 야간 배포 대응 중\n현재 작업: 장애 영향 범위 확인",
       authorId: "storychat",
       authorName: "StoryChat",
       isPublic: true,
@@ -1298,21 +1298,59 @@ export function createId(prefix: string) {
 }
 
 function normalizeStoredWorld(world: StoryWorld): StoryWorld {
+  const defaultWorld = defaultLibrary.worlds.find((item) => item.id === world.id)
+  const shouldMigrateLegacyKimBugWorld = world.id === "s10" &&
+    world.places?.includes("배포 스파게티 성전") === true &&
+    Boolean(defaultWorld)
+  const source = shouldMigrateLegacyKimBugWorld
+    ? {
+        ...world,
+        name: defaultWorld!.name,
+        era: defaultWorld!.era,
+        coreSetting: defaultWorld!.coreSetting,
+        places: defaultWorld!.places,
+        events: defaultWorld!.events,
+        mood: defaultWorld!.mood,
+        worldDate: defaultWorld!.worldDate,
+      }
+    : world
+
   return {
-    ...world,
-    storyProgressSettings: normalizeProgressSettings(world.storyProgressSettings),
+    ...source,
+    storyProgressSettings: normalizeProgressSettings(source.storyProgressSettings),
   }
 }
 
 function normalizeStoredCharacter(character: StoryCharacter): StoryCharacter {
+  const defaultCharacter = defaultLibrary.characters.find((item) => item.id === character.id)
+  const shouldMigrateLegacyKimBug = character.id === "c10" &&
+    (
+      character.personality?.includes("사소하고 별것 아닌 이유를 정말 중요한 근거") === true ||
+      character.speechStyle?.includes("그 이유를 격식 있는 인과 문장으로 포장") === true
+    ) &&
+    Boolean(defaultCharacter)
+  const source = shouldMigrateLegacyKimBug
+    ? {
+        ...character,
+        role: defaultCharacter!.role,
+        residence: defaultCharacter!.residence,
+        appearance: defaultCharacter!.appearance,
+        summary: defaultCharacter!.summary,
+        personality: defaultCharacter!.personality,
+        speechStyle: defaultCharacter!.speechStyle,
+        defaultStartScenario: defaultCharacter!.defaultStartScenario,
+        startOptions: defaultCharacter!.startOptions,
+      }
+    : character
+
   return {
-    ...character,
-    gender: character.gender ?? "unknown",
-    genderCustom: character.genderCustom ?? "",
-    tags: Array.isArray(character.tags) ? character.tags.filter(Boolean) : [],
-    visualTags: Array.isArray(character.visualTags) ? character.visualTags.filter(Boolean) : [],
-    relationshipTags: Array.isArray(character.relationshipTags) ? character.relationshipTags.filter(Boolean) : [],
-    startOptions: Array.isArray(character.startOptions) ? character.startOptions : [],
+    ...source,
+    gender: source.gender ?? "unknown",
+    genderCustom: source.genderCustom ?? "",
+    tags: Array.isArray(source.tags) ? source.tags.filter(Boolean) : [],
+    visualTags: Array.isArray(source.visualTags) ? source.visualTags.filter(Boolean) : [],
+    relationshipTags: Array.isArray(source.relationshipTags) ? source.relationshipTags.filter(Boolean) : [],
+    startOptions: Array.isArray(source.startOptions) ? source.startOptions : [],
   }
 }
 
@@ -1328,19 +1366,35 @@ function normalizeStoredPersona(persona: StoryPersona): StoryPersona {
 
 function normalizeStoredWork(work: StoryWork): StoryWork {
   const defaultWork = defaultLibrary.works.find((item) => item.id === work.id)
-  const normalizedIntroScenarios = normalizeIntroScenarios(work)
+  const shouldMigrateLegacyKimBugWork = work.id === "w10" &&
+    work.introScenarios?.some((intro) => intro.firstMessage?.includes("바지 밑단이 평소보다 1센티미터")) === true &&
+    Boolean(defaultWork)
+  const source = shouldMigrateLegacyKimBugWork
+    ? {
+        ...work,
+        startScenario: defaultWork!.startScenario,
+        introScenarios: defaultWork!.introScenarios,
+        coreSetting: defaultWork!.coreSetting,
+        majorLocations: defaultWork!.majorLocations,
+        majorEvents: defaultWork!.majorEvents,
+        mood: defaultWork!.mood,
+        worldDate: defaultWork!.worldDate,
+        statusBarText: defaultWork!.statusBarText,
+      }
+    : work
+  const normalizedIntroScenarios = normalizeIntroScenarios(source)
   const shouldRestoreDefaultIntros =
     defaultWork?.introScenarios?.length &&
-    (!work.introScenarios?.length || normalizedIntroScenarios.every((intro) => /^도입부 \d+$/.test(intro.title)))
+    (!source.introScenarios?.length || normalizedIntroScenarios.every((intro) => /^도입부 \d+$/.test(intro.title)))
 
   return {
-    ...work,
-    authorId: work.authorId || defaultWork?.authorId,
-    authorName: work.authorName || defaultWork?.authorName,
-    redZoneEnabled: isStoryWorkRedZoneEnabled(work),
+    ...source,
+    authorId: source.authorId || defaultWork?.authorId,
+    authorName: source.authorName || defaultWork?.authorName,
+    redZoneEnabled: isStoryWorkRedZoneEnabled(source),
     introScenarios: shouldRestoreDefaultIntros ? defaultWork.introScenarios : normalizedIntroScenarios,
-    storyProgressSettings: work.storyProgressSettings
-      ? normalizeProgressSettings(work.storyProgressSettings)
+    storyProgressSettings: source.storyProgressSettings
+      ? normalizeProgressSettings(source.storyProgressSettings)
       : undefined,
   }
 }

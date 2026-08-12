@@ -5,6 +5,7 @@ import {
   MAX_REPLY_CREDIT_COST,
   MIN_REPLY_CREDIT_COST,
   REPLY_CREDIT_COSTS,
+  SELECTABLE_CHAT_MODELS,
   getChatModelConfig,
   normalizeChatModelId,
 } from "../lib/chat-models"
@@ -67,6 +68,17 @@ test("chat model metadata describes output style without legacy unshaped labels"
     ],
   )
   assert.equal(JSON.stringify(CHAT_MODELS).includes("언셰이프"), false)
+})
+
+test("Command R remains backward compatible but is hidden from the model picker", () => {
+  assert.equal(
+    SELECTABLE_CHAT_MODELS.some((model) => model.id === "cohere/command-r-plus-08-2024"),
+    false,
+  )
+  assert.equal(
+    getChatModelConfig("cohere/command-r-plus-08-2024").label,
+    "Command R+",
+  )
 })
 
 test("reply credit costs follow provider price order within the 20 to 110 range", () => {

@@ -147,6 +147,10 @@ export const CHAT_MODELS: ChatModelConfig[] = [
   },
 ]
 
+export const SELECTABLE_CHAT_MODELS = CHAT_MODELS.filter(
+  (model) => model.id !== "cohere/command-r-plus-08-2024",
+)
+
 export const DEFAULT_CHAT_MODEL_ID: ChatModelId = "free"
 export const CHAT_MODEL_SETTINGS_KEY = "storychat_chat_model_settings"
 

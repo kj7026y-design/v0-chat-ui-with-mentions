@@ -12,6 +12,7 @@ import {
   getChatModelConfig,
   type ChatModelId,
 } from "@/lib/chat-models"
+import { buildClientChatPayloadMessages } from "@/lib/chat-payload-security"
 import {
   saveGenerationRun,
   type GenerationProviderOutcome,
@@ -1132,9 +1133,8 @@ async function generatePollinationsReply(
   const messages = cleanChatHistory(buildAssistantMessages(history, userContent, introContext, context, modelId, options.sceneState))
   const bypassRoleplayRules = process.env.NODE_ENV !== "production" && options.bypassRoleplayRules === true
   const debugRawRoleplayStream = process.env.NODE_ENV !== "production" && options.debugRawRoleplayStream === true
-  const outboundMessages = model.provider === "openrouter" && !bypassRoleplayRules
-    ? messages.filter((message) => message.role !== "system")
-    : messages
+  const exposePromptPayload = process.env.NODE_ENV !== "production"
+  const outboundMessages = buildClientChatPayloadMessages(messages)
   const systemPrompt = messages.find((message) => message.role === "system")?.content ?? buildAssistantSystemPrompt(context, modelId, introContext)
   const fallbackPrompt = messages
     .filter((message) => message.role !== "system")
@@ -1164,7 +1164,7 @@ async function generatePollinationsReply(
     debugRawRoleplayStream,
     answerLength: options.answerLength,
     ...promptContext,
-    ...(model.provider === "pollinations" ? { systemPrompt, fallbackPrompt } : {}),
+    ...(model.provider === "pollinations" && exposePromptPayload ? { systemPrompt, fallbackPrompt } : {}),
   }
   const response = await fetch("/api/chat", {
     method: "POST",
