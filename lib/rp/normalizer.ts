@@ -1,3 +1,5 @@
+// Legacy public shape retained for external callers of this facade. The
+// server pipeline's richer normalized turn types live separately in types.ts.
 export type NormalizedInputType = "dialogue" | "action" | "summary" | "mixed"
 export type NormalizedContactLevel = "none" | "near" | "touch"
 

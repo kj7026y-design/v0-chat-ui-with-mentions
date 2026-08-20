@@ -833,7 +833,8 @@ function buildAssistantMessages(
     CONTEXT_RECENT_TURN_LIMIT,
   )
 
-  // 2. 상태 고정 블록을 시스템 프롬프트 최하단에 추가
+  // 2. 레거시 클라이언트 프롬프트용 장면 참고 블록
+  // 운영 payload에서는 system 역할이 제거되고 서버가 정책을 다시 조립한다.
   const baseSystemPrompt = buildAssistantSystemPrompt(context, modelId, introContext)
   const pinnedStateBlock = buildPinnedStateBlock(sceneState)
   const systemPromptText = pinnedStateBlock
@@ -860,7 +861,7 @@ function buildAssistantMessages(
     messages.push(message)
   })
 
-  // 3. 프롬프트 주사기: 마지막 유저 메시지 직전에 리마인드 삽입
+  // 3. 로컬/레거시 장면 리마인더
   const characterName = context?.character?.name || context?.status?.characterName
   if (characterName || sceneState) {
     const reminder = buildInjectorReminder(characterName, sceneState)

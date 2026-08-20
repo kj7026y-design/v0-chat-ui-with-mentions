@@ -16,7 +16,7 @@ import {
   normalizeBody,
   runChatEventStream,
   runPlainChat,
-  runRoleplayPipeline,
+  runRoleplayPipelineFromNormalized,
 } from "@/lib/rp/pipeline"
 
 export const maxDuration = 180
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
     }
 
     if (roleplayEnabled) {
-      return await runRoleplayPipeline(body, model)
+      return await runRoleplayPipelineFromNormalized(normalizedBody, model)
     }
 
     if (process.env.NODE_ENV !== "production") {

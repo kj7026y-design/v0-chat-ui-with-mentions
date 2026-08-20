@@ -1,4 +1,11 @@
 import { NextResponse } from "next/server"
+import {
+  PROMPT_SECURITY_SAFE_FALLBACK,
+  SERVICE_INFO_PROTECTION_PROMPT,
+  containsProtectedPromptLeak,
+  preparePlainChatBoundary,
+  type PromptInjectionAssessment,
+} from "@/lib/prompt-security"
 
 interface ChatRequestBody {
   messages?: Array<{
@@ -12,6 +19,7 @@ interface ChatRequestBody {
 const FREE_TIER_INTERVAL_MS = 15_000
 const POLLINATIONS_TIMEOUT_MS = 45_000
 
+// ---------- Rate-limited provider queue ----------
 let nextAllowedPollinationsAt = 0
 let pollinationsQueue = Promise.resolve()
 
@@ -23,7 +31,8 @@ async function waitForFreeTierSlot() {
   const now = Date.now()
   const waitMs = Math.max(0, nextAllowedPollinationsAt - now)
   if (waitMs > 0) await wait(waitMs)
-  nextAllowedPollinationsAt = Date.now() + FREE_TIER_INTERVAL_MS
+  const intervalMs = process.env.NODE_ENV === "test" ? 0 : FREE_TIER_INTERVAL_MS
+  nextAllowedPollinationsAt = Date.now() + intervalMs
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -49,19 +58,53 @@ async function runQueued<T>(task: () => Promise<T>) {
   return run
 }
 
+// ---------- Shared output security gate ----------
+function safeFreeChatResponse(content: string, assessment: PromptInjectionAssessment) {
+  // Both Pollinations response paths end here; no provider output bypasses DLP.
+  if (!containsProtectedPromptLeak(content, {
+    requestedMarkers: assessment.requestedMarkers,
+    protectedTexts: [SERVICE_INFO_PROTECTION_PROMPT],
+  })) {
+    return NextResponse.json({ content })
+  }
+
+  console.warn("[free chat protected prompt leak blocked]", {
+    outputChars: Array.from(content).length,
+  })
+  return NextResponse.json({
+    content: PROMPT_SECURITY_SAFE_FALLBACK,
+    validation_status: "fallback",
+    validation_failures: ["protected-prompt-leak"],
+  })
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as ChatRequestBody | null
-  const messages = body?.messages?.filter((message) => message.content?.trim()) ?? []
-  const systemPrompt = body?.systemPrompt?.trim() || messages.find((message) => message.role === "system")?.content || ""
-  const fallbackPrompt = body?.fallbackPrompt?.trim() || messages
-    .filter((message) => message.role !== "system")
-    .map((message) => `${message.role}: ${message.content}`)
-    .join("\n\n")
+  // The shared boundary demotes legacy prompt fields, scans the full history,
+  // and keeps the server policy as the only system message.
+  const boundary = preparePlainChatBoundary({
+    messages: body?.messages,
+    systemPrompt: body?.systemPrompt,
+    fallbackPrompt: body?.fallbackPrompt,
+  })
+  const securityAssessment = boundary.assessment
+  if (securityAssessment.blocked) {
+    return NextResponse.json({
+      content: PROMPT_SECURITY_SAFE_FALLBACK,
+      validation_status: "fallback",
+      validation_failures: ["prompt-injection-blocked"],
+    })
+  }
+
+  const messages = boundary.messages
+  const systemPrompt = SERVICE_INFO_PROTECTION_PROMPT
+  const fallbackPrompt = boundary.fallbackPrompt
 
   if (messages.length === 0 && !fallbackPrompt) {
     return NextResponse.json({ error: "Missing messages" }, { status: 400 })
   }
 
+  // ---------- Primary and fallback provider calls ----------
   return runQueued(async () => {
     const postResponse = await withTimeout(fetch("https://text.pollinations.ai/openai?referrer=storychat-local", {
       method: "POST",
@@ -87,7 +130,7 @@ export async function POST(request: Request) {
         }>
       }
       const content = data.choices?.[0]?.message?.content?.trim()
-      if (content) return NextResponse.json({ content })
+      if (content) return safeFreeChatResponse(content, securityAssessment)
     }
 
     if (postResponse.status !== 403 && postResponse.status !== 429) {
@@ -124,7 +167,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Pollinations returned empty content" }, { status: 502 })
     }
 
-    return NextResponse.json({ content })
+    return safeFreeChatResponse(content, securityAssessment)
   }).catch((error) => {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Free chat API failed" },
